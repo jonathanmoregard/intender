@@ -1,13 +1,17 @@
 # TODO (For Humans) - AI kept using as scratchpad before name change
 
-## Pre beta test
-
-- ✅ Make a "CD" - build artefact to stable link AND a install guide for testers with the link
-
 ## Maybe pre beta
 
 - Quick add current website button
 - Built-in bug report button (if easy)
+
+- add url to intention screen
+- hide other settings under "advanced settings"
+  - openable all the time, open by default same time examples are gone
+  - default advanced & example gone when: 2 intentions & have navigated to intention screen once (use local metrics - blocked by)
+- add har coded example intention to example.com, link it in settings as example (wizard?)
+- add setting to remove save button, and add tolltip that it's reundant (for psychological safety)
+- maybe move import/export out of dots. Figure out button colors
 
 # FUTURE- reasses post user interview
 
@@ -29,7 +33,6 @@
 - Show # unparseable intention urls on the extension icon somehow
 - power users & a11y review
 - Add loading states, error handling
-- after period of inactivity on tab (3 hours?) require revalidation? If this doesn't clash with some arcane google rule
 
 ## Technical
 
