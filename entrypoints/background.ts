@@ -1,16 +1,40 @@
+import { Brand } from 'ts-brand';
 import browser from 'webextension-polyfill';
 import { mapNulls } from '../components/helpers';
 import {
   createIntentionIndex,
+  intentionToIntentionScopeId,
   lookupIntention,
   parseIntention,
   parseUrlToScope,
   type IntentionIndex,
+  type IntentionScopeId,
 } from '../components/intention';
 import { storage } from '../components/storage';
+import {
+  createTimeoutMs,
+  createTimestamp,
+  type Timestamp,
+} from '../components/time';
+
+// Branded type for tab ID
+export type TabId = Brand<number, 'TabId'>;
+
+// Helper functions for TabId
+function numberToTabId(num: number): TabId {
+  return num as TabId;
+}
+
+function tabIdToNumber(tabId: TabId): number {
+  return tabId as number;
+}
 
 // Tab URL cache to track last-known URLs for each tab
-const tabUrlMap = new Map<number, string>();
+const tabUrlMap = new Map<TabId, string>();
+
+// Inactivity tracking
+const lastActiveByScope = new Map<IntentionScopeId, Timestamp>();
+const intentionScopePerTabId = new Map<TabId, IntentionScopeId>();
 
 const getDomain = (input: string): string => {
   const parsed = parseUrlToScope(input);
@@ -23,6 +47,15 @@ const domainEquals = (url1: string, url2: string): boolean => {
   return domain1 === domain2 && domain1 !== '';
 };
 
+// Update activity for an intention scope
+const updateIntentionScopeActivity = (intentionScopeId: IntentionScopeId) => {
+  lastActiveByScope.set(intentionScopeId, createTimestamp());
+  console.log(
+    '[Intender] Updated activity for intention scope:',
+    intentionScopeId
+  );
+};
+
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 export default defineBackground(async () => {
@@ -30,11 +63,109 @@ export default defineBackground(async () => {
   let intentionIndex: IntentionIndex = createIntentionIndex([]);
   const intentionPageUrl = browser.runtime.getURL('intention-page.html');
 
-  // Load intentions on startup before registering listener to prevent race conditions
+  // Load intentions and settings on startup
   try {
-    const { intentions } = await storage.get();
+    const {
+      intentions,
+      inactivityMode = 'off',
+      inactivityTimeoutMinutes = 30,
+    } = await storage.get();
     const parsedIntentions = mapNulls(parseIntention, intentions);
     intentionIndex = createIntentionIndex(parsedIntentions);
+
+    // Get intention scope ID for a URL
+    const lookupIntentionScopeId = (url: string): IntentionScopeId | null => {
+      const matchedIntention = lookupIntention(url, intentionIndex);
+      if (!matchedIntention) return null;
+      return intentionToIntentionScopeId(matchedIntention);
+    };
+
+    // Check if we should trigger inactivity intention
+    const shouldTriggerInactivityIntention = (
+      intentionScopeId: IntentionScopeId
+    ): boolean => {
+      if (inactivityMode === 'off') return false;
+
+      const lastActive = lastActiveByScope.get(intentionScopeId);
+      if (!lastActive) return false;
+
+      const timeoutMs = createTimeoutMs(inactivityTimeoutMinutes);
+      const now = createTimestamp();
+      const isInactive = now - lastActive > timeoutMs;
+
+      console.log('[Intender] Intention scope inactivity check:', {
+        intentionScopeId,
+        lastActive,
+        now,
+        timeoutMs,
+        isInactive,
+      });
+
+      return isInactive;
+    };
+
+    // Set up event listeners with access to the functions
+    browser.tabs.onActivated.addListener(async activeInfo => {
+      const tabId = numberToTabId(activeInfo.tabId);
+      const url = tabUrlMap.get(tabId);
+      if (!url) return;
+
+      const intentionScopeId = lookupIntentionScopeId(url);
+      if (!intentionScopeId) return;
+
+      console.log('[Intender] Tab focus event:', {
+        tabId,
+        url,
+        intentionScopeId,
+      });
+
+      if (shouldTriggerInactivityIntention(intentionScopeId)) {
+        console.log(
+          '[Intender] Triggering revalidation for inactive intention scope:',
+          intentionScopeId
+        );
+
+        const intentionPageUrl = browser.runtime.getURL(
+          'intention-page.html?target=' +
+            encodeURIComponent(url) +
+            '&intentionScopeId=' +
+            encodeURIComponent(intentionScopeId)
+        );
+
+        try {
+          await browser.tabs.update(tabId, { url: intentionPageUrl });
+        } catch (error) {
+          console.log('[Intender] Failed to redirect for revalidation:', error);
+        }
+      } else {
+        // Update activity on focus
+        updateIntentionScopeActivity(intentionScopeId);
+      }
+    });
+
+    // Handle audio state changes
+    browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+      if (changeInfo.audible !== undefined) {
+        const url = tabUrlMap.get(numberToTabId(tabId));
+        if (!url) return;
+
+        const intentionScopeId = lookupIntentionScopeId(url);
+        if (!intentionScopeId) return;
+
+        if (changeInfo.audible) {
+          console.log('[Intender] Tab became audible, resetting activity:', {
+            tabId,
+            intentionScopeId,
+          });
+          updateIntentionScopeActivity(intentionScopeId);
+        } else {
+          console.log('[Intender] Tab stopped being audible:', {
+            tabId,
+            intentionScopeId,
+          });
+        }
+      }
+    });
   } catch (error) {
     console.error('[Intender] Failed to load intentions on startup:', error);
   }
@@ -42,7 +173,7 @@ export default defineBackground(async () => {
   // Track new tabs to initialize cache
   browser.tabs.onCreated.addListener(tab => {
     if (tab.id !== undefined && typeof tab.url === 'string') {
-      tabUrlMap.set(tab.id, tab.url);
+      tabUrlMap.set(numberToTabId(tab.id), tab.url);
       console.log('[Intender] Tab created, cached URL:', {
         tabId: tab.id,
         url: tab.url,
@@ -54,7 +185,7 @@ export default defineBackground(async () => {
   browser.webNavigation.onCommitted.addListener(details => {
     if (details.frameId === 0) {
       // Only track main frame navigation
-      tabUrlMap.set(details.tabId, details.url);
+      tabUrlMap.set(numberToTabId(details.tabId), details.url);
       console.log('[Intender] Navigation committed, updated cache:', {
         tabId: details.tabId,
         url: details.url,
@@ -64,7 +195,8 @@ export default defineBackground(async () => {
 
   // Clean up cache when tabs are removed
   browser.tabs.onRemoved.addListener(tabId => {
-    tabUrlMap.delete(tabId);
+    tabUrlMap.delete(numberToTabId(tabId));
+    intentionScopePerTabId.delete(numberToTabId(tabId));
     console.log('[Intender] Tab removed, cleared cache:', { tabId });
   });
 
@@ -72,7 +204,7 @@ export default defineBackground(async () => {
     if (details.frameId !== 0) return;
 
     const targetUrl = details.url;
-    const sourceUrl = tabUrlMap.get(details.tabId) || null;
+    const sourceUrl = tabUrlMap.get(numberToTabId(details.tabId)) || null;
 
     let activeTabs: browser.Tabs.Tab[];
     try {
@@ -146,10 +278,18 @@ export default defineBackground(async () => {
         matchedIntention
       );
 
+      // Track the intention scope for this tab
+      const intentionScopeId = intentionToIntentionScopeId(matchedIntention);
+      intentionScopePerTabId.set(
+        numberToTabId(details.tabId),
+        intentionScopeId
+      );
+      updateIntentionScopeActivity(intentionScopeId);
+
       const redirectUrl = browser.runtime.getURL(
         'intention-page.html?target=' +
           encodeURIComponent(targetUrl) +
-          '&intention=' +
+          '&intentionScopeId=' +
           encodeURIComponent(matchedIntention.id)
       );
 

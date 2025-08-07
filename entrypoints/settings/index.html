@@ -952,6 +952,151 @@
         background: #e55a1a;
         transform: translateY(-1px);
       }
+
+      /* Inactivity Settings */
+      .inactivity-mode-setting {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+      }
+
+      .setting-help {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: rgba(158, 142, 51, 0.2);
+        color: #9e8e33;
+        font-size: 0.8rem;
+        font-weight: 600;
+        cursor: help;
+        transition: all 0.3s ease;
+        font-family: 'Inter', sans-serif;
+      }
+
+      .setting-help:hover {
+        background: rgba(158, 142, 51, 0.3);
+        transform: scale(1.1);
+      }
+
+      .inactivity-mode-select {
+        padding: 0.5rem;
+        border: 1px solid rgba(158, 142, 51, 0.3);
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.9);
+        font-family: 'Inter', sans-serif;
+        font-size: 0.9rem;
+        color: #30332e;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        min-width: 200px;
+      }
+
+      .inactivity-mode-select:focus {
+        outline: none;
+        border-color: #9e8e33;
+        box-shadow: 0 0 0 2px rgba(158, 142, 51, 0.1);
+      }
+
+      .timeout-setting {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+      }
+
+      .timeout-input {
+        padding: 0.5rem;
+        border: 1px solid rgba(158, 142, 51, 0.3);
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.9);
+        font-family: 'Inter', sans-serif;
+        font-size: 0.9rem;
+        color: #30332e;
+        width: 80px;
+        text-align: center;
+        transition: all 0.3s ease;
+      }
+
+      .timeout-input:focus {
+        outline: none;
+        border-color: #9e8e33;
+        box-shadow: 0 0 0 2px rgba(158, 142, 51, 0.1);
+      }
+
+      .timeout-input::-webkit-inner-spin-button,
+      .timeout-input::-webkit-outer-spin-button {
+        opacity: 1;
+      }
+
+      /* Radio Button Styles */
+      .radio-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        margin-top: 0.5rem;
+      }
+
+      .radio-option {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        cursor: pointer;
+        padding: 0.5rem;
+        border-radius: 6px;
+        transition: all 0.3s ease;
+        font-family: 'Inter', sans-serif;
+      }
+
+      .radio-option:hover {
+        background: rgba(158, 142, 51, 0.05);
+      }
+
+      .radio-option input[type='radio'] {
+        width: 18px;
+        height: 18px;
+        accent-color: #9e8e33;
+        cursor: pointer;
+        margin: 0;
+      }
+
+      .radio-label {
+        color: #30332e;
+        font-size: 0.95rem;
+        line-height: 1.4;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      /* Updated Timeout Input Styling */
+      .timeout-input {
+        padding: 0.75rem;
+        border: 1px solid rgba(158, 142, 51, 0.3);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.9);
+        font-family: 'Inter', sans-serif;
+        font-size: 0.9rem;
+        color: #30332e;
+        width: 100px;
+        text-align: center;
+        transition: all 0.3s ease;
+        font-weight: 500;
+      }
+
+      .timeout-input:focus {
+        outline: none;
+        border-color: #9e8e33;
+        box-shadow: 0 0 0 3px rgba(158, 142, 51, 0.1);
+      }
+
+      .timeout-input:hover {
+        border-color: rgba(158, 142, 51, 0.5);
+      }
     </style>
   </head>
   <body>

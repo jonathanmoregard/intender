@@ -2,13 +2,13 @@ import { debounce } from 'lodash-es';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
-  type RawIntention,
   canParseIntention,
   emptyRawIntention,
   isEmpty,
   makeRawIntention,
+  type RawIntention,
 } from '../../components/intention';
-import { storage } from '../../components/storage';
+import { storage, type InactivityMode } from '../../components/storage';
 
 type Tab = 'settings' | 'about';
 
@@ -34,6 +34,9 @@ const SettingsTab = memo(
     const [showExamples, setShowExamples] = useState(false);
     const [showMoreOptions, setShowMoreOptions] = useState(false);
     const [fuzzyMatching, setFuzzyMatching] = useState(false);
+    const [inactivityMode, setInactivityMode] = useState<InactivityMode>('off');
+    const [inactivityTimeoutMinutes, setInactivityTimeoutMinutes] =
+      useState(30);
 
     const [blurredIntentionIds, setBlurredIntentionIds] = useState<Set<string>>(
       new Set()
@@ -110,6 +113,14 @@ const SettingsTab = memo(
       await storage.set({ fuzzyMatching: enabled });
     }, []);
 
+    const saveInactivityMode = useCallback(async (mode: InactivityMode) => {
+      await storage.set({ inactivityMode: mode });
+    }, []);
+
+    const saveInactivityTimeout = useCallback(async (timeout: number) => {
+      await storage.set({ inactivityTimeoutMinutes: timeout });
+    }, []);
+
     // Debounced save function
     const debouncedSave = useCallback(
       debounce(async (intentionsToSave: RawIntention[]) => {
@@ -129,6 +140,8 @@ const SettingsTab = memo(
           data.intentions.length > 0 ? data.intentions : [emptyRawIntention()];
         setIntentions(initialIntentions);
         setFuzzyMatching(data.fuzzyMatching ?? true);
+        setInactivityMode(data.inactivityMode ?? 'off');
+        setInactivityTimeoutMinutes(data.inactivityTimeoutMinutes ?? 30);
 
         // Track which intentions were loaded from storage (not newly created)
         const loadedIds = new Set<string>();
@@ -594,6 +607,97 @@ const SettingsTab = memo(
                   Allow typos when entering intention
                 </span>
               </label>
+            </div>
+          </div>
+        </div>
+
+        {/* 4. Inactivity Settings */}
+        <div className='general-settings'>
+          <h3>Inactivity Settings</h3>
+          <p className='description'>
+            Require re-entering your intention after periods of inactivity to
+            maintain mindfulness.
+          </p>
+
+          <div className='setting-item'>
+            <div className='inactivity-mode-setting'>
+              <span className='setting-text'>
+                Intention screen for inactive tabs
+              </span>
+              <div className='radio-group'>
+                <label className='radio-option'>
+                  <input
+                    type='radio'
+                    name='inactivityMode'
+                    value='off'
+                    checked={inactivityMode === 'off'}
+                    onChange={e => {
+                      const mode = e.target.value as InactivityMode;
+                      setInactivityMode(mode);
+                      saveInactivityMode(mode);
+                    }}
+                  />
+                  <span className='radio-label'>Off</span>
+                </label>
+                <label className='radio-option'>
+                  <input
+                    type='radio'
+                    name='inactivityMode'
+                    value='all-except-audio'
+                    checked={inactivityMode === 'all-except-audio'}
+                    onChange={e => {
+                      const mode = e.target.value as InactivityMode;
+                      setInactivityMode(mode);
+                      saveInactivityMode(mode);
+                    }}
+                  />
+                  <span className='radio-label'>
+                    On (except tabs with sound)
+                  </span>
+                </label>
+                <label className='radio-option'>
+                  <input
+                    type='radio'
+                    name='inactivityMode'
+                    value='all'
+                    checked={inactivityMode === 'all'}
+                    onChange={e => {
+                      const mode = e.target.value as InactivityMode;
+                      setInactivityMode(mode);
+                      saveInactivityMode(mode);
+                    }}
+                  />
+                  <span className='radio-label'>
+                    On (all tabs)
+                    <div
+                      className='setting-help'
+                      title='Good if you play YouTube in inactive tabs'
+                    >
+                      ?
+                    </div>
+                  </span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div className='setting-item'>
+            <div className='timeout-setting'>
+              <label className='setting-label'>
+                <span className='setting-text'>Timeout duration (minutes)</span>
+              </label>
+              <input
+                type='number'
+                min='1'
+                max='480'
+                value={inactivityTimeoutMinutes}
+                onChange={e => {
+                  const timeout = parseInt(e.target.value) || 30;
+                  setInactivityTimeoutMinutes(timeout);
+                  saveInactivityTimeout(timeout);
+                }}
+                className='timeout-input'
+              />
             </div>
           </div>
         </div>
