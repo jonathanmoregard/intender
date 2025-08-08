@@ -2,7 +2,11 @@
   "name": "intender",
   "description": "manifest.json description",
   "private": true,
+<<<<<<< HEAD
   "version": "0.1.4",
+=======
+  "version": "0.2.0",
+>>>>>>> 1d45491 (chore(release): bump version to 0.2.0)
   "type": "module",
   "scripts": {
     "dev": "wxt",
@@ -24,8 +28,10 @@
     "version:bump": "node scripts/version-bump.js",
     "pr:create": "node scripts/create-pr.js",
     "lint:version": "node scripts/version-check.js",
-    "test:e2e": "playwright test",
-    "test:ci": "playwright install --with-deps  playwright test"
+    "test:e2e": "HEADFUL=1 playwright test",
+    "test:e2e:headed": "HEADFUL=1 playwright test",
+    "test:e2e:raw": "playwright test",
+    "test:ci": "playwright install --with-deps && HEADFUL=1 playwright test"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
