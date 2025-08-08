@@ -18,18 +18,21 @@ export const storage = {
     fuzzyMatching?: boolean;
     inactivityMode?: InactivityMode;
     inactivityTimeoutMinutes?: number;
+    showAdvancedSettings?: boolean;
   }> {
     const result = await backend.get({
       intentions: [],
       fuzzyMatching: true,
       inactivityMode: 'off',
       inactivityTimeoutMinutes: 30,
+      showAdvancedSettings: false,
     });
     return result as {
       intentions: RawIntention[];
       fuzzyMatching?: boolean;
       inactivityMode?: InactivityMode;
       inactivityTimeoutMinutes?: number;
+      showAdvancedSettings?: boolean;
     };
   },
   async set(
@@ -38,6 +41,7 @@ export const storage = {
       | { fuzzyMatching: boolean }
       | { inactivityMode: InactivityMode }
       | { inactivityTimeoutMinutes: number }
+      | { showAdvancedSettings: boolean }
   ) {
     await backend.set(data);
   },

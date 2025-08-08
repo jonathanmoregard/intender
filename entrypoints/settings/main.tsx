@@ -33,6 +33,7 @@ const SettingsTab = memo(
     });
     const [showExamples, setShowExamples] = useState(false);
     const [showMoreOptions, setShowMoreOptions] = useState(false);
+    const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
     const [fuzzyMatching, setFuzzyMatching] = useState(false);
     const [inactivityMode, setInactivityMode] = useState<InactivityMode>('off');
     const [inactivityTimeoutMinutes, setInactivityTimeoutMinutes] =
@@ -121,6 +122,10 @@ const SettingsTab = memo(
       await storage.set({ inactivityTimeoutMinutes: timeout });
     }, []);
 
+    const saveAdvancedSettingsState = useCallback(async (expanded: boolean) => {
+      await storage.set({ showAdvancedSettings: expanded });
+    }, []);
+
     // Debounced save function
     const debouncedSave = useCallback(
       debounce(async (intentionsToSave: RawIntention[]) => {
@@ -142,6 +147,7 @@ const SettingsTab = memo(
         setFuzzyMatching(data.fuzzyMatching ?? true);
         setInactivityMode(data.inactivityMode ?? 'off');
         setInactivityTimeoutMinutes(data.inactivityTimeoutMinutes ?? 30);
+        setShowAdvancedSettings(data.showAdvancedSettings ?? false);
 
         // Track which intentions were loaded from storage (not newly created)
         const loadedIds = new Set<string>();
@@ -419,11 +425,10 @@ const SettingsTab = memo(
     return (
       <div className='settings-tab'>
         {/* 1. Intentions */}
-        <h2>Intentions</h2>
+        <h2>Your intentions</h2>
         <p className='description'>
-          Set intentions for websites, to help yourself use them wisely. Later,
-          when you navigate to these sites, you will get a chance to reaffirm
-          your intention before entering.
+          Choose the sites and write a short intention. When you visit them,
+          you’ll pause for a moment to re‑enter your intention.
         </p>
 
         <div className='intentions-list'>
@@ -460,9 +465,9 @@ const SettingsTab = memo(
                       }}
                       onFocus={() => markFocused(intention.id)}
                       onBlur={() => markBlurred(intention.id)}
-                      placeholder='Enter website URL (e.g., facebook.com)'
+                      placeholder='Website (e.g., example.com)'
                     />
-                    <label className='input-label'>Website URL</label>
+                    <label className='input-label'>Website</label>
                     {(isBlurred(intention.id) || isLoaded(intention.id)) &&
                       canParseIntention(intention) && (
                         <span className='valid-checkmark'>✓</span>
@@ -473,7 +478,7 @@ const SettingsTab = memo(
                     !isEmpty(intention) &&
                     !canParseIntention(intention) && (
                       <div className='error-text show'>
-                        Please enter a full domain, e.g. example.com
+                        Enter a website like example.com
                       </div>
                     )}
                 </div>
@@ -492,11 +497,11 @@ const SettingsTab = memo(
                     }}
                     onBlur={() => handlePhraseBlur(i)}
                     onKeyDown={e => handlePhraseKeyDown(e, i)}
-                    placeholder='Enter your intention phrase'
+                    placeholder='Write your intention'
                     maxLength={150}
                     rows={2}
                   />
-                  <label className='input-label'>Intention Phrase</label>
+                  <label className='input-label'>Intention</label>
                 </div>
               </div>
 
@@ -532,10 +537,10 @@ const SettingsTab = memo(
             onClick={addIntention}
             title='Add another intention'
           >
-            Add Site
+            Add website
           </button>
           <button className='save-btn' onClick={update}>
-            Save
+            Save changes
           </button>
           <div className='more-options' ref={moreOptionsRef}>
             <button
@@ -563,9 +568,9 @@ const SettingsTab = memo(
         {/* 2. Example Intentions */}
         {showExamples && filteredExampleIntentions.length > 0 && (
           <div className='examples-section'>
-            <h3>Example Intentions</h3>
+            <h3>Examples to try</h3>
             <p className='examples-description'>
-              Quick-add these examples to get started:
+              Quick add these to get started:
             </p>
             <div className='examples-list'>
               {filteredExampleIntentions.map((example, i) => (
@@ -588,116 +593,172 @@ const SettingsTab = memo(
           </div>
         )}
 
-        {/* 3. Match Settings */}
-        <div className='general-settings'>
-          <h3>General Settings</h3>
-          <div className='setting-item'>
-            <div className='fuzzy-matching-setting'>
-              <label className='setting-label'>
-                <input
-                  type='checkbox'
-                  checked={fuzzyMatching}
-                  onChange={e => {
-                    const enabled = e.target.checked;
-                    setFuzzyMatching(enabled);
-                    saveFuzzyMatching(enabled);
-                  }}
-                />
-                <span className='setting-text'>
-                  Allow typos when entering intention
-                </span>
-              </label>
-            </div>
+        {/* 3. Advanced Settings */}
+        <div className='advanced-settings'>
+          <div
+            className='advanced-settings-header'
+            onClick={() => {
+              const newState = !showAdvancedSettings;
+              setShowAdvancedSettings(newState);
+              saveAdvancedSettingsState(newState);
+              if (!showAdvancedSettings) {
+                // Scroll to the advanced settings when opening
+                setTimeout(() => {
+                  document.querySelector('.advanced-settings')?.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start',
+                  });
+                }, 100);
+              }
+            }}
+          >
+            <span
+              className={`toggle-icon ${showAdvancedSettings ? 'expanded' : ''}`}
+            >
+              ▼
+            </span>
+            <h3>Advanced settings</h3>
           </div>
-        </div>
 
-        {/* 4. Inactivity Settings */}
-        <div className='general-settings'>
-          <h3>Inactivity Settings</h3>
-          <p className='description'>
-            Require re-entering your intention after periods of inactivity to
-            maintain mindfulness.
-          </p>
+          <div
+            className={`advanced-settings-content ${showAdvancedSettings ? 'expanded' : ''}`}
+          >
+            <div className='setting-group'>
+              <div className='setting-item'>
+                <div className='setting-header'>
+                  <span className='setting-text'>
+                    Intention on inactive tabs?
+                  </span>
+                  <div
+                    className='setting-help'
+                    aria-label='If you return to a tab after a having been away for some time, do you want to se an intention page?'
+                    data-tooltip='If you return to a tab after a having been away for some time, do you want to se an intention page?'
+                  >
+                    ?
+                  </div>
+                </div>
+                <div className='radio-group-horizontal'>
+                  <label className='radio-option'>
+                    <input
+                      type='radio'
+                      name='inactivityMode'
+                      value='all'
+                      checked={inactivityMode === 'all'}
+                      onChange={e => {
+                        const mode = e.target.value as InactivityMode;
+                        setInactivityMode(mode);
+                        saveInactivityMode(mode);
+                      }}
+                    />
+                    <span className='radio-label'>All Inactive Tabs</span>
+                  </label>
+                  <label className='radio-option'>
+                    <input
+                      type='radio'
+                      name='inactivityMode'
+                      value='all-except-audio'
+                      checked={inactivityMode === 'all-except-audio'}
+                      onChange={e => {
+                        const mode = e.target.value as InactivityMode;
+                        setInactivityMode(mode);
+                        saveInactivityMode(mode);
+                      }}
+                    />
+                    <span className='radio-label'>
+                      Silent Inactive Tabs
+                      <div
+                        className='setting-help'
+                        aria-label='Good if you play music in background tabs. With this setting, tabs playing music never count as inactive: only silent tabs get intention pages on inactivity.'
+                        data-tooltip='Good if you play music in background tabs. With this setting, tabs playing music never count as inactive: only silent tabs get intention pages on inactivity.'
+                      >
+                        ?
+                      </div>
+                    </span>
+                  </label>
+                  <label className='radio-option'>
+                    <input
+                      type='radio'
+                      name='inactivityMode'
+                      value='off'
+                      checked={inactivityMode === 'off'}
+                      onChange={e => {
+                        const mode = e.target.value as InactivityMode;
+                        setInactivityMode(mode);
+                        saveInactivityMode(mode);
+                      }}
+                    />
+                    <span className='radio-label'>Never</span>
+                  </label>
+                </div>
 
-          <div className='setting-item'>
-            <div className='inactivity-mode-setting'>
-              <span className='setting-text'>
-                Intention screen for inactive tabs
-              </span>
-              <div className='radio-group'>
-                <label className='radio-option'>
+                <div
+                  className={`timeout-setting ${inactivityMode === 'off' ? 'disabled' : ''}`}
+                >
                   <input
-                    type='radio'
-                    name='inactivityMode'
-                    value='off'
-                    checked={inactivityMode === 'off'}
+                    type='number'
+                    min='1'
+                    max='480'
+                    value={inactivityTimeoutMinutes}
                     onChange={e => {
-                      const mode = e.target.value as InactivityMode;
-                      setInactivityMode(mode);
-                      saveInactivityMode(mode);
+                      const timeout = parseInt(e.target.value) || 30;
+                      setInactivityTimeoutMinutes(timeout);
+                      saveInactivityTimeout(timeout);
                     }}
+                    className='timeout-input'
+                    disabled={inactivityMode === 'off'}
                   />
-                  <span className='radio-label'>Off</span>
-                </label>
-                <label className='radio-option'>
-                  <input
-                    type='radio'
-                    name='inactivityMode'
-                    value='all-except-audio'
-                    checked={inactivityMode === 'all-except-audio'}
-                    onChange={e => {
-                      const mode = e.target.value as InactivityMode;
-                      setInactivityMode(mode);
-                      saveInactivityMode(mode);
-                    }}
-                  />
-                  <span className='radio-label'>
-                    On (except tabs with sound)
-                  </span>
-                </label>
-                <label className='radio-option'>
-                  <input
-                    type='radio'
-                    name='inactivityMode'
-                    value='all'
-                    checked={inactivityMode === 'all'}
-                    onChange={e => {
-                      const mode = e.target.value as InactivityMode;
-                      setInactivityMode(mode);
-                      saveInactivityMode(mode);
-                    }}
-                  />
-                  <span className='radio-label'>
-                    On (all tabs)
-                    <div
-                      className='setting-help'
-                      title='Good if you play YouTube in inactive tabs'
-                    >
-                      ?
-                    </div>
-                  </span>
-                </label>
+                  <div className='timeout-label-group'>
+                    <span className='setting-text'>
+                      Inactive time before intention check?
+                    </span>
+                    <span className='timeout-unit'>(minutes)</span>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className='setting-item'>
-            <div className='timeout-setting'>
-              <label className='setting-label'>
-                <span className='setting-text'>Timeout duration (minutes)</span>
-              </label>
-              <input
-                type='number'
-                min='1'
-                max='480'
-                value={inactivityTimeoutMinutes}
-                onChange={e => {
-                  const timeout = parseInt(e.target.value) || 30;
-                  setInactivityTimeoutMinutes(timeout);
-                  saveInactivityTimeout(timeout);
+            {/* Move typos card below inactivity */}
+            <div className='setting-group'>
+              <div
+                className='clickable-setting-item'
+                onClick={() => {
+                  const enabled = !fuzzyMatching;
+                  setFuzzyMatching(enabled);
+                  saveFuzzyMatching(enabled);
                 }}
-                className='timeout-input'
-              />
+                role='button'
+                aria-pressed={fuzzyMatching}
+                tabIndex={0}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    const enabled = !fuzzyMatching;
+                    setFuzzyMatching(enabled);
+                    saveFuzzyMatching(enabled);
+                  }
+                }}
+              >
+                <div className='fuzzy-matching-setting'>
+                  <label
+                    className='setting-label'
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <input
+                      type='checkbox'
+                      checked={fuzzyMatching}
+                      onClick={e => e.stopPropagation()}
+                      onChange={e => {
+                        const enabled = e.target.checked;
+                        setFuzzyMatching(enabled);
+                        saveFuzzyMatching(enabled);
+                      }}
+                    />
+                    <span className='setting-text'>
+                      Allow small typos when typing your intention
+                    </span>
+                  </label>
+                </div>
+              </div>
             </div>
           </div>
         </div>
