@@ -51,23 +51,22 @@ This document captures our team’s preferences and conventions. It is intention
 
 1. Optimize for clarity and readability; prefer straightforward code over cleverness.
 2. Comment “why” not “how”; avoid stating the obvious.
-3. Avoid TODOs when possible—implement or file an issue.
+3. Keep naming and comments in the same abstraction as the code's purpose, don't mention use cases in general helpers.
 
 ## 9. PRs & Process
 
 1. Before structural changes, propose alternative options with pros/cons; let the owner choose.
-2. Keep PRs small and focused; provide a succinct title and short description.
-3. Follow the PR Management guide in `cursor_instructions/PR_MANAGEMENT.md` (version bump, lockfile sync, etc.).
+2. Follow the PR Management guide in `cursor_instructions/PR_MANAGEMENT.md` (version bump, lockfile sync, etc.).
 
 ## 10. Documentation
 
 1. Keep README and docs succinct and practical.
-2. When writing READMEs, include appreciation to Cursor and note that it was used in development.
 
 ## 11. Security & Permissions (Extensions)
 
 1. Request the minimum necessary permissions; prefer domain‑scoped or dynamic injection over `<all_urls>`.
 2. Avoid collecting sensitive data; keep tracking strictly local and minimal.
+3. Secure code is easier when code is simple, low abstraction, low nesting etc. Keep the code enjoyable to read, simple, understandable.
 
 ## 12. Performance
 
