@@ -7,7 +7,7 @@
 
 ## PR Creation Process
 
-0. **COMMIT CHANGES** check uncommited changes, read them, create a commit with an appropriate message
+0. **COMMIT CHANGES** check uncommited changes, read them, create a commit with an appropriate message. Keep `pnpm-lock.yaml` in sync; CI uses a frozen lockfile.
 1. **Analyze changes**: start with updating master, and then running `git diff origin/master HEAD` and run commands until you have a clear idea of the changes
 2. **Create branch summary**: writes succinct title + paragraph summary in chat window
 3. **Check version**: `npm run version:check`
