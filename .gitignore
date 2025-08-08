@@ -30,4 +30,5 @@ web-ext.config.ts
 *.swp
 *.swo
 
+test-results/
 .test-results/

@@ -10,10 +10,11 @@ import {
   type IntentionIndex,
   type IntentionScopeId,
 } from '../components/intention';
-import { storage } from '../components/storage';
+import { storage, type InactivityMode } from '../components/storage';
 import {
-  createTimeoutMs,
   createTimestamp,
+  minutesToMs,
+  type TimeoutMs,
   type Timestamp,
 } from '../components/time';
 
@@ -62,16 +63,32 @@ export default defineBackground(async () => {
   // Cache data that won't change during session
   let intentionIndex: IntentionIndex = createIntentionIndex([]);
   const intentionPageUrl = browser.runtime.getURL('intention-page.html');
+  // Immutable inactivity settings snapshot (replaced wholesale on changes)
+  type InactivitySnapshot = Readonly<{
+    mode: InactivityMode;
+    timeoutMs: TimeoutMs;
+  }>;
+  let inactivity: InactivitySnapshot = Object.freeze({
+    mode: 'off',
+    timeoutMs: minutesToMs(30),
+  });
 
   // Load intentions and settings on startup
   try {
     const {
       intentions,
       inactivityMode = 'off',
-      inactivityTimeoutMinutes = 30,
+      inactivityTimeoutMs,
     } = await storage.get();
     const parsedIntentions = mapNulls(parseIntention, intentions);
     intentionIndex = createIntentionIndex(parsedIntentions);
+    inactivity = Object.freeze({
+      mode: inactivityMode,
+      timeoutMs:
+        typeof inactivityTimeoutMs === 'number'
+          ? (inactivityTimeoutMs as unknown as TimeoutMs)
+          : minutesToMs(30),
+    });
 
     // Get intention scope ID for a URL
     const lookupIntentionScopeId = (url: string): IntentionScopeId | null => {
@@ -84,12 +101,12 @@ export default defineBackground(async () => {
     const shouldTriggerInactivityIntention = (
       intentionScopeId: IntentionScopeId
     ): boolean => {
-      if (inactivityMode === 'off') return false;
+      if (inactivity.mode === 'off') return false;
 
       const lastActive = lastActiveByScope.get(intentionScopeId);
       if (!lastActive) return false;
 
-      const timeoutMs = createTimeoutMs(inactivityTimeoutMinutes);
+      const timeoutMs = inactivity.timeoutMs;
       const now = createTimestamp();
       const isInactive = now - lastActive > timeoutMs;
 
@@ -302,7 +319,7 @@ export default defineBackground(async () => {
     }
   });
 
-  // Refresh cached intentions when storage changes
+  // Refresh cached intentions and inactivity settings when storage changes
   browser.storage.onChanged.addListener(async changes => {
     if (changes.intentions) {
       try {
@@ -311,6 +328,26 @@ export default defineBackground(async () => {
         intentionIndex = createIntentionIndex(parsedIntentions);
       } catch (error) {
         console.error('[Intender] Failed to refresh intention index:', error);
+      }
+    }
+    if (changes.inactivityMode || changes.inactivityTimeoutMs) {
+      try {
+        const { inactivityMode, inactivityTimeoutMs } = await storage.get();
+        const newMode = (
+          typeof inactivityMode !== 'undefined'
+            ? inactivityMode
+            : inactivity.mode
+        ) as InactivityMode;
+        const newTimeout =
+          typeof inactivityTimeoutMs === 'number'
+            ? (inactivityTimeoutMs as unknown as TimeoutMs)
+            : inactivity.timeoutMs;
+        inactivity = Object.freeze({ mode: newMode, timeoutMs: newTimeout });
+      } catch (error) {
+        console.error(
+          '[Intender] Failed to update inactivity settings:',
+          error
+        );
       }
     }
   });

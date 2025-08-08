@@ -22,7 +22,10 @@
     "test:url-matching": "vitest url-matching.test.ts",
     "version:check": "node scripts/version-check.js",
     "version:bump": "node scripts/version-bump.js",
-    "pr:create": "node scripts/create-pr.js"
+    "pr:create": "node scripts/create-pr.js",
+    "lint:version": "node scripts/version-check.js",
+    "test:e2e": "playwright test",
+    "test:ci": "playwright install --with-deps  playwright test"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
@@ -32,6 +35,8 @@
     "@types/react-dom": "^19.1.7",
     "@types/webextension-polyfill": "^0.12.3",
     "@vitest/coverage-v8": "^3.2.4",
+    "@playwright/test": "^1.54.2",
+    "playwright": "^1.54.2",
     "chrome-types": "^0.1.367",
     "fast-check": "^4.2.0",
     "husky": "^8.0.0",

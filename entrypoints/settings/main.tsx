@@ -9,6 +9,7 @@ import {
   type RawIntention,
 } from '../../components/intention';
 import { storage, type InactivityMode } from '../../components/storage';
+import { minutesToMs, msToMinutes } from '../../components/time';
 
 type Tab = 'settings' | 'about';
 
@@ -118,9 +119,12 @@ const SettingsTab = memo(
       await storage.set({ inactivityMode: mode });
     }, []);
 
-    const saveInactivityTimeout = useCallback(async (timeout: number) => {
-      await storage.set({ inactivityTimeoutMinutes: timeout });
-    }, []);
+    const saveInactivityTimeout = useCallback(
+      async (timeoutMinutes: number) => {
+        await storage.set({ inactivityTimeoutMs: minutesToMs(timeoutMinutes) });
+      },
+      []
+    );
 
     const saveAdvancedSettingsState = useCallback(async (expanded: boolean) => {
       await storage.set({ showAdvancedSettings: expanded });
@@ -140,14 +144,31 @@ const SettingsTab = memo(
     );
 
     useEffect(() => {
-      storage.get().then(data => {
+      storage.get().then(async data => {
         const initialIntentions =
           data.intentions.length > 0 ? data.intentions : [emptyRawIntention()];
         setIntentions(initialIntentions);
         setFuzzyMatching(data.fuzzyMatching ?? true);
         setInactivityMode(data.inactivityMode ?? 'off');
-        setInactivityTimeoutMinutes(data.inactivityTimeoutMinutes ?? 30);
+        setInactivityTimeoutMinutes(
+          data.inactivityTimeoutMs
+            ? msToMinutes(data.inactivityTimeoutMs as any)
+            : 30
+        );
         setShowAdvancedSettings(data.showAdvancedSettings ?? false);
+
+        // E2E testing hook: allow overriding inactivity timeout via query param
+        try {
+          const url = new URL(window.location.href);
+          const override = url.searchParams.get('e2eInactivityTimeoutMs');
+          if (override) {
+            const parsed = Number(override);
+            if (Number.isFinite(parsed) && parsed > 0) {
+              await storage.set({ inactivityTimeoutMs: parsed as any });
+              setInactivityTimeoutMinutes(msToMinutes(parsed));
+            }
+          }
+        } catch {}
 
         // Track which intentions were loaded from storage (not newly created)
         const loadedIds = new Set<string>();
@@ -597,6 +618,7 @@ const SettingsTab = memo(
         <div className='advanced-settings'>
           <div
             className='advanced-settings-header'
+            data-testid='advanced-settings-toggle'
             onClick={() => {
               const newState = !showAdvancedSettings;
               setShowAdvancedSettings(newState);
@@ -640,6 +662,7 @@ const SettingsTab = memo(
                 <div className='radio-group-horizontal'>
                   <label className='radio-option'>
                     <input
+                      data-testid='inactivity-mode-all'
                       type='radio'
                       name='inactivityMode'
                       value='all'
@@ -654,6 +677,7 @@ const SettingsTab = memo(
                   </label>
                   <label className='radio-option'>
                     <input
+                      data-testid='inactivity-mode-all-except-audio'
                       type='radio'
                       name='inactivityMode'
                       value='all-except-audio'
@@ -677,6 +701,7 @@ const SettingsTab = memo(
                   </label>
                   <label className='radio-option'>
                     <input
+                      data-testid='inactivity-mode-off'
                       type='radio'
                       name='inactivityMode'
                       value='off'
@@ -695,6 +720,7 @@ const SettingsTab = memo(
                   className={`timeout-setting ${inactivityMode === 'off' ? 'disabled' : ''}`}
                 >
                   <input
+                    data-testid='inactivity-timeout-minutes'
                     type='number'
                     min='1'
                     max='480'

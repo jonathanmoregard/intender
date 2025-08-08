@@ -1,5 +1,6 @@
 import browser from 'webextension-polyfill';
 import { RawIntention } from './intention';
+import type { TimeoutMs } from './time';
 
 declare const __IS_DEV__: boolean;
 
@@ -9,7 +10,7 @@ export type InactivityMode = 'off' | 'all-except-audio' | 'all';
 
 export interface InactivitySettings {
   mode: InactivityMode;
-  timeoutMinutes: number;
+  timeoutMs: TimeoutMs;
 }
 
 export const storage = {
@@ -17,21 +18,21 @@ export const storage = {
     intentions: RawIntention[];
     fuzzyMatching?: boolean;
     inactivityMode?: InactivityMode;
-    inactivityTimeoutMinutes?: number;
+    inactivityTimeoutMs?: TimeoutMs;
     showAdvancedSettings?: boolean;
   }> {
     const result = await backend.get({
       intentions: [],
       fuzzyMatching: true,
       inactivityMode: 'off',
-      inactivityTimeoutMinutes: 30,
+      inactivityTimeoutMs: (30 * 60 * 1000) as TimeoutMs,
       showAdvancedSettings: false,
     });
     return result as {
       intentions: RawIntention[];
       fuzzyMatching?: boolean;
       inactivityMode?: InactivityMode;
-      inactivityTimeoutMinutes?: number;
+      inactivityTimeoutMs?: TimeoutMs;
       showAdvancedSettings?: boolean;
     };
   },
@@ -40,7 +41,7 @@ export const storage = {
       | { intentions: RawIntention[] }
       | { fuzzyMatching: boolean }
       | { inactivityMode: InactivityMode }
-      | { inactivityTimeoutMinutes: number }
+      | { inactivityTimeoutMs: TimeoutMs }
       | { showAdvancedSettings: boolean }
   ) {
     await backend.set(data);
