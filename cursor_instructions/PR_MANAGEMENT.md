@@ -36,3 +36,16 @@
 - Breaking changes
 - Major architectural changes
 - Significant feature additions
+
+## Lockfile and CI
+
+CI runs with a frozen lockfile. If `pnpm install --frozen-lockfile` fails due to a specifier mismatch between `package.json` and `pnpm-lock.yaml`, update the lockfile before opening a PR:
+
+- Recommended (no install):
+  - `pnpm install --lockfile-only`
+  - Commit `pnpm-lock.yaml`
+- Or install (regenerates lockfile):
+  - `pnpm install --no-frozen-lockfile`
+  - Commit `pnpm-lock.yaml`
+
+Always re-run tests locally after lockfile updates, then push and (re)create the PR.
