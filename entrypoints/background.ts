@@ -6,17 +6,27 @@ import {
   intentionToIntentionScopeId,
   lookupIntention,
   parseIntention,
-  parseUrlToScope,
   type IntentionIndex,
   type IntentionScopeId,
 } from '../components/intention';
+import {
+  normalizeUrl,
+  parseUrlString,
+  toComponents,
+} from '../components/normalized-url';
 import { storage, type InactivityMode } from '../components/storage';
 import {
   createTimestamp,
   minutesToMs,
+  msToSeconds,
   type TimeoutMs,
   type Timestamp,
 } from '../components/time';
+
+type SettingsCache = Readonly<{
+  inactivityMode: InactivityMode;
+  inactivityTimeoutMs: TimeoutMs;
+}>;
 
 // Branded type for tab ID
 export type TabId = Brand<number, 'TabId'>;
@@ -24,10 +34,6 @@ export type TabId = Brand<number, 'TabId'>;
 // Helper functions for TabId
 function numberToTabId(num: number): TabId {
   return num as TabId;
-}
-
-function tabIdToNumber(tabId: TabId): number {
-  return tabId as number;
 }
 
 // Tab URL cache to track last-known URLs for each tab
@@ -38,8 +44,11 @@ const lastActiveByScope = new Map<IntentionScopeId, Timestamp>();
 const intentionScopePerTabId = new Map<TabId, IntentionScopeId>();
 
 const getDomain = (input: string): string => {
-  const parsed = parseUrlToScope(input);
-  return parsed?.domain || '';
+  const url = parseUrlString(input);
+  if (!url) return '';
+  const normalized = normalizeUrl(url);
+  const comps = toComponents(normalized);
+  return comps.domain || '';
 };
 
 const domainEquals = (url1: string, url2: string): boolean => {
@@ -57,69 +66,59 @@ const updateIntentionScopeActivity = (intentionScopeId: IntentionScopeId) => {
   );
 };
 
+function shouldTriggerInactivity(
+  intentionScopeId: IntentionScopeId,
+  mode: InactivityMode,
+  timeoutMs: TimeoutMs
+): boolean {
+  if (mode === 'off') return false;
+  const lastActive = lastActiveByScope.get(intentionScopeId);
+  if (!lastActive) return false;
+  const now = createTimestamp();
+  const isInactive = now - lastActive > (timeoutMs as number);
+  console.log('[Intender] Inactivity check:', {
+    intentionScopeId,
+    lastActive,
+    now,
+    timeoutMs,
+    isInactive,
+  });
+  return isInactive;
+}
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 export default defineBackground(async () => {
   // Cache data that won't change during session
   let intentionIndex: IntentionIndex = createIntentionIndex([]);
   const intentionPageUrl = browser.runtime.getURL('intention-page.html');
-  // Immutable inactivity settings snapshot (replaced wholesale on changes)
-  type InactivitySnapshot = Readonly<{
-    mode: InactivityMode;
-    timeoutMs: TimeoutMs;
-  }>;
-  let inactivity: InactivitySnapshot = Object.freeze({
-    mode: 'off',
-    timeoutMs: minutesToMs(30),
+  // Immutable settings cache (read by listeners, written only here and on storage changes)
+  let settingsCache: SettingsCache = Object.freeze({
+    inactivityMode: 'off',
+    inactivityTimeoutMs: minutesToMs(30) as TimeoutMs,
   });
+
+  // Get intention scope ID for a URL (outside try so polling can use it)
+  const lookupIntentionScopeId = (url: string): IntentionScopeId | null => {
+    const matchedIntention = lookupIntention(url, intentionIndex);
+    if (!matchedIntention) return null;
+    return intentionToIntentionScopeId(matchedIntention);
+  };
 
   // Load intentions and settings on startup
   try {
     const {
       intentions,
       inactivityMode = 'off',
-      inactivityTimeoutMs,
+      inactivityTimeoutMs = minutesToMs(30),
     } = await storage.get();
     const parsedIntentions = mapNulls(parseIntention, intentions);
     intentionIndex = createIntentionIndex(parsedIntentions);
-    inactivity = Object.freeze({
-      mode: inactivityMode,
-      timeoutMs:
-        typeof inactivityTimeoutMs === 'number'
-          ? (inactivityTimeoutMs as unknown as TimeoutMs)
-          : minutesToMs(30),
+
+    settingsCache = Object.freeze({
+      inactivityMode: inactivityMode as InactivityMode,
+      inactivityTimeoutMs: inactivityTimeoutMs as TimeoutMs,
     });
-
-    // Get intention scope ID for a URL
-    const lookupIntentionScopeId = (url: string): IntentionScopeId | null => {
-      const matchedIntention = lookupIntention(url, intentionIndex);
-      if (!matchedIntention) return null;
-      return intentionToIntentionScopeId(matchedIntention);
-    };
-
-    // Check if we should trigger inactivity intention
-    const shouldTriggerInactivityIntention = (
-      intentionScopeId: IntentionScopeId
-    ): boolean => {
-      if (inactivity.mode === 'off') return false;
-
-      const lastActive = lastActiveByScope.get(intentionScopeId);
-      if (!lastActive) return false;
-
-      const timeoutMs = inactivity.timeoutMs;
-      const now = createTimestamp();
-      const isInactive = now - lastActive > timeoutMs;
-
-      console.log('[Intender] Intention scope inactivity check:', {
-        intentionScopeId,
-        lastActive,
-        now,
-        timeoutMs,
-        isInactive,
-      });
-
-      return isInactive;
-    };
+    updateIdleDetectionInterval(settingsCache.inactivityTimeoutMs);
 
     // Set up event listeners with access to the functions
     browser.tabs.onActivated.addListener(async activeInfo => {
@@ -136,7 +135,13 @@ export default defineBackground(async () => {
         intentionScopeId,
       });
 
-      if (shouldTriggerInactivityIntention(intentionScopeId)) {
+      if (
+        shouldTriggerInactivity(
+          intentionScopeId,
+          settingsCache.inactivityMode,
+          settingsCache.inactivityTimeoutMs
+        )
+      ) {
         console.log(
           '[Intender] Triggering revalidation for inactive intention scope:',
           intentionScopeId
@@ -161,7 +166,7 @@ export default defineBackground(async () => {
     });
 
     // Handle audio state changes
-    browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
       if (changeInfo.audible !== undefined) {
         const url = tabUrlMap.get(numberToTabId(tabId));
         if (!url) return;
@@ -207,6 +212,14 @@ export default defineBackground(async () => {
         tabId: details.tabId,
         url: details.url,
       });
+
+      // If the destination URL matches an intention, record scope per tab and mark activity
+      const matched = lookupIntention(details.url, intentionIndex);
+      if (matched) {
+        const scopeId = intentionToIntentionScopeId(matched);
+        intentionScopePerTabId.set(numberToTabId(details.tabId), scopeId);
+        updateIntentionScopeActivity(scopeId);
+      }
     }
   });
 
@@ -319,36 +332,100 @@ export default defineBackground(async () => {
     }
   });
 
+  // Idle-based inactivity for focused tab
+  const MIN_IDLE_DETECTION_SECONDS = 15;
+  function updateIdleDetectionInterval(timeoutMs: TimeoutMs): void {
+    try {
+      const seconds = Math.max(
+        MIN_IDLE_DETECTION_SECONDS,
+        msToSeconds(timeoutMs)
+      );
+      chrome.idle.setDetectionInterval(seconds);
+    } catch (e) {
+      console.log('[Intender] Failed to set idle detection interval:', e);
+    }
+  }
+
+  chrome.idle.onStateChanged.addListener(
+    async (newState: chrome.idle.IdleState) => {
+      if (newState !== 'idle') return;
+      await inactivityCheck();
+    }
+  );
+
+  // E2E only: force the same logic as idle without relying on OS idle in automation.
+  // Rationale: In MV3 tests, timers can be suspended and OS idle often doesn't flip.
+  // This hook lets tests trigger the same per-scope path from an extension page.
+  browser.runtime.onMessage.addListener(async (message: unknown) => {
+    const msg = message as { type?: string } | null | undefined;
+    if (!msg || msg.type !== 'e2e:forceInactivityCheck') return;
+    await inactivityCheck();
+  });
+
+  // Shared: perform inactivity check for the focused tab and revalidate if needed
+  async function inactivityCheck(): Promise<void> {
+    try {
+      if (settingsCache.inactivityMode === 'off') return;
+      const [activeTab] = await browser.tabs.query({
+        active: true,
+        currentWindow: true,
+      });
+      if (!activeTab || typeof activeTab.id !== 'number') return;
+      const tabId = numberToTabId(activeTab.id);
+      const cachedUrl = tabUrlMap.get(tabId);
+      const url =
+        cachedUrl || (typeof activeTab.url === 'string' ? activeTab.url : '');
+      if (!url) return;
+      const intentionScopeId =
+        intentionScopePerTabId.get(tabId) || lookupIntentionScopeId(url);
+      if (!intentionScopeId) return;
+      if (
+        shouldTriggerInactivity(
+          intentionScopeId,
+          settingsCache.inactivityMode,
+          settingsCache.inactivityTimeoutMs
+        )
+      ) {
+        const redirect = browser.runtime.getURL(
+          'intention-page.html?target=' +
+            encodeURIComponent(url) +
+            '&intentionScopeId=' +
+            encodeURIComponent(intentionScopeId)
+        );
+        try {
+          await browser.tabs.update(activeTab.id, { url: redirect });
+        } catch (error) {
+          console.log('[Intender] Redirect failed:', error);
+        }
+      }
+    } catch (error) {
+      console.log('[Intender] Inactivity check failed:', error);
+    }
+  }
+
   // Refresh cached intentions and inactivity settings when storage changes
   browser.storage.onChanged.addListener(async changes => {
-    if (changes.intentions) {
-      try {
+    try {
+      // Intentions updated → rebuild index
+      if (changes.intentions) {
         const { intentions } = await storage.get();
         const parsedIntentions = mapNulls(parseIntention, intentions);
         intentionIndex = createIntentionIndex(parsedIntentions);
-      } catch (error) {
-        console.error('[Intender] Failed to refresh intention index:', error);
       }
-    }
-    if (changes.inactivityMode || changes.inactivityTimeoutMs) {
-      try {
+
+      // Inactivity settings updated → refresh snapshot and idle interval
+      if (changes.inactivityMode || changes.inactivityTimeoutMs) {
         const { inactivityMode, inactivityTimeoutMs } = await storage.get();
-        const newMode = (
-          typeof inactivityMode !== 'undefined'
-            ? inactivityMode
-            : inactivity.mode
-        ) as InactivityMode;
-        const newTimeout =
-          typeof inactivityTimeoutMs === 'number'
-            ? (inactivityTimeoutMs as unknown as TimeoutMs)
-            : inactivity.timeoutMs;
-        inactivity = Object.freeze({ mode: newMode, timeoutMs: newTimeout });
-      } catch (error) {
-        console.error(
-          '[Intender] Failed to update inactivity settings:',
-          error
-        );
+        settingsCache = Object.freeze({
+          inactivityMode: (inactivityMode ??
+            settingsCache.inactivityMode) as InactivityMode,
+          inactivityTimeoutMs: (inactivityTimeoutMs ??
+            settingsCache.inactivityTimeoutMs) as TimeoutMs,
+        });
+        updateIdleDetectionInterval(settingsCache.inactivityTimeoutMs);
       }
+    } catch (error) {
+      console.error('[Intender] Failed handling storage change:', error);
     }
   });
 });

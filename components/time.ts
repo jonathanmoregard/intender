@@ -16,3 +16,7 @@ export function minutesToMs(minutes: number): TimeoutMs {
 export function msToMinutes(ms: number): number {
   return Math.round(ms / (60 * 1000));
 }
+
+export function msToSeconds(ms: number | TimeoutMs): number {
+  return Math.floor((ms as number) / 1000);
+}
