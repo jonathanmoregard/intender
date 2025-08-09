@@ -18,7 +18,6 @@ import { storage, type InactivityMode } from '../components/storage';
 import {
   createTimestamp,
   minutesToMs,
-  msToSeconds,
   type TimeoutMs,
   type Timestamp,
 } from '../components/time';
@@ -42,6 +41,28 @@ const tabUrlMap = new Map<TabId, string>();
 // Inactivity tracking
 const lastActiveByScope = new Map<IntentionScopeId, Timestamp>();
 const intentionScopePerTabId = new Map<TabId, IntentionScopeId>();
+const audibleTabsByScope = new Map<IntentionScopeId, Set<TabId>>();
+
+function markTabAudible(scopeId: IntentionScopeId, tabId: TabId): void {
+  let set = audibleTabsByScope.get(scopeId);
+  if (!set) {
+    set = new Set<TabId>();
+    audibleTabsByScope.set(scopeId, set);
+  }
+  set.add(tabId);
+}
+
+function unmarkTabAudible(scopeId: IntentionScopeId, tabId: TabId): void {
+  const set = audibleTabsByScope.get(scopeId);
+  if (!set) return;
+  set.delete(tabId);
+  if (set.size === 0) audibleTabsByScope.delete(scopeId);
+}
+
+function isScopeAudible(scopeId: IntentionScopeId): boolean {
+  const set = audibleTabsByScope.get(scopeId);
+  return !!set && set.size > 0;
+}
 
 const getDomain = (input: string): string => {
   const url = parseUrlString(input);
@@ -72,6 +93,10 @@ function shouldTriggerInactivity(
   timeoutMs: TimeoutMs
 ): boolean {
   if (mode === 'off') return false;
+  if (mode === 'all-except-audio') {
+    // If any tab for this scope is currently audible, do not revalidate
+    if (isScopeAudible(intentionScopeId)) return false;
+  }
   const lastActive = lastActiveByScope.get(intentionScopeId);
   if (!lastActive) return false;
   const now = createTimestamp();
@@ -118,7 +143,7 @@ export default defineBackground(async () => {
       inactivityMode: inactivityMode as InactivityMode,
       inactivityTimeoutMs: inactivityTimeoutMs as TimeoutMs,
     });
-    updateIdleDetectionInterval(settingsCache.inactivityTimeoutMs);
+    toggleIdleDetection(settingsCache.inactivityMode);
 
     // Set up event listeners with access to the functions
     browser.tabs.onActivated.addListener(async activeInfo => {
@@ -168,22 +193,22 @@ export default defineBackground(async () => {
     // Handle audio state changes
     browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
       if (changeInfo.audible !== undefined) {
-        const url = tabUrlMap.get(numberToTabId(tabId));
-        if (!url) return;
-
-        const intentionScopeId = lookupIntentionScopeId(url);
-        if (!intentionScopeId) return;
+        const tId = numberToTabId(tabId);
+        const url = tabUrlMap.get(tId);
+        const intentionScopeId = url ? lookupIntentionScopeId(url) : null;
 
         if (changeInfo.audible) {
+          if (intentionScopeId) markTabAudible(intentionScopeId, tId);
           console.log('[Intender] Tab became audible, resetting activity:', {
             tabId,
-            intentionScopeId,
+            intentionScopeId: intentionScopeId || 'unknown',
           });
-          updateIntentionScopeActivity(intentionScopeId);
+          if (intentionScopeId) updateIntentionScopeActivity(intentionScopeId);
         } else {
+          if (intentionScopeId) unmarkTabAudible(intentionScopeId, tId);
           console.log('[Intender] Tab stopped being audible:', {
             tabId,
-            intentionScopeId,
+            intentionScopeId: intentionScopeId || 'unknown',
           });
         }
       }
@@ -225,8 +250,18 @@ export default defineBackground(async () => {
 
   // Clean up cache when tabs are removed
   browser.tabs.onRemoved.addListener(tabId => {
-    tabUrlMap.delete(numberToTabId(tabId));
-    intentionScopePerTabId.delete(numberToTabId(tabId));
+    const tId = numberToTabId(tabId);
+    const scope = intentionScopePerTabId.get(tId);
+    // If this tab was marked audible for a scope, decrement
+    if (scope) {
+      const set = audibleTabsByScope.get(scope);
+      if (set && set.has(tId)) {
+        set.delete(tId);
+        if (set.size === 0) audibleTabsByScope.delete(scope);
+      }
+    }
+    tabUrlMap.delete(tId);
+    intentionScopePerTabId.delete(tId);
     console.log('[Intender] Tab removed, cleared cache:', { tabId });
   });
 
@@ -334,72 +369,100 @@ export default defineBackground(async () => {
 
   // Idle-based inactivity for focused tab
   const MIN_IDLE_DETECTION_SECONDS = 15;
-  function updateIdleDetectionInterval(timeoutMs: TimeoutMs): void {
-    try {
-      const seconds = Math.max(
-        MIN_IDLE_DETECTION_SECONDS,
-        msToSeconds(timeoutMs)
-      );
-      chrome.idle.setDetectionInterval(seconds);
-    } catch (e) {
-      console.log('[Intender] Failed to set idle detection interval:', e);
-    }
+  try {
+    chrome.idle.setDetectionInterval(MIN_IDLE_DETECTION_SECONDS);
+  } catch (e) {
+    console.log('[Intender] Failed to set idle detection interval:', e);
   }
 
-  chrome.idle.onStateChanged.addListener(
-    async (newState: chrome.idle.IdleState) => {
-      if (newState !== 'idle') return;
-      await inactivityCheck();
+  let e2eDisableIdleListener = false;
+
+  function toggleIdleDetection(mode: InactivityMode): void {
+    if (mode === 'off' || e2eDisableIdleListener) {
+      chrome.idle.onStateChanged.removeListener(idlePoll);
+    } else {
+      chrome.idle.onStateChanged.addListener(idlePoll);
     }
-  );
+  }
 
   // E2E only: force the same logic as idle without relying on OS idle in automation.
   // Rationale: In MV3 tests, timers can be suspended and OS idle often doesn't flip.
   // This hook lets tests trigger the same per-scope path from an extension page.
   browser.runtime.onMessage.addListener(async (message: unknown) => {
     const msg = message as { type?: string } | null | undefined;
-    if (!msg || msg.type !== 'e2e:forceInactivityCheck') return;
-    await inactivityCheck();
+    if (!msg || typeof msg.type !== 'string') return;
+    if (msg.type === 'e2e:forceInactivityCheck-idle') {
+      e2eDisableIdleListener = true;
+      toggleIdleDetection(settingsCache.inactivityMode);
+      await idlePoll('idle');
+    } else if (msg.type === 'e2e:forceInactivityCheck-active') {
+      e2eDisableIdleListener = true;
+      toggleIdleDetection(settingsCache.inactivityMode);
+      await idlePoll('active');
+    } else {
+      return;
+    }
   });
 
-  // Shared: perform inactivity check for the focused tab and revalidate if needed
-  async function inactivityCheck(): Promise<void> {
-    try {
-      if (settingsCache.inactivityMode === 'off') return;
-      const [activeTab] = await browser.tabs.query({
-        active: true,
-        currentWindow: true,
-      });
-      if (!activeTab || typeof activeTab.id !== 'number') return;
-      const tabId = numberToTabId(activeTab.id);
-      const cachedUrl = tabUrlMap.get(tabId);
-      const url =
-        cachedUrl || (typeof activeTab.url === 'string' ? activeTab.url : '');
-      if (!url) return;
-      const intentionScopeId =
-        intentionScopePerTabId.get(tabId) || lookupIntentionScopeId(url);
-      if (!intentionScopeId) return;
-      if (
-        shouldTriggerInactivity(
-          intentionScopeId,
-          settingsCache.inactivityMode,
-          settingsCache.inactivityTimeoutMs
-        )
-      ) {
-        const redirect = browser.runtime.getURL(
-          'intention-page.html?target=' +
-            encodeURIComponent(url) +
-            '&intentionScopeId=' +
-            encodeURIComponent(intentionScopeId)
-        );
-        try {
-          await browser.tabs.update(activeTab.id, { url: redirect });
-        } catch (error) {
-          console.log('[Intender] Redirect failed:', error);
+  async function idlePoll(newState: chrome.idle.IdleState): Promise<void> {
+    if (newState === 'idle') {
+      try {
+        if (settingsCache.inactivityMode === 'off') return;
+        const [activeTab] = await browser.tabs.query({
+          active: true,
+          currentWindow: true,
+        });
+        if (!activeTab || typeof activeTab.id !== 'number') return;
+        const tabId = numberToTabId(activeTab.id);
+        const cachedUrl = tabUrlMap.get(tabId);
+        const url =
+          cachedUrl || (typeof activeTab.url === 'string' ? activeTab.url : '');
+        if (!url) return;
+        const intentionScopeId =
+          intentionScopePerTabId.get(tabId) || lookupIntentionScopeId(url);
+        if (!intentionScopeId) return;
+        if (
+          shouldTriggerInactivity(
+            intentionScopeId,
+            settingsCache.inactivityMode,
+            settingsCache.inactivityTimeoutMs
+          )
+        ) {
+          const redirect = browser.runtime.getURL(
+            'intention-page.html?target=' +
+              encodeURIComponent(url) +
+              '&intentionScopeId=' +
+              encodeURIComponent(intentionScopeId)
+          );
+          try {
+            await browser.tabs.update(activeTab.id, { url: redirect });
+          } catch (error) {
+            console.log('[Intender] Redirect failed:', error);
+          }
         }
+      } catch (error) {
+        console.log('[Intender] Inactivity check failed:', error);
       }
-    } catch (error) {
-      console.log('[Intender] Inactivity check failed:', error);
+      return;
+    }
+    if (newState === 'active') {
+      try {
+        const [activeTab] = await browser.tabs.query({
+          active: true,
+          currentWindow: true,
+        });
+        if (!activeTab || typeof activeTab.id !== 'number') return;
+        const tId = numberToTabId(activeTab.id);
+        const cachedUrl = tabUrlMap.get(tId);
+        const url =
+          cachedUrl || (typeof activeTab.url === 'string' ? activeTab.url : '');
+        if (!url) return;
+        const scope =
+          intentionScopePerTabId.get(tId) || lookupIntentionScopeId(url);
+        if (scope) updateIntentionScopeActivity(scope);
+      } catch (error) {
+        console.log('[Intender] Idle active mark failed:', error);
+      }
     }
   }
 
@@ -422,7 +485,7 @@ export default defineBackground(async () => {
           inactivityTimeoutMs: (inactivityTimeoutMs ??
             settingsCache.inactivityTimeoutMs) as TimeoutMs,
         });
-        updateIdleDetectionInterval(settingsCache.inactivityTimeoutMs);
+        toggleIdleDetection(settingsCache.inactivityMode);
       }
     } catch (error) {
       console.error('[Intender] Failed handling storage change:', error);
