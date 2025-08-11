@@ -87,29 +87,6 @@ const updateIntentionScopeActivity = (intentionScopeId: IntentionScopeId) => {
   );
 };
 
-function shouldTriggerInactivity(
-  intentionScopeId: IntentionScopeId,
-  mode: InactivityMode,
-  timeoutMs: TimeoutMs
-): boolean {
-  if (mode === 'off') return false;
-  if (mode === 'all-except-audio') {
-    // If any tab for this scope is currently audible, do not revalidate
-    if (isScopeAudible(intentionScopeId)) return false;
-  }
-  const lastActive = lastActiveByScope.get(intentionScopeId);
-  if (!lastActive) return false;
-  const now = createTimestamp();
-  const isInactive = now - lastActive > (timeoutMs as number);
-  console.log('[Intender] Inactivity check:', {
-    intentionScopeId,
-    lastActive,
-    now,
-    timeoutMs,
-    isInactive,
-  });
-  return isInactive;
-}
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 export default defineBackground(async () => {
@@ -121,6 +98,9 @@ export default defineBackground(async () => {
     inactivityMode: 'off',
     inactivityTimeoutMs: minutesToMs(30) as TimeoutMs,
   });
+
+  // E2E: test control flag must be initialized before any calls that read it
+  let e2eDisableIdleListener = false;
 
   // Get intention scope ID for a URL (outside try so polling can use it)
   const lookupIntentionScopeId = (url: string): IntentionScopeId | null => {
@@ -143,6 +123,7 @@ export default defineBackground(async () => {
       inactivityMode: inactivityMode as InactivityMode,
       inactivityTimeoutMs: inactivityTimeoutMs as TimeoutMs,
     });
+    updateIdleDetectionInterval(settingsCache.inactivityTimeoutMs);
     toggleIdleDetection(settingsCache.inactivityMode);
 
     // Set up event listeners with access to the functions
@@ -160,34 +141,8 @@ export default defineBackground(async () => {
         intentionScopeId,
       });
 
-      if (
-        shouldTriggerInactivity(
-          intentionScopeId,
-          settingsCache.inactivityMode,
-          settingsCache.inactivityTimeoutMs
-        )
-      ) {
-        console.log(
-          '[Intender] Triggering revalidation for inactive intention scope:',
-          intentionScopeId
-        );
-
-        const intentionPageUrl = browser.runtime.getURL(
-          'intention-page.html?target=' +
-            encodeURIComponent(url) +
-            '&intentionScopeId=' +
-            encodeURIComponent(intentionScopeId)
-        );
-
-        try {
-          await browser.tabs.update(tabId, { url: intentionPageUrl });
-        } catch (error) {
-          console.log('[Intender] Failed to redirect for revalidation:', error);
-        }
-      } else {
-        // Update activity on focus
-        updateIntentionScopeActivity(intentionScopeId);
-      }
+      // On focus, always update activity for the scope
+      updateIntentionScopeActivity(intentionScopeId);
     });
 
     // Handle audio state changes
@@ -368,20 +323,21 @@ export default defineBackground(async () => {
   });
 
   // Idle-based inactivity for focused tab
-  const MIN_IDLE_DETECTION_SECONDS = 15;
-  try {
-    chrome.idle.setDetectionInterval(MIN_IDLE_DETECTION_SECONDS);
-  } catch (e) {
-    console.log('[Intender] Failed to set idle detection interval:', e);
-  }
 
-  let e2eDisableIdleListener = false;
+  function updateIdleDetectionInterval(timeoutMs: TimeoutMs): void {
+    const timeoutSeconds = Math.max(15, Math.floor(timeoutMs / 1000));
+    try {
+      chrome.idle.setDetectionInterval(timeoutSeconds);
+    } catch (e) {
+      console.log('[Intender] Failed to set idle detection interval:', e);
+    }
+  }
 
   function toggleIdleDetection(mode: InactivityMode): void {
     if (mode === 'off' || e2eDisableIdleListener) {
-      chrome.idle.onStateChanged.removeListener(idlePoll);
+      chrome.idle.onStateChanged.removeListener(inactivityChange);
     } else {
-      chrome.idle.onStateChanged.addListener(idlePoll);
+      chrome.idle.onStateChanged.addListener(inactivityChange);
     }
   }
 
@@ -394,57 +350,63 @@ export default defineBackground(async () => {
     if (msg.type === 'e2e:forceInactivityCheck-idle') {
       e2eDisableIdleListener = true;
       toggleIdleDetection(settingsCache.inactivityMode);
-      await idlePoll('idle');
+      await inactivityChange('idle');
     } else if (msg.type === 'e2e:forceInactivityCheck-active') {
       e2eDisableIdleListener = true;
       toggleIdleDetection(settingsCache.inactivityMode);
-      await idlePoll('active');
+      await inactivityChange('active');
     } else {
       return;
     }
   });
 
-  async function idlePoll(newState: chrome.idle.IdleState): Promise<void> {
+  async function inactivityChange(
+    newState: chrome.idle.IdleState
+  ): Promise<void> {
     if (newState === 'idle') {
       try {
         if (settingsCache.inactivityMode === 'off') return;
+
         const [activeTab] = await browser.tabs.query({
           active: true,
           currentWindow: true,
         });
         if (!activeTab || typeof activeTab.id !== 'number') return;
+
         const tabId = numberToTabId(activeTab.id);
         const cachedUrl = tabUrlMap.get(tabId);
         const url =
           cachedUrl || (typeof activeTab.url === 'string' ? activeTab.url : '');
         if (!url) return;
+
         const intentionScopeId =
           intentionScopePerTabId.get(tabId) || lookupIntentionScopeId(url);
         if (!intentionScopeId) return;
-        if (
-          shouldTriggerInactivity(
-            intentionScopeId,
-            settingsCache.inactivityMode,
-            settingsCache.inactivityTimeoutMs
-          )
-        ) {
-          const redirect = browser.runtime.getURL(
-            'intention-page.html?target=' +
-              encodeURIComponent(url) +
-              '&intentionScopeId=' +
-              encodeURIComponent(intentionScopeId)
-          );
-          try {
-            await browser.tabs.update(activeTab.id, { url: redirect });
-          } catch (error) {
-            console.log('[Intender] Redirect failed:', error);
-          }
+
+        // Check audio exemption
+        if (settingsCache.inactivityMode === 'all-except-audio') {
+          if (isScopeAudible(intentionScopeId)) return;
+        }
+
+        // Redirect to intention page
+        const redirect = browser.runtime.getURL(
+          'intention-page.html?target=' +
+            encodeURIComponent(url) +
+            '&intentionScopeId=' +
+            encodeURIComponent(intentionScopeId)
+        );
+
+        try {
+          await browser.tabs.update(activeTab.id, { url: redirect });
+        } catch (error) {
+          console.log('[Intender] Redirect failed:', error);
         }
       } catch (error) {
         console.log('[Intender] Inactivity check failed:', error);
       }
       return;
     }
+
     if (newState === 'active') {
       try {
         const [activeTab] = await browser.tabs.query({
@@ -452,11 +414,13 @@ export default defineBackground(async () => {
           currentWindow: true,
         });
         if (!activeTab || typeof activeTab.id !== 'number') return;
+
         const tId = numberToTabId(activeTab.id);
         const cachedUrl = tabUrlMap.get(tId);
         const url =
           cachedUrl || (typeof activeTab.url === 'string' ? activeTab.url : '');
         if (!url) return;
+
         const scope =
           intentionScopePerTabId.get(tId) || lookupIntentionScopeId(url);
         if (scope) updateIntentionScopeActivity(scope);
@@ -485,6 +449,7 @@ export default defineBackground(async () => {
           inactivityTimeoutMs: (inactivityTimeoutMs ??
             settingsCache.inactivityTimeoutMs) as TimeoutMs,
         });
+        updateIdleDetectionInterval(settingsCache.inactivityTimeoutMs);
         toggleIdleDetection(settingsCache.inactivityMode);
       }
     } catch (error) {
