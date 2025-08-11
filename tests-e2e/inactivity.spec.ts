@@ -7,27 +7,24 @@ import {
 
 test.describe.configure({ mode: 'parallel' });
 
-async function seedYouTubeConsentCookies(context: any): Promise<void> {
-  await context.addCookies([
-    {
-      name: 'CONSENT',
-      value: 'YES+1',
-      domain: '.youtube.com',
-      path: '/',
-      httpOnly: false,
-      secure: true,
-      sameSite: 'Lax',
+async function startAudioPlayback(page: Page): Promise<void> {
+  // Navigate to the first-party audio fixture
+  await page.goto('https://jonathanmoregard.github.io/intender/test/assets/');
+
+  // Click the play button
+  const playButton = page.getByTestId('fixture-play');
+  await playButton.waitFor({ state: 'visible' });
+  await playButton.click();
+
+  // Wait for audio to actually start playing
+  await page.waitForFunction(
+    () => {
+      // @ts-ignore
+      const audio = document.querySelector('audio');
+      return !!audio && !audio.paused && audio.currentTime > 0;
     },
-    {
-      name: 'CONSENT',
-      value: 'YES+1',
-      domain: '.google.com',
-      path: '/',
-      httpOnly: false,
-      secure: true,
-      sameSite: 'Lax',
-    },
-  ]);
+    { timeout: 5000 }
+  );
 }
 
 async function setupInactivityAndIntention(context: any, timeoutMs: number) {
@@ -55,7 +52,7 @@ async function setupInactivityAndIntention(context: any, timeoutMs: number) {
 
   const urlInput = options.locator('input.url-input').first();
   const phraseInput = options.locator('textarea.phrase-input').first();
-  await urlInput.fill('google.com');
+  await urlInput.fill('jonathanmoregard.github.io');
   await phraseInput.fill('Hello Intent');
 
   await waitForSyncStorageChange(options, ['intentions']);
@@ -68,7 +65,10 @@ async function setupInactivityAndIntention(context: any, timeoutMs: number) {
 async function openAndCompleteIntention(context: any) {
   const target: Page = await context.newPage();
   try {
-    await target.goto('https://google.com', { waitUntil: 'domcontentloaded' });
+    await target.goto(
+      'https://jonathanmoregard.github.io/intender/test/assets/',
+      { waitUntil: 'domcontentloaded' }
+    );
   } catch {}
   await expect(target).toHaveURL(
     /chrome-extension:\/\/.+\/intention-page\.html\?target=/
@@ -77,7 +77,9 @@ async function openAndCompleteIntention(context: any) {
   await target.locator('#phrase').fill('Hello Intent');
   const goButton = target.locator('#go');
   await Promise.all([
-    target.waitForNavigation({ url: /https:\/\/www\.google\.com\/?/ }),
+    target.waitForNavigation({
+      url: /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//,
+    }),
     goButton.click(),
   ]);
   return target;
@@ -88,47 +90,6 @@ async function forceInactivityCheck(optionsPage: Page) {
     // @ts-ignore
     chrome.runtime.sendMessage({ type: 'e2e:forceInactivityCheck-idle' });
   });
-}
-
-async function startYouTubePlayback(page: Page): Promise<void> {
-  const first = page.locator('ytd-video-renderer #video-title').first();
-  await first.waitFor({ state: 'visible', timeout: 10000 });
-  await first.click();
-
-  await page.waitForFunction(
-    () => {
-      // @ts-ignore
-      return !!document.querySelector('video');
-    },
-    { timeout: 10000 }
-  );
-
-  await page.evaluate(() => {
-    // @ts-ignore
-    const v = document.querySelector('video');
-    if (v) {
-      v.muted = false;
-      v.volume = 0.1;
-      const p = v.play?.();
-      if (p && typeof p.then === 'function') p.catch(() => {});
-    }
-  });
-
-  try {
-    await page.keyboard.press('k');
-  } catch {}
-  try {
-    await page.keyboard.press('m');
-  } catch {}
-
-  await page.waitForFunction(
-    () => {
-      // @ts-ignore
-      const v = document.querySelector('video');
-      return !!v && v.readyState >= 2 && !v.paused;
-    },
-    { timeout: 10000 }
-  );
 }
 
 test.describe('Inactivity revalidation', () => {
@@ -151,10 +112,10 @@ test.describe('Inactivity revalidation', () => {
 
   test('same-tab: revalidates without tab switch after inactivity', async () => {
     const { context } = await launchExtension();
-    const { options } = await setupInactivityAndIntention(context, 3000);
+    const { options } = await setupInactivityAndIntention(context, 15000);
     const target = await openAndCompleteIntention(context);
 
-    await target.waitForTimeout(3500);
+    await target.waitForTimeout(15500);
     await forceInactivityCheck(options);
 
     await expect(target).toHaveURL(
@@ -164,7 +125,7 @@ test.describe('Inactivity revalidation', () => {
     await context.close();
   });
 
-  test('sound: other tab with audio should bypass inactivity revalidation', async () => {
+  test('sound: same-scope tab with audio should bypass inactivity revalidation', async () => {
     const { context } = await launchExtension();
     const { options } = await setupInactivityAndIntention(context, 3000);
     // Switch to mode all-except-audio
@@ -173,20 +134,18 @@ test.describe('Inactivity revalidation', () => {
 
     const target = await openAndCompleteIntention(context);
 
-    // Pre-seed consent and open a YouTube audio tab and start playback
-    await seedYouTubeConsentCookies(context);
+    // Open another tab with the same fixture (same scope) with audio and start playback
     const audioTab = await context.newPage();
-    await audioTab.goto(
-      'https://www.youtube.com/results?search_query=1+hour+background+music'
-    );
-    await startYouTubePlayback(audioTab);
+    await startAudioPlayback(audioTab);
 
     // Wait beyond inactivity
     await options.waitForTimeout(3500);
 
-    // Bring google tab to front, should NOT redirect due to audible exemption
+    // Bring target tab to front, should NOT redirect due to audible exemption in same scope
     await target.bringToFront();
-    await expect(target).toHaveURL(/https:\/\/www\.google\.com\/?/);
+    await expect(target).toHaveURL(
+      /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
+    );
 
     await context.close();
   });
@@ -198,13 +157,9 @@ test.describe('Inactivity revalidation', () => {
     await options.getByTestId('inactivity-mode-all-except-audio').click();
     await options.waitForTimeout(200);
 
-    // Pre-seed consent and open YouTube in the same tab and start playback
-    await seedYouTubeConsentCookies(context);
+    // Open an audio tab and start playback
     const audioTab = await context.newPage();
-    await audioTab.goto(
-      'https://www.youtube.com/results?search_query=1+hour+background+music'
-    );
-    await startYouTubePlayback(audioTab);
+    await startAudioPlayback(audioTab);
 
     // Stay on audio tab and wait beyond inactivity
     await audioTab.waitForTimeout(3500);
