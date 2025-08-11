@@ -32,16 +32,11 @@
 
 ### Permissions & Review Risk
 
-- Declaring `["storage", "webNavigation", "tabs"]` and `"<all_urls>"` can slow reviews
+- Declaring `["storage", "webNavigation", "tabs", "idle"]` can slow reviews
 - To reduce friction:
   - Use `optional_host_permissions` if possible
   - Provide a clear reviewer note justifying each permission
   - Avoid sensitive language (e.g., "tracking") in manifest/comments
-
-### Versioning
-
-- Manual bump required on every update (`manifest.json`)
-- Stores reject uploads if version is unchanged
 
 ### SEO
 
