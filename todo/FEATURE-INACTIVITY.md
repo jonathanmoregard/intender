@@ -24,6 +24,7 @@
     2. derive via `tabUrlMap.get(tabId)` → scope lookup
     3. otherwise return null
   - Must tolerate missing data and return null when unresolved.
+  - Important: The intention page URL is NOT a scope. Do not treat the intention page as being “in” the scope for same-scope decisions; only real destination pages count.
 - `shouldTriggerInactivityIntentionCheck(mode, scopeId) -> boolean`
   - If `scopeId` is null: false
   - If `lastActiveByScope[scopeId]` is missing (first seen): false (initialize via normal bump path)
