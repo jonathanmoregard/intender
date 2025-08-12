@@ -51,6 +51,7 @@ const lastActiveByScope = new Map<IntentionScopeId, Timestamp>();
 const intentionScopePerTabId = new Map<TabId, IntentionScopeId>();
 const audibleTabsByScope = new Map<IntentionScopeId, Set<TabId>>();
 const lastActiveTabIdByWindow = new Map<WindowId, TabId>();
+// never -1, ignore non proper browser windows
 let lastFocusedWindowId: WindowId | null = null;
 const lastRedirectAtByTabId = new Map<TabId, Timestamp>();
 
@@ -128,16 +129,29 @@ export default defineBackground(async () => {
     // Resolution order per spec:
     // 1. intentionScopePerTabId if present
     const mappedScope = intentionScopePerTabId.get(tabId);
-    if (mappedScope) return mappedScope;
+    if (mappedScope) {
+      console.log('[Intender] getScopeForTab: mapped scope', {
+        tabId,
+        mappedScope,
+      });
+      return mappedScope;
+    }
 
     // 2. derive via tabUrlMap → scope lookup
     const cachedUrl = tabUrlMap.get(tabId);
     const resolvedUrl = url || cachedUrl;
     if (resolvedUrl) {
-      return lookupIntentionScopeId(resolvedUrl);
+      const scopeFromUrl = lookupIntentionScopeId(resolvedUrl);
+      console.log('[Intender] getScopeForTab: from URL', {
+        tabId,
+        url: resolvedUrl,
+        scopeFromUrl: scopeFromUrl || null,
+      });
+      return scopeFromUrl;
     }
 
     // 3. otherwise return null
+    console.log('[Intender] getScopeForTab: unresolved', { tabId });
     return null;
   };
 
@@ -190,6 +204,17 @@ export default defineBackground(async () => {
     toUrl?: string;
     windowId: WindowId;
   }): Promise<void> => {
+    // Snapshot of window → last active tab mapping prior to handling
+    try {
+      const mapSnapshot = Array.from(lastActiveTabIdByWindow.entries()).map(
+        ([w, t]) => ({
+          windowId: w as unknown as number,
+          tabId: t as unknown as number,
+        })
+      );
+      console.log('[Intender] Focus handler map snapshot (pre)', mapSnapshot);
+    } catch {}
+
     // Compute scopes for both tabs
     const fromScope = fromTabId ? getScopeForTab(fromTabId) : null;
     const toScope = getScopeForTab(toTabId, toUrl);
@@ -233,6 +258,10 @@ export default defineBackground(async () => {
       // Bump activity for the scope and update tracking
       updateIntentionScopeActivity(toScope);
       lastActiveTabIdByWindow.set(windowId, toTabId);
+      console.log('[Intender] Updated lastActiveTabIdByWindow (fast path)', {
+        windowId,
+        toTabId,
+      });
       return;
     } else {
       console.log('[Intender] NOT same-scope switch:', {
@@ -276,6 +305,13 @@ export default defineBackground(async () => {
         '[Intender] Target tab already on intention page, skipping redirect'
       );
       lastActiveTabIdByWindow.set(windowId, toTabId);
+      console.log(
+        '[Intender] Updated lastActiveTabIdByWindow (guard intention url)',
+        {
+          windowId,
+          toTabId,
+        }
+      );
       return;
     }
 
@@ -302,6 +338,10 @@ export default defineBackground(async () => {
 
     // Update tracking
     lastActiveTabIdByWindow.set(windowId, toTabId);
+    console.log('[Intender] Updated lastActiveTabIdByWindow (post)', {
+      windowId,
+      toTabId,
+    });
   };
 
   // Central helper to redirect to intention page with cooldown protection
@@ -410,6 +450,16 @@ export default defineBackground(async () => {
 
       // Get the URL for the "to" tab
       const toUrl = tabUrlMap.get(toTabId);
+
+      // Diagnostic: explicit tab focus event log
+      const toScopeForLog = getScopeForTab(toTabId, toUrl);
+      console.log('[Intender] Tab focus event:', {
+        windowId,
+        fromTabId,
+        toTabId,
+        toUrl: toUrl || '',
+        toScope: toScopeForLog,
+      });
 
       // Use unified focus handler
       await handleFocusChange({
@@ -583,6 +633,18 @@ export default defineBackground(async () => {
       prevWindowId,
       newWindowId: windowId,
     });
+    try {
+      const mapSnapshot = Array.from(lastActiveTabIdByWindow.entries()).map(
+        ([w, t]) => ({
+          windowId: w as unknown as number,
+          tabId: t as unknown as number,
+        })
+      );
+      console.log('[Intender] Window focus map snapshot', {
+        lastFocusedWindowId,
+        map: mapSnapshot,
+      });
+    } catch {}
 
     // If windowId === -1 (no window focused), return early
     if (windowId === -1) return;
@@ -839,12 +901,27 @@ export default defineBackground(async () => {
       try {
         if (settingsCache.inactivityMode === 'off') return;
 
-        // Check if there is a window in focus, return if not
-        if (!lastFocusedWindowId) return;
+        // Strictly check for a currently focused window at idle time
+        let focusedWindowId: number | null = null;
+        try {
+          const windows = await browser.windows.getAll();
+          const focused = windows.find(w => w.focused);
+          focusedWindowId = typeof focused?.id === 'number' ? focused.id : null;
+        } catch (e) {
+          // If we cannot determine a focused window, abort
+          focusedWindowId = null;
+        }
+
+        if (focusedWindowId === null) {
+          console.log(
+            '[Intender] Inactivity: no focused window at idle, skipping'
+          );
+          return;
+        }
 
         const [activeTab] = await browser.tabs.query({
           active: true,
-          windowId: lastFocusedWindowId,
+          windowId: focusedWindowId,
         });
         if (!activeTab || typeof activeTab.id !== 'number') return;
 
