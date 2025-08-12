@@ -30,9 +30,17 @@ type SettingsCache = Readonly<{
 // Branded type for tab ID
 export type TabId = Brand<number, 'TabId'>;
 
+// Branded type for window ID
+export type WindowId = Brand<number, 'WindowId'>;
+
 // Helper functions for TabId
 function numberToTabId(num: number): TabId {
   return num as TabId;
+}
+
+// Helper functions for WindowId
+function numberToWindowId(num: number): WindowId {
+  return num as WindowId;
 }
 
 // Tab URL cache to track last-known URLs for each tab
@@ -42,6 +50,9 @@ const tabUrlMap = new Map<TabId, string>();
 const lastActiveByScope = new Map<IntentionScopeId, Timestamp>();
 const intentionScopePerTabId = new Map<TabId, IntentionScopeId>();
 const audibleTabsByScope = new Map<IntentionScopeId, Set<TabId>>();
+const lastActiveTabIdByWindow = new Map<WindowId, TabId>();
+let lastFocusedWindowId: WindowId | null = null;
+const lastRedirectAtByTabId = new Map<TabId, Timestamp>();
 
 function markTabAudible(scopeId: IntentionScopeId, tabId: TabId): void {
   let set = audibleTabsByScope.get(scopeId);
@@ -109,6 +120,266 @@ export default defineBackground(async () => {
     return intentionToIntentionScopeId(matchedIntention);
   };
 
+  // Get intention scope ID for a tab with comprehensive resolution
+  const getScopeForTab = (
+    tabId: TabId,
+    url?: string
+  ): IntentionScopeId | null => {
+    // Resolution order per spec:
+    // 1. intentionScopePerTabId if present
+    const mappedScope = intentionScopePerTabId.get(tabId);
+    if (mappedScope) return mappedScope;
+
+    // 2. derive via tabUrlMap → scope lookup
+    const cachedUrl = tabUrlMap.get(tabId);
+    const resolvedUrl = url || cachedUrl;
+    if (resolvedUrl) {
+      return lookupIntentionScopeId(resolvedUrl);
+    }
+
+    // 3. otherwise return null
+    return null;
+  };
+
+  // Check if a scope should trigger inactivity intention check
+  function shouldTriggerInactivityIntentionCheck(
+    mode: InactivityMode,
+    scopeId: IntentionScopeId | null,
+    timeoutMs: TimeoutMs
+  ): boolean {
+    if (mode === 'off' || !scopeId) return false;
+
+    // Check audio exemption for all-except-audio mode
+    if (mode === 'all-except-audio' && isScopeAudible(scopeId)) {
+      return false;
+    }
+
+    // Check if scope has been inactive long enough
+    const lastActive = lastActiveByScope.get(scopeId);
+    if (!lastActive) {
+      // First-seen scope: return false (will be handled by normal bump path)
+      return false;
+    }
+
+    const now = createTimestamp();
+    const isInactive = now - lastActive >= (timeoutMs as number);
+
+    console.log('[Intender] Inactivity check:', {
+      scopeId,
+      lastActive,
+      now,
+      timeoutMs,
+      isInactive,
+      mode,
+      isScopeAudible:
+        mode === 'all-except-audio' ? isScopeAudible(scopeId) : 'N/A',
+    });
+
+    return isInactive;
+  }
+
+  // Unified focus handling with same-scope fast path
+  const handleFocusChange = async ({
+    fromTabId,
+    toTabId,
+    toUrl,
+    windowId,
+  }: {
+    fromTabId?: TabId;
+    toTabId: TabId;
+    toUrl?: string;
+    windowId: WindowId;
+  }): Promise<void> => {
+    // Compute scopes for both tabs
+    const fromScope = fromTabId ? getScopeForTab(fromTabId) : null;
+    const toScope = getScopeForTab(toTabId, toUrl);
+
+    console.log('[Intender] Focus change:', {
+      windowId,
+      fromTabId,
+      toTabId,
+      toUrl,
+      fromScope,
+      toScope,
+      scopeComparison: fromScope === toScope ? 'SAME' : 'DIFFERENT',
+    });
+
+    // Debug: log scope activity states
+    if (fromScope) {
+      const fromActivity = lastActiveByScope.get(fromScope);
+      console.log('[Intender] From scope activity:', {
+        scope: fromScope,
+        lastActive: fromActivity,
+        ageMs: fromActivity ? createTimestamp() - fromActivity : 'never',
+      });
+    }
+    if (toScope) {
+      const toActivity = lastActiveByScope.get(toScope);
+      console.log('[Intender] To scope activity:', {
+        scope: toScope,
+        lastActive: toActivity,
+        ageMs: toActivity ? createTimestamp() - toActivity : 'never',
+      });
+    }
+
+    // FAST PATH: Same-scope switch - skip inactivity check entirely
+    if (fromScope && toScope && fromScope === toScope) {
+      console.log('[Intender] Same-scope switch detected, fast path:', {
+        scope: toScope,
+        fromScope,
+        toScope,
+        scopesEqual: fromScope === toScope,
+      });
+      // Bump activity for the scope and update tracking
+      updateIntentionScopeActivity(toScope);
+      lastActiveTabIdByWindow.set(windowId, toTabId);
+      return;
+    } else {
+      console.log('[Intender] NOT same-scope switch:', {
+        fromScope,
+        toScope,
+        bothPresent: !!(fromScope && toScope),
+        scopesEqual: fromScope === toScope,
+      });
+    }
+
+    // OPTIONAL HARDENING: Short grace for focus change in same scope
+    // Even if fromScope wasn't resolvable, if user just focused another tab in the same scope
+    if (toScope && !fromScope) {
+      const now = createTimestamp();
+      const lastActive = lastActiveByScope.get(toScope);
+      if (lastActive && now - lastActive < 1000) {
+        console.log('[Intender] Same-scope grace period, skipping check:', {
+          scope: toScope,
+          timeSinceActive: now - lastActive,
+        });
+        updateIntentionScopeActivity(toScope);
+        lastActiveTabIdByWindow.set(windowId, toTabId);
+        return;
+      }
+    }
+
+    // From bump: update activity for the previous tab's scope
+    if (fromTabId && fromScope) {
+      updateIntentionScopeActivity(fromScope);
+      console.log('[Intender] Focus from bump:', {
+        windowId,
+        fromTabId,
+        fromScope,
+      });
+    }
+
+    // Guard: if the target tab URL is already the intention page URL, skip redirect
+    const resolvedUrl = toUrl || tabUrlMap.get(toTabId);
+    if (resolvedUrl && resolvedUrl.startsWith(intentionPageUrl)) {
+      console.log(
+        '[Intender] Target tab already on intention page, skipping redirect'
+      );
+      lastActiveTabIdByWindow.set(windowId, toTabId);
+      return;
+    }
+
+    // Check if we should trigger inactivity intention check
+    if (
+      shouldTriggerInactivityIntentionCheck(
+        settingsCache.inactivityMode,
+        toScope,
+        settingsCache.inactivityTimeoutMs
+      )
+    ) {
+      console.log(
+        '[Intender] Triggering inactivity redirect for scope:',
+        toScope
+      );
+
+      if (resolvedUrl && toScope) {
+        await redirectToIntentionPage(toTabId, resolvedUrl, toScope);
+      }
+    } else if (toScope) {
+      // No redirect needed, just update activity
+      updateIntentionScopeActivity(toScope);
+    }
+
+    // Update tracking
+    lastActiveTabIdByWindow.set(windowId, toTabId);
+  };
+
+  // Central helper to redirect to intention page with cooldown protection
+  async function redirectToIntentionPage(
+    tabId: TabId,
+    targetUrl: string,
+    toScope: IntentionScopeId
+  ): Promise<boolean> {
+    const REDIRECT_COOLDOWN_MS = 500;
+    const now = createTimestamp();
+    const lastRedirect = lastRedirectAtByTabId.get(tabId);
+
+    // Check cooldown
+    if (lastRedirect && now - lastRedirect < REDIRECT_COOLDOWN_MS) {
+      console.log('[Intender] Redirect cooldown active, skipping:', {
+        tabId,
+        lastRedirect,
+        now,
+        cooldownMs: REDIRECT_COOLDOWN_MS,
+      });
+      return false;
+    }
+
+    const redirectUrl = browser.runtime.getURL(
+      'intention-page.html?target=' +
+        encodeURIComponent(targetUrl) +
+        '&intentionScopeId=' +
+        encodeURIComponent(toScope)
+    );
+
+    try {
+      await browser.tabs.update(tabId, { url: redirectUrl });
+      lastRedirectAtByTabId.set(tabId, now);
+      console.log('[Intender] Redirected to intention page:', {
+        tabId,
+        targetUrl,
+        toScope,
+      });
+      return true;
+    } catch (error) {
+      console.log('[Intender] Failed to redirect to intention page:', error);
+      return false;
+    }
+  }
+
+  // Initialize window focus tracking
+  try {
+    const windows = await browser.windows.getAll();
+    const focusedWindow = windows.find(w => w.focused);
+    if (focusedWindow && typeof focusedWindow.id === 'number') {
+      lastFocusedWindowId = numberToWindowId(focusedWindow.id);
+      console.log(
+        '[Intender] Initialized focused window:',
+        lastFocusedWindowId
+      );
+
+      // Seed lastActiveTabIdByWindow for the focused window
+      try {
+        const [activeTab] = await browser.tabs.query({
+          active: true,
+          windowId: focusedWindow.id,
+        });
+        if (activeTab && typeof activeTab.id === 'number') {
+          const activeTabId = numberToTabId(activeTab.id);
+          lastActiveTabIdByWindow.set(lastFocusedWindowId, activeTabId);
+          console.log('[Intender] Seeded active tab for focused window:', {
+            windowId: lastFocusedWindowId,
+            tabId: activeTabId,
+          });
+        }
+      } catch (tabError) {
+        console.log('[Intender] Failed to seed active tab:', tabError);
+      }
+    }
+  } catch (error) {
+    console.log('[Intender] Failed to initialize window focus:', error);
+  }
+
   // Load intentions and settings on startup
   try {
     const {
@@ -128,30 +399,44 @@ export default defineBackground(async () => {
 
     // Set up event listeners with access to the functions
     browser.tabs.onActivated.addListener(async activeInfo => {
-      const tabId = numberToTabId(activeInfo.tabId);
-      const url = tabUrlMap.get(tabId);
-      if (!url) return;
+      const windowId = numberToWindowId(activeInfo.windowId);
+      const toTabId = numberToTabId(activeInfo.tabId);
 
-      const intentionScopeId = lookupIntentionScopeId(url);
-      if (!intentionScopeId) return;
+      // Track previous active per window (from tab handling)
+      const fromTabId = lastActiveTabIdByWindow.get(windowId);
 
-      console.log('[Intender] Tab focus event:', {
-        tabId,
-        url,
-        intentionScopeId,
+      // Skip if same tab (spurious re-activation)
+      if (fromTabId && fromTabId === toTabId) return;
+
+      // Get the URL for the "to" tab
+      const toUrl = tabUrlMap.get(toTabId);
+
+      // Use unified focus handler
+      await handleFocusChange({
+        fromTabId,
+        toTabId,
+        toUrl,
+        windowId,
       });
-
-      // On focus, always update activity for the scope
-      updateIntentionScopeActivity(intentionScopeId);
     });
 
     // Handle audio state changes
     browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
-      if (changeInfo.audible !== undefined) {
-        const tId = numberToTabId(tabId);
-        const url = tabUrlMap.get(tId);
-        const intentionScopeId = url ? lookupIntentionScopeId(url) : null;
+      const tId = numberToTabId(tabId);
 
+      // Update URL cache when available to keep it fresher between webNavigation commits
+      if (changeInfo.url) {
+        tabUrlMap.set(tId, changeInfo.url);
+        console.log('[Intender] Tab URL updated via onUpdated:', {
+          tabId,
+          url: changeInfo.url,
+        });
+      }
+
+      const intentionScopeId = getScopeForTab(tId);
+
+      // Handle audible state changes
+      if (changeInfo.audible !== undefined) {
         if (changeInfo.audible) {
           if (intentionScopeId) markTabAudible(intentionScopeId, tId);
           console.log('[Intender] Tab became audible, resetting activity:', {
@@ -160,11 +445,45 @@ export default defineBackground(async () => {
           });
           if (intentionScopeId) updateIntentionScopeActivity(intentionScopeId);
         } else {
+          // Update activity first, then unmark
+          if (intentionScopeId) updateIntentionScopeActivity(intentionScopeId);
           if (intentionScopeId) unmarkTabAudible(intentionScopeId, tId);
           console.log('[Intender] Tab stopped being audible:', {
             tabId,
             intentionScopeId: intentionScopeId || 'unknown',
           });
+        }
+      }
+
+      // Handle muted state changes - muted tabs should not count as audible
+      if (changeInfo.mutedInfo !== undefined) {
+        const isMuted = changeInfo.mutedInfo.muted;
+
+        if (isMuted) {
+          // Treat muted as not audible
+          if (intentionScopeId) unmarkTabAudible(intentionScopeId, tId);
+          console.log('[Intender] Tab was muted (treating as not audible):', {
+            tabId,
+            intentionScopeId: intentionScopeId || 'unknown',
+          });
+        } else {
+          // Unmuted - check if tab is actually audible and mark accordingly
+          // We need to get current tab info to check audible state
+          browser.tabs
+            .get(tabId)
+            .then(tab => {
+              if (tab.audible && intentionScopeId) {
+                markTabAudible(intentionScopeId, tId);
+                updateIntentionScopeActivity(intentionScopeId);
+                console.log('[Intender] Tab was unmuted and is audible:', {
+                  tabId,
+                  intentionScopeId,
+                });
+              }
+            })
+            .catch(() => {
+              // Tab might be gone, ignore
+            });
         }
       }
     });
@@ -187,7 +506,9 @@ export default defineBackground(async () => {
   browser.webNavigation.onCommitted.addListener(details => {
     if (details.frameId === 0) {
       // Only track main frame navigation
-      tabUrlMap.set(numberToTabId(details.tabId), details.url);
+      const tabId = numberToTabId(details.tabId);
+      tabUrlMap.set(tabId, details.url);
+
       console.log('[Intender] Navigation committed, updated cache:', {
         tabId: details.tabId,
         url: details.url,
@@ -197,8 +518,30 @@ export default defineBackground(async () => {
       const matched = lookupIntention(details.url, intentionIndex);
       if (matched) {
         const scopeId = intentionToIntentionScopeId(matched);
-        intentionScopePerTabId.set(numberToTabId(details.tabId), scopeId);
+        intentionScopePerTabId.set(tabId, scopeId);
         updateIntentionScopeActivity(scopeId);
+        console.log(
+          '[Intender] Navigation committed to scoped page, set scope:',
+          {
+            tabId: details.tabId,
+            scopeId,
+          }
+        );
+      } else {
+        // Clear scope mapping when navigating away from scoped pages
+        const priorScope = intentionScopePerTabId.get(tabId);
+        if (priorScope) {
+          // Remove tab from its prior scope's audible set
+          unmarkTabAudible(priorScope, tabId);
+          intentionScopePerTabId.delete(tabId);
+          console.log(
+            '[Intender] Navigation committed away from scoped page, cleared scope:',
+            {
+              tabId: details.tabId,
+              priorScope,
+            }
+          );
+        }
       }
     }
   });
@@ -207,17 +550,152 @@ export default defineBackground(async () => {
   browser.tabs.onRemoved.addListener(tabId => {
     const tId = numberToTabId(tabId);
     const scope = intentionScopePerTabId.get(tId);
-    // If this tab was marked audible for a scope, decrement
+
+    // Clean up audible tracking for this tab
     if (scope) {
-      const set = audibleTabsByScope.get(scope);
-      if (set && set.has(tId)) {
-        set.delete(tId);
-        if (set.size === 0) audibleTabsByScope.delete(scope);
-      }
+      unmarkTabAudible(scope, tId);
     }
+
+    // Clean up all tracking maps
     tabUrlMap.delete(tId);
     intentionScopePerTabId.delete(tId);
-    console.log('[Intender] Tab removed, cleared cache:', { tabId });
+    lastRedirectAtByTabId.delete(tId);
+
+    // Remove from lastActiveTabIdByWindow if this was the last active tab in any window
+    for (const [windowId, activeTabId] of lastActiveTabIdByWindow.entries()) {
+      if (activeTabId === tId) {
+        lastActiveTabIdByWindow.delete(windowId);
+      }
+    }
+
+    console.log('[Intender] Tab removed, cleared cache:', { tabId, scope });
+  });
+
+  // Handle window focus changes
+  browser.windows.onFocusChanged.addListener(async windowId => {
+    // Update tracking: record previous focused window
+    const prevWindowId = lastFocusedWindowId;
+    if (windowId !== -1) {
+      lastFocusedWindowId = numberToWindowId(windowId);
+    }
+
+    console.log('[Intender] Window focus changed:', {
+      prevWindowId,
+      newWindowId: windowId,
+    });
+
+    // If windowId === -1 (no window focused), return early
+    if (windowId === -1) return;
+
+    // Skip if same window (duplicate focus event)
+    const currentWindowId = numberToWindowId(windowId);
+    if (prevWindowId && prevWindowId === currentWindowId) {
+      console.log('[Intender] Duplicate window focus, skipping');
+      return;
+    }
+
+    // Get the active tab in the newly focused window
+    try {
+      const [activeTab] = await browser.tabs.query({
+        active: true,
+        windowId: windowId,
+      });
+
+      if (!activeTab || typeof activeTab.id !== 'number') return;
+
+      const activeTabId = numberToTabId(activeTab.id);
+
+      // Compute fromTabId with fallback to query previous window
+      const cachedFromTabId = prevWindowId
+        ? lastActiveTabIdByWindow.get(prevWindowId)
+        : undefined;
+
+      // Check if cached tab has a scope
+      const fromScope = cachedFromTabId
+        ? getScopeForTab(cachedFromTabId)
+        : null;
+
+      // Determine if fallback is needed: no cached tab OR cached tab has no scope
+      const willUseFallback = prevWindowId && (!cachedFromTabId || !fromScope);
+
+      console.log('[Intender] Window focus fromTabId resolution:', {
+        prevWindowId,
+        cachedFromTabId,
+        fromScope,
+        willUseFallback,
+      });
+
+      let fromTabId = cachedFromTabId;
+
+      // Fallback: if no cached fromTabId OR cached tab has no scope, query previous window
+      if (willUseFallback) {
+        try {
+          // WindowId is just a branded number, cast it back to number for the query
+          const prevWindowIdNumber = prevWindowId as unknown as number;
+          console.log(
+            '[Intender] Attempting fallback query for window:',
+            prevWindowIdNumber
+          );
+          const [prevActiveTab] = await browser.tabs.query({
+            active: true,
+            windowId: prevWindowIdNumber,
+          });
+          if (prevActiveTab && typeof prevActiveTab.id === 'number') {
+            const fallbackTabId = numberToTabId(prevActiveTab.id);
+            const fallbackFromScope = getScopeForTab(
+              fallbackTabId,
+              prevActiveTab.url
+            );
+
+            if (fallbackFromScope) {
+              // Bump the scope of the fallback-found tab
+              updateIntentionScopeActivity(fallbackFromScope);
+
+              // Update cache to keep it warm
+              lastActiveTabIdByWindow.set(prevWindowId, fallbackTabId);
+
+              console.log('[Intender] Fallback from-bump successful:', {
+                fallbackTabId,
+                fallbackFromScope,
+                updatedCache: true,
+              });
+
+              // Use the fallback tab for further processing
+              fromTabId = fallbackTabId;
+            } else {
+              console.log('[Intender] Fallback tab has no scope');
+            }
+          } else {
+            console.log('[Intender] Fallback query found no active tab');
+          }
+        } catch (fallbackError) {
+          console.log('[Intender] Fallback query failed:', fallbackError);
+        }
+      }
+
+      // Use unified focus handler
+      await handleFocusChange({
+        fromTabId,
+        toTabId: activeTabId,
+        toUrl: activeTab.url,
+        windowId: currentWindowId,
+      });
+    } catch (error) {
+      console.log('[Intender] Failed to handle window focus change:', error);
+    }
+  });
+
+  // Handle window removal cleanup
+  browser.windows.onRemoved.addListener(windowId => {
+    const wId = numberToWindowId(windowId);
+    lastActiveTabIdByWindow.delete(wId);
+
+    // If this was the last focused window, clear it
+    if (lastFocusedWindowId === wId) {
+      lastFocusedWindowId = null;
+    }
+
+    console.log('[Intender] Window removed, cleared tracking:', { windowId });
   });
 
   browser.webNavigation.onBeforeNavigate.addListener(async details => {
@@ -351,12 +829,6 @@ export default defineBackground(async () => {
       e2eDisableIdleListener = true;
       toggleIdleDetection(settingsCache.inactivityMode);
       await inactivityChange('idle');
-    } else if (msg.type === 'e2e:forceInactivityCheck-active') {
-      e2eDisableIdleListener = true;
-      toggleIdleDetection(settingsCache.inactivityMode);
-      await inactivityChange('active');
-    } else {
-      return;
     }
   });
 
@@ -367,9 +839,12 @@ export default defineBackground(async () => {
       try {
         if (settingsCache.inactivityMode === 'off') return;
 
+        // Check if there is a window in focus, return if not
+        if (!lastFocusedWindowId) return;
+
         const [activeTab] = await browser.tabs.query({
           active: true,
-          currentWindow: true,
+          windowId: lastFocusedWindowId,
         });
         if (!activeTab || typeof activeTab.id !== 'number') return;
 
@@ -379,8 +854,7 @@ export default defineBackground(async () => {
           cachedUrl || (typeof activeTab.url === 'string' ? activeTab.url : '');
         if (!url) return;
 
-        const intentionScopeId =
-          intentionScopePerTabId.get(tabId) || lookupIntentionScopeId(url);
+        const intentionScopeId = getScopeForTab(tabId, url);
         if (!intentionScopeId) return;
 
         // Check audio exemption
@@ -389,44 +863,11 @@ export default defineBackground(async () => {
         }
 
         // Redirect to intention page
-        const redirect = browser.runtime.getURL(
-          'intention-page.html?target=' +
-            encodeURIComponent(url) +
-            '&intentionScopeId=' +
-            encodeURIComponent(intentionScopeId)
-        );
-
-        try {
-          await browser.tabs.update(activeTab.id, { url: redirect });
-        } catch (error) {
-          console.log('[Intender] Redirect failed:', error);
-        }
+        await redirectToIntentionPage(tabId, url, intentionScopeId);
       } catch (error) {
         console.log('[Intender] Inactivity check failed:', error);
       }
       return;
-    }
-
-    if (newState === 'active') {
-      try {
-        const [activeTab] = await browser.tabs.query({
-          active: true,
-          currentWindow: true,
-        });
-        if (!activeTab || typeof activeTab.id !== 'number') return;
-
-        const tId = numberToTabId(activeTab.id);
-        const cachedUrl = tabUrlMap.get(tId);
-        const url =
-          cachedUrl || (typeof activeTab.url === 'string' ? activeTab.url : '');
-        if (!url) return;
-
-        const scope =
-          intentionScopePerTabId.get(tId) || lookupIntentionScopeId(url);
-        if (scope) updateIntentionScopeActivity(scope);
-      } catch (error) {
-        console.log('[Intender] Idle active mark failed:', error);
-      }
     }
   }
 
