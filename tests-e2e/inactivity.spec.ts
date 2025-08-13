@@ -20,16 +20,17 @@ async function gotoRobust(page: Page, url: string): Promise<void> {
 
 async function bringToFrontAndWait(page: Page): Promise<void> {
   await page.bringToFront();
-  await page.waitForFunction(() => document.hasFocus());
+  // Simple timeout-based wait instead of CSP-blocked waitForFunction
+  await page.waitForTimeout(200);
 }
 
 async function startAudioPlayback(page: Page): Promise<void> {
-  // Only navigate if we're not already on the target page
+  // Ensure we're on the target page (should already be there from openAndCompleteIntention)
   const currentUrl = page.url();
-  const tabUrl = 'https://jonathanmoregard.github.io/intender/test/assets/';
-
   if (!currentUrl.includes('jonathanmoregard.github.io/intender/test/assets')) {
-    await page.goto(tabUrl);
+    throw new Error(
+      'startAudioPlayback expects to be called on a page already at the target URL'
+    );
   }
 
   // Click the play button
@@ -106,7 +107,8 @@ async function forceInactivityCheck(optionsPage: Page) {
   });
 }
 
-test.describe('Inactivity revalidation', () => {
+// Parallel-safe tests (can run concurrently)
+test.describe('Inactivity revalidation - parallel safe', () => {
   test('focus-switch: timeout in ms and revalidation on tab focus after inactivity', async () => {
     const { context } = await launchExtension();
     const { options } = await setupInactivityAndIntention(context, 3000);
@@ -142,7 +144,7 @@ test.describe('Inactivity revalidation', () => {
     await context.close();
   });
 
-  test.skip('sound: same-scope tab with audio should bypass inactivity revalidation', async () => {
+  test('sound: same-scope tab with audio should bypass inactivity revalidation', async () => {
     const { context } = await launchExtension();
     const { options } = await setupInactivityAndIntention(context, 3000);
     // Switch to mode all-except-audio
@@ -152,11 +154,14 @@ test.describe('Inactivity revalidation', () => {
     const tab = await openAndCompleteIntention(context);
 
     // Open another tab with the same fixture (same scope) with audio and start playback
-    const audioTab = await context.newPage();
+    const audioTab = await openAndCompleteIntention(context);
     await startAudioPlayback(audioTab);
 
     // Wait beyond inactivity
     await options.waitForTimeout(3500);
+
+    // Force idle check since this is a sub-15s timeout test
+    await forceInactivityCheck(options);
 
     // Bring tab tab to front, should NOT redirect due to audible exemption in same scope
     await tab.bringToFront();
@@ -167,7 +172,7 @@ test.describe('Inactivity revalidation', () => {
     await context.close();
   });
 
-  test.skip('sound: active tab with audio should not revalidate while passively listening', async () => {
+  test('sound: active tab with audio should not revalidate while passively listening', async () => {
     const { context } = await launchExtension();
     const { options } = await setupInactivityAndIntention(context, 3000);
     // all-except-audio mode
@@ -175,12 +180,14 @@ test.describe('Inactivity revalidation', () => {
     await options.waitForTimeout(200);
 
     // Open an audio tab and start playback
-    const audioTab = await context.newPage();
+    const audioTab = await openAndCompleteIntention(context);
     await startAudioPlayback(audioTab);
 
     // Stay on audio tab and wait beyond inactivity
     await audioTab.waitForTimeout(3500);
-    // No redirect expected
+    // Force idle check since this is a sub-15s timeout test
+    await forceInactivityCheck(options);
+    // No redirect expected due to audio exemption
     await expect(audioTab).not.toHaveURL(/chrome-extension:\/\//);
 
     await context.close();
@@ -237,7 +244,7 @@ test.describe('Inactivity revalidation', () => {
   });
 
   // Test 5: Idle on-except-audio (3s). Navigate to test audio page with intention, pass the intention check, start audio, duplicate the tab. Wait > timeout, focusing either should remain on the audio page (audio exemption).
-  test.skip('test-5: duplicate audio tab, both stay on audio page due to exemption', async () => {
+  test('test-5: duplicate audio tab, both stay on audio page due to exemption', async () => {
     const { context } = await launchExtension();
     const { options } = await setupInactivityAndIntention(
       context,
@@ -249,12 +256,14 @@ test.describe('Inactivity revalidation', () => {
     // Start audio
     await startAudioPlayback(tab);
 
-    // Duplicate the tab
-    const duplicate = await context.newPage();
-    await duplicate.goto(tab.url());
+    // Duplicate the tab - it will need to complete intention too
+    const duplicate = await openAndCompleteIntention(context);
 
     // Wait beyond timeout
     await options.waitForTimeout(3500);
+
+    // Force idle check since this is a sub-15s timeout test
+    await forceInactivityCheck(options);
 
     // Focus original - should remain on audio page (audio exemption)
     await tab.bringToFront();
@@ -272,7 +281,7 @@ test.describe('Inactivity revalidation', () => {
   });
 
   // Test 6: Idle on-except-audio (3s). Navigate to test audio page with intention, pass the intention check, start audio, duplicate tab, open a new non-scope tab, wait > timeout, focusing the duplicate stays on audio page; focusing the original stays on audio page.
-  test.skip('test-6: duplicate audio tab with non-scope tab, both stay on audio page', async () => {
+  test('test-6: duplicate audio tab with non-scope tab, both stay on audio page', async () => {
     const { context } = await launchExtension();
     const { options } = await setupInactivityAndIntention(
       context,
@@ -284,9 +293,8 @@ test.describe('Inactivity revalidation', () => {
     // Start audio
     await startAudioPlayback(tab);
 
-    // Duplicate the tab
-    const duplicate = await context.newPage();
-    await duplicate.goto(tab.url());
+    // Duplicate the tab - it will need to complete intention too
+    const duplicate = await openAndCompleteIntention(context);
 
     // Open a new non-scope tab
     const nonScopeTab = await context.newPage();
@@ -294,6 +302,9 @@ test.describe('Inactivity revalidation', () => {
 
     // Wait beyond timeout
     await options.waitForTimeout(3500);
+
+    // Force idle check since this is a sub-15s timeout test
+    await forceInactivityCheck(options);
 
     // Focus duplicate - should stay on audio page
     await duplicate.bringToFront();
@@ -319,9 +330,11 @@ test.describe('Inactivity revalidation', () => {
     // Start audio
     await startAudioPlayback(tab);
 
-    // Create new window with duplicate
-    const newWindow = await context.newPage();
-    await newWindow.goto(tab.url());
+    // Create new window with duplicate - it will need to complete intention too
+    const newWindow = await openAndCompleteIntention(context);
+
+    // Start audio on duplicate tab too
+    await startAudioPlayback(newWindow);
 
     // Open a new non-scope tab in original window
     const nonScopeTab = await context.newPage();
@@ -329,6 +342,9 @@ test.describe('Inactivity revalidation', () => {
 
     // Wait beyond timeout
     await options.waitForTimeout(3500);
+
+    // Force idle check since this is a sub-15s timeout test
+    await forceInactivityCheck(options);
 
     // Focus duplicate in new window - should stay on audio page
     await newWindow.bringToFront();
@@ -560,88 +576,8 @@ test.describe('Inactivity revalidation', () => {
     await context.close();
   });
 
-  // Test 16: Cross-window same-scope switch
-  test('test-16: cross-window same-scope switch should not show intention page', async () => {
-    const { context } = await launchExtension();
-    const { options } = await setupInactivityAndIntention(context, 3000);
-
-    // Open and pass intention check for tab in Window A
-    const tabA = await openAndCompleteIntention(context);
-
-    // Get Window A's ID for later focus control
-    const windowAId = await options.evaluate(async () => {
-      const windows = await chrome.windows.getAll();
-      const focusedWindow = windows.find(w => w.focused);
-      if (!focusedWindow?.id) {
-        throw new Error('No focused window found');
-      }
-      return focusedWindow.id;
-    });
-
-    // Create real Chrome window with blank tab first (Window B)
-    // Use extension API to create a real window for proper window focus behavior
-    const windowBInfo = await options.evaluate(async () => {
-      const window = await chrome.windows.create({
-        url: 'about:blank',
-        focused: true,
-        type: 'normal',
-      });
-      if (!window || !window.id || !window.tabs?.[0]?.id) {
-        throw new Error('Failed to create window or get tab ID');
-      }
-      return {
-        windowId: window.id,
-        tabId: window.tabs[0].id,
-      };
-    });
-
-    // Wait for new page to be created and get it
-    await options.waitForTimeout(1000); // Wait for window creation
-    const allPages = context.pages();
-    const tabB = allPages[allPages.length - 1];
-
-    // Now navigate to the target URL to trigger extension interception
-    await gotoRobust(
-      tabB,
-      'https://jonathanmoregard.github.io/intender/test/assets/'
-    );
-
-    await expect(tabB).toHaveURL(
-      /chrome-extension:\/\/.+\/intention-page\.html\?target=/
-    );
-    await tabB.locator('#phrase').fill('Hello Intent');
-    await Promise.all([
-      tabB.waitForURL(
-        /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
-      ),
-      tabB.locator('#go').click(),
-    ]);
-
-    // Focus Window A and work beyond timeout
-    await options.evaluate(async windowId => {
-      await chrome.windows.update(windowId, { focused: true });
-    }, windowAId);
-    await bringToFrontAndWait(tabA);
-    await tabA.waitForTimeout(3500);
-
-    // Focus Window B using chrome.windows.update - should NOT show intention page
-    await options.evaluate(async windowId => {
-      await chrome.windows.update(windowId, { focused: true });
-    }, windowBInfo.windowId);
-
-    // Wait for focus change to take effect
-    await tabB.waitForTimeout(200);
-
-    await expect(tabB).toHaveURL(
-      /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
-    );
-    await tabB.waitForTimeout(100); // Settle time to prevent double-fires
-
-    await context.close();
-  });
-
   // Test 17: Muted-audio exemption correctness
-  test.skip('test-17: muted audio should not count as audible, expect intention page', async () => {
+  test('test-17: muted audio should not count as audible, expect intention page', async () => {
     const { context } = await launchExtension();
     const { options } = await setupInactivityAndIntention(
       context,
@@ -662,6 +598,9 @@ test.describe('Inactivity revalidation', () => {
 
     // Wait beyond timeout
     await options.waitForTimeout(3500);
+
+    // Force idle check since this is a sub-15s timeout test
+    await forceInactivityCheck(options);
 
     // Focus tab - should show intention page (muted doesn't count as audible)
     await tab.bringToFront();
@@ -918,7 +857,7 @@ test.describe('Inactivity revalidation', () => {
     await context.close();
   });
 
-  test.skip('test-19c: complex multi-window scenario with window close', async () => {
+  test('test-19c: complex multi-window scenario with window close', async () => {
     const { context } = await launchExtension();
     const { options } = await setupInactivityAndIntention(context, 10000);
 
@@ -956,6 +895,9 @@ test.describe('Inactivity revalidation', () => {
 
     // Wait 6s (total 11s > 10s timeout)
     await options.waitForTimeout(6000);
+
+    // Force idle check since this is a sub-15s timeout test
+    await forceInactivityCheck(options);
 
     // Switch to a - should show intention page
     await tabA.bringToFront();
@@ -1026,8 +968,85 @@ test.describe('Inactivity revalidation', () => {
   });
 });
 
-// Serial tests (for OS idle behavior)
+// Serial tests (for OS idle behavior and cross-window focus-sensitive tests)
 test.describe.serial('Inactivity revalidation - Serial Tests', () => {
+  // Test 16: Cross-window same-scope switch (serial due to window focus sensitivity)
+  test('test-16: cross-window same-scope switch should not show intention page', async () => {
+    const { context } = await launchExtension();
+    const { options } = await setupInactivityAndIntention(context, 3000);
+
+    // Open and pass intention check for tab in Window A
+    const tabA = await openAndCompleteIntention(context);
+
+    // Get Window A's ID for later focus control - use getCurrent() for deterministic selection
+    const windowAId = await options.evaluate(async () => {
+      const currentWindow = await chrome.windows.getCurrent();
+      if (!currentWindow?.id) {
+        throw new Error('Failed to get current window ID');
+      }
+      return currentWindow.id;
+    });
+
+    // Create real Chrome window with blank tab first (Window B)
+    // Use extension API to create a real window for proper window focus behavior
+    const windowBInfo = await options.evaluate(async () => {
+      const window = await chrome.windows.create({
+        url: 'about:blank',
+        focused: true,
+        type: 'normal',
+      });
+      if (!window || !window.id || !window.tabs?.[0]?.id) {
+        throw new Error('Failed to create window or get tab ID');
+      }
+      return {
+        windowId: window.id,
+        tabId: window.tabs[0].id,
+      };
+    });
+
+    // Wait for new page to be created and get it - use deterministic wait
+    const tabB = await context.waitForEvent('page', { timeout: 5000 });
+
+    // Now navigate to the target URL to trigger extension interception
+    await gotoRobust(
+      tabB,
+      'https://jonathanmoregard.github.io/intender/test/assets/'
+    );
+
+    await expect(tabB).toHaveURL(
+      /chrome-extension:\/\/.+\/intention-page\.html\?target=/
+    );
+    await tabB.locator('#phrase').fill('Hello Intent');
+    await Promise.all([
+      tabB.waitForURL(
+        /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
+      ),
+      tabB.locator('#go').click(),
+    ]);
+
+    // Focus Window A and work beyond timeout
+    await options.evaluate(async windowId => {
+      await chrome.windows.update(windowId, { focused: true });
+    }, windowAId);
+    await bringToFrontAndWait(tabA);
+    await tabA.waitForTimeout(3500);
+
+    // Focus Window B using chrome.windows.update - should NOT show intention page
+    await options.evaluate(async windowId => {
+      await chrome.windows.update(windowId, { focused: true });
+    }, windowBInfo.windowId);
+
+    // Wait for focus change to take effect
+    await tabB.waitForTimeout(200);
+
+    await expect(tabB).toHaveURL(
+      /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
+    );
+    await tabB.waitForTimeout(100); // Settle time to prevent double-fires
+
+    await context.close();
+  });
+
   // Test 13: Long OS idle (serial, real OS idle)
   test.skip('test-13: long OS idle should trigger intention page', async () => {
     const { context } = await launchExtension();
