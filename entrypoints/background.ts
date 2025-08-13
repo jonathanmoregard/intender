@@ -49,32 +49,10 @@ const tabUrlMap = new Map<TabId, string>();
 // Inactivity tracking
 const lastActiveByScope = new Map<IntentionScopeId, Timestamp>();
 const intentionScopePerTabId = new Map<TabId, IntentionScopeId>();
-const audibleTabsByScope = new Map<IntentionScopeId, Set<TabId>>();
 const lastActiveTabIdByWindow = new Map<WindowId, TabId>();
 // never -1, ignore non proper browser windows
 let lastFocusedWindowId: WindowId | null = null;
 const lastRedirectAtByTabId = new Map<TabId, Timestamp>();
-
-function markTabAudible(scopeId: IntentionScopeId, tabId: TabId): void {
-  let set = audibleTabsByScope.get(scopeId);
-  if (!set) {
-    set = new Set<TabId>();
-    audibleTabsByScope.set(scopeId, set);
-  }
-  set.add(tabId);
-}
-
-function unmarkTabAudible(scopeId: IntentionScopeId, tabId: TabId): void {
-  const set = audibleTabsByScope.get(scopeId);
-  if (!set) return;
-  set.delete(tabId);
-  if (set.size === 0) audibleTabsByScope.delete(scopeId);
-}
-
-function isScopeAudible(scopeId: IntentionScopeId): boolean {
-  const set = audibleTabsByScope.get(scopeId);
-  return !!set && set.size > 0;
-}
 
 const getDomain = (input: string): string => {
   const url = parseUrlString(input);
@@ -121,6 +99,27 @@ export default defineBackground(async () => {
     return intentionToIntentionScopeId(matchedIntention);
   };
 
+  // Check if a scope has any audible tabs on-demand
+  async function isScopeAudible(scopeId: IntentionScopeId): Promise<boolean> {
+    try {
+      // Build a set of tab IDs in the given scope without intermediate arrays
+      const scopeTabIds = new Set<TabId>();
+      for (const [tabId, scope] of intentionScopePerTabId) {
+        if (scope === scopeId) scopeTabIds.add(tabId);
+      }
+      if (scopeTabIds.size === 0) return false;
+
+      // Get all audible tabs and check for any overlap
+      const audibleTabs = await browser.tabs.query({ audible: true });
+      return audibleTabs.some(
+        tab => tab.id != null && scopeTabIds.has(tab.id as TabId)
+      );
+    } catch (error) {
+      console.error('[Intender] Failed to check scope audibility:', error);
+      return false;
+    }
+  }
+
   // Get intention scope ID for a tab with comprehensive resolution
   const getScopeForTab = (
     tabId: TabId,
@@ -156,15 +155,15 @@ export default defineBackground(async () => {
   };
 
   // Check if a scope should trigger inactivity intention check
-  function shouldTriggerInactivityIntentionCheck(
+  async function shouldTriggerInactivityIntentionCheck(
     mode: InactivityMode,
     scopeId: IntentionScopeId | null,
     timeoutMs: TimeoutMs
-  ): boolean {
+  ): Promise<boolean> {
     if (mode === 'off' || !scopeId) return false;
 
     // Check audio exemption for all-except-audio mode
-    if (mode === 'all-except-audio' && isScopeAudible(scopeId)) {
+    if (mode === 'all-except-audio' && (await isScopeAudible(scopeId))) {
       return false;
     }
 
@@ -185,15 +184,13 @@ export default defineBackground(async () => {
       timeoutMs,
       isInactive,
       mode,
-      isScopeAudible:
-        mode === 'all-except-audio' ? isScopeAudible(scopeId) : 'N/A',
     });
 
     return isInactive;
   }
 
   // Unified focus handling with same-scope fast path
-  const handleFocusChange = async ({
+  async function handleFocusChange({
     fromTabId,
     toTabId,
     toUrl,
@@ -203,7 +200,7 @@ export default defineBackground(async () => {
     toTabId: TabId;
     toUrl?: string;
     windowId: WindowId;
-  }): Promise<void> => {
+  }): Promise<void> {
     // Snapshot of window → last active tab mapping prior to handling
     try {
       const mapSnapshot = Array.from(lastActiveTabIdByWindow.entries()).map(
@@ -317,7 +314,7 @@ export default defineBackground(async () => {
 
     // Check if we should trigger inactivity intention check
     if (
-      shouldTriggerInactivityIntentionCheck(
+      await shouldTriggerInactivityIntentionCheck(
         settingsCache.inactivityMode,
         toScope,
         settingsCache.inactivityTimeoutMs
@@ -342,7 +339,7 @@ export default defineBackground(async () => {
       windowId,
       toTabId,
     });
-  };
+  }
 
   // Central helper to redirect to intention page with cooldown protection
   async function redirectToIntentionPage(
@@ -485,55 +482,20 @@ export default defineBackground(async () => {
 
       const intentionScopeId = getScopeForTab(tId);
 
-      // Handle audible state changes
+      // Handle audible state changes - update activity when audio starts/stops
       if (changeInfo.audible !== undefined) {
         if (changeInfo.audible) {
-          if (intentionScopeId) markTabAudible(intentionScopeId, tId);
           console.log('[Intender] Tab became audible, resetting activity:', {
             tabId,
             intentionScopeId: intentionScopeId || 'unknown',
           });
           if (intentionScopeId) updateIntentionScopeActivity(intentionScopeId);
         } else {
-          // Update activity first, then unmark
-          if (intentionScopeId) updateIntentionScopeActivity(intentionScopeId);
-          if (intentionScopeId) unmarkTabAudible(intentionScopeId, tId);
           console.log('[Intender] Tab stopped being audible:', {
             tabId,
             intentionScopeId: intentionScopeId || 'unknown',
           });
-        }
-      }
-
-      // Handle muted state changes - muted tabs should not count as audible
-      if (changeInfo.mutedInfo !== undefined) {
-        const isMuted = changeInfo.mutedInfo.muted;
-
-        if (isMuted) {
-          // Treat muted as not audible
-          if (intentionScopeId) unmarkTabAudible(intentionScopeId, tId);
-          console.log('[Intender] Tab was muted (treating as not audible):', {
-            tabId,
-            intentionScopeId: intentionScopeId || 'unknown',
-          });
-        } else {
-          // Unmuted - check if tab is actually audible and mark accordingly
-          // We need to get current tab info to check audible state
-          browser.tabs
-            .get(tabId)
-            .then(tab => {
-              if (tab.audible && intentionScopeId) {
-                markTabAudible(intentionScopeId, tId);
-                updateIntentionScopeActivity(intentionScopeId);
-                console.log('[Intender] Tab was unmuted and is audible:', {
-                  tabId,
-                  intentionScopeId,
-                });
-              }
-            })
-            .catch(() => {
-              // Tab might be gone, ignore
-            });
+          if (intentionScopeId) updateIntentionScopeActivity(intentionScopeId);
         }
       }
     });
@@ -581,8 +543,6 @@ export default defineBackground(async () => {
         // Clear scope mapping when navigating away from scoped pages
         const priorScope = intentionScopePerTabId.get(tabId);
         if (priorScope) {
-          // Remove tab from its prior scope's audible set
-          unmarkTabAudible(priorScope, tabId);
           intentionScopePerTabId.delete(tabId);
           console.log(
             '[Intender] Navigation committed away from scoped page, cleared scope:',
@@ -599,12 +559,6 @@ export default defineBackground(async () => {
   // Clean up cache when tabs are removed
   browser.tabs.onRemoved.addListener(tabId => {
     const tId = numberToTabId(tabId);
-    const scope = intentionScopePerTabId.get(tId);
-
-    // Clean up audible tracking for this tab
-    if (scope) {
-      unmarkTabAudible(scope, tId);
-    }
 
     // Clean up all tracking maps
     tabUrlMap.delete(tId);
@@ -618,7 +572,7 @@ export default defineBackground(async () => {
       }
     }
 
-    console.log('[Intender] Tab removed, cleared cache:', { tabId, scope });
+    console.log('[Intender] Tab removed, cleared cache:', { tabId });
   });
 
   // Handle window focus changes
@@ -934,9 +888,9 @@ export default defineBackground(async () => {
         const intentionScopeId = getScopeForTab(tabId, url);
         if (!intentionScopeId) return;
 
-        // Check audio exemption
+        // Check audio exemption for all-except-audio mode
         if (settingsCache.inactivityMode === 'all-except-audio') {
-          if (isScopeAudible(intentionScopeId)) return;
+          if (await isScopeAudible(intentionScopeId)) return;
         }
 
         // Redirect to intention page
