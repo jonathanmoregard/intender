@@ -12,26 +12,36 @@ function resolveExtensionPath(): string {
 }
 
 async function createSwTeeLogger(): Promise<winston.Logger> {
-  const logDir = join(process.cwd(), '.test-data');
+  const logDir = join(process.cwd(), '.test-results/logs');
   await mkdir(logDir, { recursive: true });
 
+  // Generate unique filename per worker to avoid clobbering
+  const workerIndex = process.env.TEST_WORKER_INDEX || '0';
+  const pid = process.pid;
+  const filename = `sw-background.${workerIndex}.${pid}.log`;
+
   const fileTransport = new winston.transports.File({
-    filename: join(logDir, 'sw-background.log'),
-    options: { flags: 'w' },
+    filename: join(logDir, filename),
+    options: { flags: 'a' }, // Use append mode to avoid truncation
     format: winston.format.printf(({ message }) => String(message)),
     level: 'debug',
   });
 
-  const consoleTransport = new winston.transports.Console({
-    format: winston.format.printf(
-      ({ level, message }) => `[SW-${level.toUpperCase()}] ${String(message)}`
-    ),
-    level: 'debug',
-  });
+  // Only use console transport in non-parallel runs to reduce noise
+  const transports: winston.transport[] = [fileTransport];
+  if (process.env.TEST_WORKER_INDEX === undefined) {
+    const consoleTransport = new winston.transports.Console({
+      format: winston.format.printf(
+        ({ level, message }) => `[SW-${level.toUpperCase()}] ${String(message)}`
+      ),
+      level: 'debug',
+    });
+    transports.push(consoleTransport);
+  }
 
   return winston.createLogger({
     level: 'debug',
-    transports: [fileTransport, consoleTransport],
+    transports,
   });
 }
 
