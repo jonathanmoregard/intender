@@ -15,7 +15,17 @@ export default defineConfig({
   },
   projects: [
     {
-      name: 'chromium',
+      name: 'e2e-parallel',
+      grepInvert: /@serial/,
+      fullyParallel: true,
+      workers: process.env.CI ? 2 : 4,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'e2e-serial',
+      grep: /@serial/,
+      workers: 1,
+      fullyParallel: false,
       use: { ...devices['Desktop Chrome'] },
     },
   ],
