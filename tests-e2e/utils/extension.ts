@@ -1,5 +1,5 @@
 import { chromium, type BrowserContext, type Page } from '@playwright/test';
-import { mkdir, mkdtemp } from 'fs/promises';
+import { mkdir, mkdtemp, readdir, stat, unlink } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import winston from 'winston';
@@ -11,18 +11,48 @@ function resolveExtensionPath(): string {
   return extDir.pathname;
 }
 
-async function createSwTeeLogger(): Promise<winston.Logger> {
+async function cleanupOldLogs(logDir: string): Promise<void> {
+  try {
+    const files = await readdir(logDir);
+    const now = Date.now();
+    const twoDaysMs = 2 * 24 * 60 * 60 * 1000; // 2 days in milliseconds
+
+    for (const file of files) {
+      const filePath = join(logDir, file);
+      const stats = await stat(filePath);
+      if (now - stats.mtime.getTime() > twoDaysMs) {
+        await unlink(filePath);
+      }
+    }
+  } catch (error) {
+    // Ignore cleanup errors
+  }
+}
+
+async function createSwTeeLogger(
+  testName?: string
+): Promise<winston.Logger | null> {
+  // Skip SW log tee unless explicitly enabled
+  if (!process.env.TEST_SW_LOG) {
+    return null;
+  }
+
   const logDir = join(process.cwd(), '.test-results/logs');
   await mkdir(logDir, { recursive: true });
 
-  // Generate unique filename per worker to avoid clobbering
+  // Clean up old logs (> 2 days)
+  await cleanupOldLogs(logDir);
+
+  // Generate unique filename per test
+  const timestamp = Date.now();
   const workerIndex = process.env.TEST_WORKER_INDEX || '0';
-  const pid = process.pid;
-  const filename = `sw-background.${workerIndex}.${pid}.log`;
+  const sanitizedTestName = testName
+    ? testName.replace(/[^a-zA-Z0-9-_]/g, '_').substring(0, 50)
+    : 'unknown';
+  const filename = `sw-background.${sanitizedTestName}.${workerIndex}.${timestamp}.log`;
 
   const fileTransport = new winston.transports.File({
     filename: join(logDir, filename),
-    options: { flags: 'a' }, // Use append mode to avoid truncation
     format: winston.format.printf(({ message }) => String(message)),
     level: 'debug',
   });
@@ -45,12 +75,27 @@ async function createSwTeeLogger(): Promise<winston.Logger> {
   });
 }
 
-export async function launchExtension(): Promise<{ context: BrowserContext }> {
+// Helper to get current test name from test context
+function getCurrentTestName(): string | undefined {
+  // Try to get test name from various sources
+  if (process.env.TEST_NAME) {
+    return process.env.TEST_NAME;
+  }
+
+  // Fallback to worker index and timestamp
+  const workerIndex = process.env.TEST_WORKER_INDEX || '0';
+  return `test_${workerIndex}_${Date.now()}`;
+}
+
+export async function launchExtension(
+  testName?: string
+): Promise<{ context: BrowserContext }> {
   const pathToExtension = resolveExtensionPath();
   const userDataDir = await mkdtemp(join(tmpdir(), 'intender-test-'));
 
-  const tee = await createSwTeeLogger();
-  tee.info('Winston tee logger initialized');
+  const actualTestName = testName || getCurrentTestName();
+  const tee = await createSwTeeLogger(actualTestName);
+  tee?.info('Winston tee logger initialized');
 
   const context = await chromium.launchPersistentContext(userDataDir, {
     headless: false,
@@ -68,7 +113,7 @@ export async function launchExtension(): Promise<{ context: BrowserContext }> {
         context.serviceWorkers()[0] ||
         (await context.waitForEvent('serviceworker', { timeout: 10000 }));
 
-      tee.info(`Found service worker: ${sw.url()}`);
+      tee?.info(`Found service worker: ${sw.url()}`);
 
       // Inject console interceptor
       await sw.evaluate(() => {
@@ -110,7 +155,7 @@ export async function launchExtension(): Promise<{ context: BrowserContext }> {
         console.log('Console interception enabled');
       });
 
-      tee.info('Console interception installed');
+      tee?.info('Console interception installed');
 
       // Poll for logs every 50ms
       const pollLogs = async () => {
@@ -125,13 +170,13 @@ export async function launchExtension(): Promise<{ context: BrowserContext }> {
             const { level, message } = log;
             switch (level) {
               case 'error':
-                tee.error(message);
+                tee?.error(message);
                 break;
               case 'warn':
-                tee.warn(message);
+                tee?.warn(message);
                 break;
               default:
-                tee.info(message);
+                tee?.info(message);
                 break;
             }
           });
@@ -146,7 +191,7 @@ export async function launchExtension(): Promise<{ context: BrowserContext }> {
 
       pollLogs();
     } catch (error) {
-      tee.error(`Failed to setup console interception: ${error}`);
+      tee?.error(`Failed to setup console interception: ${error}`);
     }
   };
 
