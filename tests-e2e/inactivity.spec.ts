@@ -322,7 +322,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
   });
 
   // Test 6b: Same as 6, but the duplicate is moved to its own window just after creation
-  test.skip('test-6b: duplicate audio tab in separate window, both stay on audio page', async () => {
+  test('test-6b: duplicate audio tab in separate window, both stay on audio page', async () => {
     const { context } = await launchExtension();
     const { options } = await setupInactivityAndIntention(context, 3000);
     const tab = await openAndCompleteIntention(context);
@@ -432,7 +432,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
   });
 
   // Test 11: Pause audio in-place (grace on audible off)
-  test.skip('test-11: pause audio should refresh activity, delay intention page', async () => {
+  test('test-11: pause audio should refresh activity, delay intention page', async () => {
     const { context } = await launchExtension();
     const { options } = await setupInactivityAndIntention(
       context,
@@ -509,7 +509,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
   });
 
   // Test 15: Parallel audibles within a scope (close-one/close-last)
-  test.skip('test-15: parallel audibles, close one keeps exemption, close last removes exemption', async () => {
+  test('test-15: parallel audibles, close one keeps exemption, close last removes exemption', async () => {
     const { context } = await launchExtension();
     const { options } = await setupInactivityAndIntention(
       context,
@@ -612,7 +612,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
   });
 
   // Test 7: Idle on (3s). Navigate to a site with intention, pass the intention check, open 5 other tabs within same site, go idle, return to intention page (pass the intention check again), focusing the other same-site tabs should not show intention page.
-  test.skip('test-7: multiple same-site tabs, after revalidation other tabs should not show intention', async () => {
+  test('test-7: multiple same-site tabs, after revalidation other tabs should not show intention', async () => {
     const { context } = await launchExtension();
     const { options } = await setupInactivityAndIntention(context, 3000);
 
@@ -671,7 +671,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
   });
 
   // Test 8: Same as 7 but on-except-audio.
-  test.skip('test-8: multiple same-site tabs, after revalidation other tabs should not show intention (all-except-audio)', async () => {
+  test('test-8: multiple same-site tabs, after revalidation other tabs should not show intention (all-except-audio)', async () => {
     const { context } = await launchExtension();
     const { options } = await setupInactivityAndIntention(
       context,
@@ -782,7 +782,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
   });
 
   // Test 19: Multi window tests
-  test.skip('test-19a: two windows, stale tab in B, focus A then B should show intention', async () => {
+  test('test-19a: two windows, stale tab in B, focus A then B should show intention', async () => {
     const { context } = await launchExtension();
     const { options } = await setupInactivityAndIntention(context, 3000);
 
@@ -820,7 +820,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await context.close();
   });
 
-  test.skip('test-19b: two windows, keep active in A, focus B should not show intention', async () => {
+  test('test-19b: two windows, keep active in A, focus B should not show intention', async () => {
     const { context } = await launchExtension();
     const { options } = await setupInactivityAndIntention(context, 3000);
 
@@ -969,7 +969,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 });
 
 // Serial tests (for OS idle behavior and cross-window focus-sensitive tests)
-test.describe.serial('Inactivity revalidation - Serial Tests', () => {
+test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
   // Test 16: Cross-window same-scope switch (serial due to window focus sensitivity)
   test('test-16: cross-window same-scope switch should not show intention page', async () => {
     const { context } = await launchExtension();
@@ -1048,7 +1048,7 @@ test.describe.serial('Inactivity revalidation - Serial Tests', () => {
   });
 
   // Test 13: Long OS idle (serial, real OS idle)
-  test.skip('test-13: long OS idle should trigger intention page', async () => {
+  test('test-13: long OS idle should trigger intention page', async () => {
     const { context } = await launchExtension();
     const { options } = await setupInactivityAndIntention(context, 16000);
     const tab = await openAndCompleteIntention(context);
