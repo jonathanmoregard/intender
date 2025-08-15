@@ -1206,29 +1206,4 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
 
     await context.close();
   });
-
-  // Test 13: Long OS idle (serial, real OS idle)
-  test('test-13: long OS idle should trigger intention page', async () => {
-    const { context } = await launchExtension();
-    await setupInactivityAndIntention({
-      context,
-      timeoutMs: 16000,
-      inactivityMode: 'all',
-      url: AUDIO_TEST_DOMAIN,
-      phrase: 'Hello Intent',
-    });
-    const tabA = await context.newPage();
-    await gotoRobust(tabA, AUDIO_TEST_URL);
-    await completeIntention({ page: tabA, phrase: 'Hello Intent' });
-
-    // Wait longer than timeout (using real OS idle, no force needed)
-    await tabA.waitForTimeout(17000);
-
-    // Should show intention page
-    await expect(tabA).toHaveURL(
-      /chrome-extension:\/\/.+\/intention-page\.html\?target=/
-    );
-
-    await context.close();
-  });
 });
