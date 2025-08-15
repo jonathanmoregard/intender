@@ -18,7 +18,6 @@ Intender embraces a **mindful, non-coercive approach** to digital wellness. Rath
 
 - **Error**: `#FE621D` - Orange-red for error states and incorrect input
 - **Success**: `#9E8E33` - Sage green for success states, active buttons, and correct input
-- **Primary Text**: `#30332E` - Dark green-black for primary text, headings, and labels
 - **Gold**: `#FEE3A4` - Warm gold for particles, phrase background, and accents
 - **Off White**: `#FEF8EA` - Warm off-white for dialog backgrounds and containers
 

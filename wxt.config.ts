@@ -13,8 +13,8 @@ export default defineConfig({
     name: 'Intender',
     version: packageJson.version,
     manifest_version: 3,
-    permissions: ['storage', 'webNavigation', 'tabs'],
-    host_permissions: ['<all_urls>'],
+    permissions: ['storage', 'webNavigation', 'tabs', 'idle'],
+    optional_host_permissions: [],
     background: {
       service_worker: 'entrypoints/background.ts',
       type: 'module',
@@ -29,14 +29,5 @@ export default defineConfig({
       48: 'icon/intender-48.png',
       128: 'icon/intender-128.png',
     },
-    web_accessible_resources: [
-      {
-        resources: [
-          'entrypoints/intention-page/index.html',
-          'entrypoints/settings/index.html',
-        ],
-        matches: ['<all_urls>'],
-      },
-    ],
   },
 });

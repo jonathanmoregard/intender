@@ -113,7 +113,7 @@ draw();
 
 const query = new URLSearchParams(window.location.search);
 const target = query.get('target');
-const intentionId = query.get('intention');
+const intentionId = query.get('intentionScopeId');
 
 const phraseDisplayEl = document.getElementById(
   'phrase-display'

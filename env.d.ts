@@ -1,4 +1,5 @@
 /// <reference types="vite/client" />
+/// <reference types="chrome-types" />
 
 interface ImportMetaEnv {
   readonly MODE: 'development' | 'production';

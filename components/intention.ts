@@ -21,6 +21,19 @@ export type IntentionIndex = Brand<
   'IntentionIndex'
 >;
 
+// Branded type for intention scope ID
+export type IntentionScopeId = Brand<UUID, 'IntentionScopeId'>;
+
+/**
+ * Converts an Intention to an IntentionScopeId.
+ * Uses the intention's UUID as the IntentionScopeId.
+ */
+export function intentionToIntentionScopeId(
+  intention: Intention
+): IntentionScopeId {
+  return intention.id as IntentionScopeId;
+}
+
 export interface IntentionScope {
   domain: string; // e.g. "facebook"
   publicSuffix: string; // e.g. "com", "se", "co.uk"
