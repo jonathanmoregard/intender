@@ -1,4 +1,5 @@
 import { expect, Page, test } from '@playwright/test';
+import { execSync } from 'node:child_process';
 import {
   launchExtension,
   openSettingsPage,
@@ -130,30 +131,6 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await settingsPage.waitForTimeout(3500);
 
     await bringToFrontAndWait(tab);
-    await expect(tab).toHaveURL(
-      /chrome-extension:\/\/.+\/intention-page\.html\?target=/
-    );
-    await tab.waitForTimeout(100); // Settle time to prevent double-fires
-
-    await context.close();
-  });
-
-  test('same-tab: revalidates without tab switch after inactivity', async () => {
-    const { context } = await launchExtension();
-    const { settingsPage } = await setupInactivityAndIntention({
-      context,
-      timeoutMs: 15000,
-      inactivityMode: 'all',
-      url: AUDIO_TEST_DOMAIN,
-      phrase: 'Hello Intent',
-    });
-    const tab = await context.newPage();
-    await gotoRobust(tab, AUDIO_TEST_URL);
-    await completeIntention({ page: tab, phrase: 'Hello Intent' });
-
-    await tab.waitForTimeout(15500);
-    await forceInactivityCheck(settingsPage);
-
     await expect(tab).toHaveURL(
       /chrome-extension:\/\/.+\/intention-page\.html\?target=/
     );
@@ -1203,6 +1180,35 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
       /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
     );
     await tabB.waitForTimeout(100); // Settle time to prevent double-fires
+
+    await context.close();
+  });
+
+  test('test-13: long OS idle should trigger intention page', async () => {
+    const { context } = await launchExtension();
+    const { settingsPage } = await setupInactivityAndIntention({
+      context,
+      timeoutMs: 15000,
+      inactivityMode: 'all',
+      url: AUDIO_TEST_DOMAIN,
+      phrase: 'test-13: long OS idle should trigger intention page',
+    });
+    const tab = await context.newPage();
+    await gotoRobust(tab, AUDIO_TEST_URL);
+    await completeIntention({
+      page: tab,
+      phrase: 'test-13: long OS idle should trigger intention page',
+    });
+
+    // Ensure system is truly idle by jiggling mouse slightly
+    execSync('xdotool mousemove_relative 1 0'); // small jiggle
+
+    await tab.waitForTimeout(16000);
+
+    await expect(tab).toHaveURL(
+      /chrome-extension:\/\/.+\/intention-page\.html\?target=/
+    );
+    await tab.waitForTimeout(100); // Settle time to prevent double-fires
 
     await context.close();
   });
