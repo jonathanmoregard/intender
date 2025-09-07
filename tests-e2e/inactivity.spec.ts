@@ -884,7 +884,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
-      timeoutMs: 3000,
+      timeoutMs: 1000,
       inactivityMode: 'all',
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
@@ -901,8 +901,11 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     // Focus A, go idle
     await tabA.bringToFront();
-    await settingsPage.waitForTimeout(3500);
+    await settingsPage.waitForTimeout(1500);
     await forceInactivityCheck(settingsPage);
+    await tabA.waitForURL(
+      /chrome-extension:\/\/.+\/intention-page\.html\?target=/
+    );
 
     // Focus B window - should show intention page (stale)
     await tabB.bringToFront();
