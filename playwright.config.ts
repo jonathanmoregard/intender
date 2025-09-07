@@ -13,6 +13,7 @@ export default defineConfig({
     video: 'off',
     screenshot: 'only-on-failure',
   },
+  timeout: 60000, // 1 minute timeout
   projects: [
     {
       name: 'e2e-parallel',
