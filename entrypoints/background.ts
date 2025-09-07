@@ -112,7 +112,10 @@ export default defineBackground(async () => {
       // Get all audible tabs and check for any overlap
       const audibleTabs = await browser.tabs.query({ audible: true });
       return audibleTabs.some(
-        tab => tab.id != null && scopeTabIds.has(tab.id as TabId)
+        tab =>
+          tab.id != null &&
+          scopeTabIds.has(tab.id as TabId) &&
+          tab.mutedInfo?.muted === false
       );
     } catch (error) {
       console.error('[Intender] Failed to check scope audibility:', error);
