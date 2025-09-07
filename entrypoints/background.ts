@@ -277,21 +277,6 @@ export default defineBackground(async () => {
       });
     }
 
-    // OPTIONAL HARDENING: Short grace for focus change in same scope
-    // Even if fromScope wasn't resolvable, if user just focused another tab in the same scope
-    if (toScope && !fromScope) {
-      const now = createTimestamp();
-      const lastActive = lastActiveByScope.get(toScope);
-      if (lastActive && now - lastActive < 1000) {
-        console.log('[Intender] Same-scope grace period, skipping check:', {
-          scope: toScope,
-          timeSinceActive: now - lastActive,
-        });
-        updateIntentionScopeActivity(toScope);
-        return;
-      }
-    }
-
     // From bump: update activity for the previous tab's scope
     if (fromTabId && fromScope) {
       updateIntentionScopeActivity(fromScope);
@@ -508,42 +493,44 @@ export default defineBackground(async () => {
 
   // Update cache when navigation is committed (reliable source of truth)
   browser.webNavigation.onCommitted.addListener(details => {
-    if (details.frameId === 0) {
-      // Only track main frame navigation
-      const tabId = numberToTabId(details.tabId);
-      tabUrlMap.set(tabId, details.url);
+    // Only track main frame navigation
+    if (details.frameId !== 0) {
+      return;
+    }
 
-      console.log('[Intender] Navigation committed, updated cache:', {
-        tabId: details.tabId,
-        url: details.url,
-      });
+    const tabId = numberToTabId(details.tabId);
+    tabUrlMap.set(tabId, details.url);
 
-      // If the destination URL matches an intention, record scope per tab and mark activity
-      const matched = lookupIntention(details.url, intentionIndex);
-      if (matched) {
-        const scopeId = intentionToIntentionScopeId(matched);
-        intentionScopePerTabId.set(tabId, scopeId);
-        updateIntentionScopeActivity(scopeId);
+    console.log('[Intender] Navigation committed, updated cache:', {
+      tabId: details.tabId,
+      url: details.url,
+    });
+
+    // If the destination URL matches an intention, record scope per tab and mark activity
+    const matched = lookupIntention(details.url, intentionIndex);
+    if (matched) {
+      const scopeId = intentionToIntentionScopeId(matched);
+      intentionScopePerTabId.set(tabId, scopeId);
+      updateIntentionScopeActivity(scopeId);
+      console.log(
+        '[Intender] Navigation committed to scoped page, set scope:',
+        {
+          tabId: details.tabId,
+          scopeId,
+        }
+      );
+    } else {
+      // Clear scope mapping when navigating away from scoped pages
+      const priorScope = intentionScopePerTabId.get(tabId);
+      if (priorScope) {
+        intentionScopePerTabId.delete(tabId);
         console.log(
-          '[Intender] Navigation committed to scoped page, set scope:',
+          '[Intender] Navigation committed away from scoped page, cleared scope:',
           {
             tabId: details.tabId,
-            scopeId,
+            priorScope,
           }
         );
-      } else {
-        // Clear scope mapping when navigating away from scoped pages
-        const priorScope = intentionScopePerTabId.get(tabId);
-        if (priorScope) {
-          intentionScopePerTabId.delete(tabId);
-          console.log(
-            '[Intender] Navigation committed away from scoped page, cleared scope:',
-            {
-              tabId: details.tabId,
-              priorScope,
-            }
-          );
-        }
       }
     }
   });

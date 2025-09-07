@@ -10,6 +10,8 @@ import {
 const AUDIO_TEST_URL =
   'https://jonathanmoregard.github.io/intender/test/assets/';
 const AUDIO_TEST_DOMAIN = 'jonathanmoregard.github.io';
+const AUDIO_TEST_REGEX =
+  /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//;
 const INTENTION_PAGE_REGEX =
   /chrome-extension:\/\/.+\/intention-page\.html\?target=/;
 
@@ -152,9 +154,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await settingsPage.waitForTimeout(3500);
 
     await bringToFrontAndWait(tab);
-    await expect(tab).toHaveURL(
-      /chrome-extension:\/\/.+\/intention-page\.html\?target=/
-    );
+    await expect(tab).toHaveURL(INTENTION_PAGE_REGEX);
     await tab.waitForTimeout(100); // Settle time to prevent double-fires
 
     await context.close();
@@ -188,9 +188,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     // Bring tab tab to front, should NOT redirect due to audible exemption in same scope
     await tab.bringToFront();
-    await expect(tab).toHaveURL(
-      /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
-    );
+    await expect(tab).toHaveURL(AUDIO_TEST_REGEX);
 
     await context.close();
   });
@@ -245,9 +243,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     // Switch back to scoped tab - should show intention page
     await bringToFrontAndWait(tab);
-    await expect(tab).toHaveURL(
-      /chrome-extension:\/\/.+\/intention-page\.html\?target=/
-    );
+    await expect(tab).toHaveURL(INTENTION_PAGE_REGEX);
     await tab.waitForTimeout(100); // Settle time to prevent double-fires
 
     await context.close();
@@ -276,9 +272,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     // Switch back to scoped tab - should show intention page
     await tab.bringToFront();
-    await expect(tab).toHaveURL(
-      /chrome-extension:\/\/.+\/intention-page\.html\?target=/
-    );
+    await expect(tab).toHaveURL(INTENTION_PAGE_REGEX);
 
     await context.close();
   });
@@ -313,15 +307,11 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     // Focus original - should remain on audio page (audio exemption)
     await tab.bringToFront();
-    await expect(tab).toHaveURL(
-      /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
-    );
+    await expect(tab).toHaveURL(AUDIO_TEST_REGEX);
 
     // Focus duplicate - should also remain on audio page (audio exemption)
     await duplicate.bringToFront();
-    await expect(duplicate).toHaveURL(
-      /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
-    );
+    await expect(duplicate).toHaveURL(AUDIO_TEST_REGEX);
 
     await context.close();
   });
@@ -360,15 +350,11 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     // Focus duplicate - should stay on audio page
     await duplicate.bringToFront();
-    await expect(duplicate).toHaveURL(
-      /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
-    );
+    await expect(duplicate).toHaveURL(AUDIO_TEST_REGEX);
 
     // Focus original - should stay on audio page
     await tab.bringToFront();
-    await expect(tab).toHaveURL(
-      /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
-    );
+    await expect(tab).toHaveURL(AUDIO_TEST_REGEX);
 
     await context.close();
   });
@@ -411,15 +397,11 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     // Focus duplicate in new window - should stay on audio page (audio exemption)
     await newWindow.bringToFront();
-    await expect(newWindow).toHaveURL(
-      /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
-    );
+    await expect(newWindow).toHaveURL(AUDIO_TEST_REGEX);
 
     // Focus original - should stay on audio page (audio exemption)
     await tab.bringToFront();
-    await expect(tab).toHaveURL(
-      /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
-    );
+    await expect(tab).toHaveURL(AUDIO_TEST_REGEX);
 
     await context.close();
   });
@@ -456,9 +438,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       tab,
       'https://jonathanmoregard.github.io/intender/test/assets/'
     );
-    await expect(tab).toHaveURL(
-      /chrome-extension:\/\/.+\/intention-page\.html\?target=/
-    );
+    await expect(tab).toHaveURL(INTENTION_PAGE_REGEX);
 
     await context.close();
   });
@@ -468,7 +448,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     const { context } = await launchExtension();
     await setupInactivityAndIntention({
       context,
-      timeoutMs: 3000,
+      timeoutMs: 2000,
       inactivityMode: 'all',
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
@@ -485,9 +465,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       tabB,
       'https://jonathanmoregard.github.io/intender/test/assets/'
     );
-    await expect(tabB).toHaveURL(
-      /chrome-extension:\/\/.+\/intention-page\.html\?target=/
-    );
+    await expect(tabB).toHaveURL(INTENTION_PAGE_REGEX);
     await completeIntention({ page: tabB, phrase: 'Hello Intent' });
 
     // Work on tab A longer than timeout (stay active)
@@ -496,9 +474,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     // Switch to tab B - should NOT show intention page (same-scope switch is safe)
     await bringToFrontAndWait(tabB);
-    await expect(tabB).toHaveURL(
-      /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
-    );
+    await expect(tabB).toHaveURL(AUDIO_TEST_REGEX);
     await tabB.waitForTimeout(100); // Settle time to prevent double-fires
 
     await context.close();
@@ -537,9 +513,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await tab.waitForTimeout(2500);
 
     // Should NOT immediately show intention page (activity was refreshed)
-    await expect(tab).toHaveURL(
-      /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
-    );
+    await expect(tab).toHaveURL(AUDIO_TEST_REGEX);
 
     await context.close();
   });
@@ -561,13 +535,8 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await completeIntention({ page: tab1, phrase: 'Hello Intent' });
 
     const tab2 = await context.newPage();
-    await gotoRobust(
-      tab2,
-      'https://jonathanmoregard.github.io/intender/test/assets/'
-    );
-    await expect(tab2).toHaveURL(
-      /chrome-extension:\/\/.+\/intention-page\.html\?target=/
-    );
+    await gotoRobust(tab2, AUDIO_TEST_URL);
+    await expect(tab2).toHaveURL(INTENTION_PAGE_REGEX);
     await completeIntention({ page: tab2, phrase: 'Hello Intent' });
 
     // Work on tab1 for over inactivity time
@@ -580,9 +549,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     // Switch to intention-scope tab2 - should be tab2 (not intention screen)
     await tab2.bringToFront();
-    await expect(tab2).toHaveURL(
-      /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
-    );
+    await expect(tab2).toHaveURL(AUDIO_TEST_REGEX);
 
     await context.close();
   });
@@ -624,15 +591,11 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     // Go to audio1, verify no intention
     await audio1.bringToFront();
-    await expect(audio1).toHaveURL(
-      /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
-    );
+    await expect(audio1).toHaveURL(AUDIO_TEST_REGEX);
 
     // Go to audio3, verify no intention
     await audio3.bringToFront();
-    await expect(audio3).toHaveURL(
-      /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
-    );
+    await expect(audio3).toHaveURL(AUDIO_TEST_REGEX);
 
     // Close audio3
     await audio3.close();
@@ -645,15 +608,11 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     // Go to audio1, verify no intention (exemption still holds due to audio2)
     await audio1.bringToFront();
-    await expect(audio1).toHaveURL(
-      /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
-    );
+    await expect(audio1).toHaveURL(AUDIO_TEST_REGEX);
 
     // Go to audio2, verify no intention
     await audio2.bringToFront();
-    await expect(audio2).toHaveURL(
-      /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
-    );
+    await expect(audio2).toHaveURL(AUDIO_TEST_REGEX);
 
     // Close audio2
     await audio2.close();
@@ -666,9 +625,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     // Go to audio1, verify intention (exemption removed)
     await audio1.bringToFront();
-    await expect(audio1).toHaveURL(
-      /chrome-extension:\/\/.+\/intention-page\.html\?target=/
-    );
+    await expect(audio1).toHaveURL(INTENTION_PAGE_REGEX);
 
     await context.close();
   });
@@ -710,9 +667,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     // Focus tab - should show intention page (muted doesn't count as audible)
     await tab.bringToFront();
-    await expect(tab).toHaveURL(
-      /chrome-extension:\/\/.+\/intention-page\.html\?target=/
-    );
+    await expect(tab).toHaveURL(INTENTION_PAGE_REGEX);
 
     await context.close();
   });
@@ -737,13 +692,8 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     const sameSiteTabs = [];
     for (let i = 0; i < 5; i++) {
       const tab = await context.newPage();
-      await gotoRobust(
-        tab,
-        'https://jonathanmoregard.github.io/intender/test/assets/'
-      );
-      await expect(tab).toHaveURL(
-        /chrome-extension:\/\/.+\/intention-page\.html\?target=/
-      );
+      await gotoRobust(tab, AUDIO_TEST_URL);
+      await expect(tab).toHaveURL(INTENTION_PAGE_REGEX);
       await completeIntention({ page: tab, phrase: 'Hello Intent' });
       sameSiteTabs.push(tab);
     }
@@ -756,9 +706,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await settingsPage.waitForTimeout(3500);
 
     await mainTab.bringToFront();
-    await expect(mainTab).toHaveURL(
-      /chrome-extension:\/\/.+\/intention-page\.html\?target=/
-    );
+    await expect(mainTab).toHaveURL(INTENTION_PAGE_REGEX);
 
     // Pass intention check again
     await completeIntention({ page: mainTab, phrase: 'Hello Intent' });
@@ -766,9 +714,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     // Focus other same-site tabs - should NOT show intention page
     for (const tab of sameSiteTabs) {
       await tab.bringToFront();
-      await expect(tab).toHaveURL(
-        /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
-      );
+      await expect(tab).toHaveURL(AUDIO_TEST_REGEX);
     }
 
     await context.close();
@@ -794,13 +740,8 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     const sameSiteTabs = [];
     for (let i = 0; i < 5; i++) {
       const tab = await context.newPage();
-      await gotoRobust(
-        tab,
-        'https://jonathanmoregard.github.io/intender/test/assets/'
-      );
-      await expect(tab).toHaveURL(
-        /chrome-extension:\/\/.+\/intention-page\.html\?target=/
-      );
+      await gotoRobust(tab, AUDIO_TEST_URL);
+      await expect(tab).toHaveURL(INTENTION_PAGE_REGEX);
       await completeIntention({ page: tab, phrase: 'Hello Intent' });
       sameSiteTabs.push(tab);
     }
@@ -813,9 +754,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await settingsPage.waitForTimeout(3500);
 
     await mainTab.bringToFront();
-    await expect(mainTab).toHaveURL(
-      /chrome-extension:\/\/.+\/intention-page\.html\?target=/
-    );
+    await expect(mainTab).toHaveURL(INTENTION_PAGE_REGEX);
 
     // Pass intention check again
     await completeIntention({ page: mainTab, phrase: 'Hello Intent' });
@@ -823,9 +762,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     // Focus other same-site tabs - should NOT show intention page
     for (const tab of sameSiteTabs) {
       await tab.bringToFront();
-      await expect(tab).toHaveURL(
-        /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
-      );
+      await expect(tab).toHaveURL(AUDIO_TEST_REGEX);
     }
 
     await context.close();
@@ -864,9 +801,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     // Go to test domain, verify intention page has the correct intention text
     const testTab = await context.newPage();
     await gotoRobust(testTab, 'https://google.com');
-    await expect(testTab).toHaveURL(
-      /chrome-extension:\/\/.+\/intention-page\.html\?target=/
-    );
+    await expect(testTab).toHaveURL(INTENTION_PAGE_REGEX);
     // Check if intention page loaded correctly (basic functionality test)
     await expect(testTab.locator('#phrase')).toBeVisible();
     // Note: placeholder issue may be related to intention loading - needs investigation
@@ -903,15 +838,12 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await tabA.bringToFront();
     await settingsPage.waitForTimeout(1500);
     await forceInactivityCheck(settingsPage);
-    await tabA.waitForURL(
-      /chrome-extension:\/\/.+\/intention-page\.html\?target=/
-    );
+    await tabA.waitForURL(INTENTION_PAGE_REGEX);
+    await settingsPage.waitForTimeout(1000);
 
     // Focus B window - should show intention page (stale)
     await tabB.bringToFront();
-    await expect(tabB).toHaveURL(
-      /chrome-extension:\/\/.+\/intention-page\.html\?target=/
-    );
+    await expect(tabB).toHaveURL(INTENTION_PAGE_REGEX);
 
     await context.close();
   });
@@ -941,9 +873,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     // Focus B - should NOT show intention page
     await tabB.bringToFront();
-    await expect(tabB).toHaveURL(
-      /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
-    );
+    await expect(tabB).toHaveURL(AUDIO_TEST_REGEX);
 
     await context.close();
   });
@@ -987,9 +917,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     // Switch to a - should show intention page
     await tabA.bringToFront();
-    await expect(tabA).toHaveURL(
-      /chrome-extension:\/\/.+\/intention-page\.html\?target=/
-    );
+    await expect(tabA).toHaveURL(INTENTION_PAGE_REGEX);
 
     await context.close();
   });
@@ -1019,15 +947,11 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await Promise.all([forceInactivityCheck(settingsPage), tab.bringToFront()]);
 
     // Should show intention page (but only one redirect should happen)
-    await expect(tab).toHaveURL(
-      /chrome-extension:\/\/.+\/intention-page\.html\?target=/
-    );
+    await expect(tab).toHaveURL(INTENTION_PAGE_REGEX);
 
     // Wait a bit to ensure no second redirect occurs
     await tab.waitForTimeout(1000);
-    await expect(tab).toHaveURL(
-      /chrome-extension:\/\/.+\/intention-page\.html\?target=/
-    );
+    await expect(tab).toHaveURL(INTENTION_PAGE_REGEX);
 
     await context.close();
   });
@@ -1059,9 +983,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     // The system should handle this gracefully with no errors and no redirects
     // Focus back to original tab - should remain on the target page (NO intention page)
     await tab.bringToFront();
-    await expect(tab).toHaveURL(
-      /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
-    );
+    await expect(tab).toHaveURL(AUDIO_TEST_REGEX);
 
     // Verify no errors occurred (tab should still be functional)
     await expect(tab.locator('body')).toBeVisible();
@@ -1118,14 +1040,9 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
     const tabB = await context.waitForEvent('page', { timeout: 5000 });
 
     // Now navigate to the target URL to trigger extension interception
-    await gotoRobust(
-      tabB,
-      'https://jonathanmoregard.github.io/intender/test/assets/'
-    );
+    await gotoRobust(tabB, AUDIO_TEST_URL);
 
-    await expect(tabB).toHaveURL(
-      /chrome-extension:\/\/.+\/intention-page\.html\?target=/
-    );
+    await expect(tabB).toHaveURL(INTENTION_PAGE_REGEX);
     await completeIntention({ page: tabB, phrase: 'Hello Intent' });
 
     // Focus Window A and work beyond timeout
@@ -1143,9 +1060,7 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
     // Wait for focus change to take effect
     await tabB.waitForTimeout(200);
 
-    await expect(tabB).toHaveURL(
-      /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
-    );
+    await expect(tabB).toHaveURL(AUDIO_TEST_REGEX);
     await tabB.waitForTimeout(100); // Settle time to prevent double-fires
 
     await context.close();
@@ -1172,9 +1087,7 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
 
     await tab.waitForTimeout(16000);
 
-    await expect(tab).toHaveURL(
-      /chrome-extension:\/\/.+\/intention-page\.html\?target=/
-    );
+    await expect(tab).toHaveURL(INTENTION_PAGE_REGEX);
     await tab.waitForTimeout(100); // Settle time to prevent double-fires
 
     await context.close();
