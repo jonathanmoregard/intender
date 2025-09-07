@@ -92,14 +92,19 @@ async function setupInactivityAndIntention(opts: {
 async function completeIntention(opts: { page: Page; phrase: string }) {
   await expect(opts.page).toHaveURL(INTENTION_PAGE_REGEX);
 
+  // Extract target URL from intention page URL
+  const currentUrl = opts.page.url();
+  const targetUrl = new URL(currentUrl).searchParams.get('target');
+  if (!targetUrl) {
+    throw new Error('No target URL found in intention page');
+  }
+
   await opts.page.locator('#phrase').fill(opts.phrase);
-  const goButton = opts.page.locator('#go');
-  await Promise.all([
-    opts.page.waitForURL(
-      new RegExp(AUDIO_TEST_URL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-    ),
-    goButton.click(),
-  ]);
+  await opts.page.locator('#go').click();
+
+  await opts.page.waitForURL(
+    new RegExp(targetUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  );
   return opts.page;
 }
 
@@ -712,7 +717,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
-      timeoutMs: 3000,
+      timeoutMs: 2000,
       inactivityMode: 'all',
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
@@ -738,11 +743,13 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       sameSiteTabs.push(tab);
     }
 
-    // Wait beyond timeout
+    // Open new tab
+    const newTab = await context.newPage();
+    await gotoRobust(newTab, 'https://google.com');
+
+    // Wait over inactivity
     await settingsPage.waitForTimeout(3500);
 
-    // Force idle to trigger intention page on main tab
-    await forceInactivityCheck(settingsPage);
     await mainTab.bringToFront();
     await expect(mainTab).toHaveURL(
       /chrome-extension:\/\/.+\/intention-page\.html\?target=/
