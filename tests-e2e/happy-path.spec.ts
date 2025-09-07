@@ -10,7 +10,7 @@ test.describe('Happy path intention flow', () => {
     const { context } = await launchExtension();
 
     // Open options page
-    const { page: options } = await openSettingsPage(context);
+    const { settingsPage: options } = await openSettingsPage(context);
 
     // Fill first intention (URL and phrase) and save
     const urlInput = options.locator('input.url-input').first();
@@ -45,7 +45,7 @@ test.describe('Happy path intention flow', () => {
     const goButton = page.locator('#go');
     await expect(goButton).toBeEnabled();
     await Promise.all([
-      page.waitForNavigation({ url: /https:\/\/www\.google\.com\/?/ }),
+      page.waitForURL(/https:\/\/www\.google\.com\/?/),
       goButton.click(),
     ]);
 
