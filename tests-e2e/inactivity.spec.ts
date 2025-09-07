@@ -103,6 +103,22 @@ async function completeIntention(opts: { page: Page; phrase: string }) {
   return opts.page;
 }
 
+async function createNewWindowFromTab(
+  sourceTab: Page,
+  url: string
+): Promise<Page> {
+  const [newWindow] = await Promise.all([
+    sourceTab.waitForEvent('popup'),
+    sourceTab.evaluate(url => {
+      // Hint to Chromium to open a popup window rather than a tab
+      // (features string helps produce a separate window + windowId in Chrome)
+      window.open(url, '_blank', 'popup=1,width=1200,height=800');
+      return null;
+    }, url),
+  ]);
+  return newWindow;
+}
+
 async function forceInactivityCheck(optionsPage: Page) {
   await optionsPage.evaluate(() => {
     // @ts-ignore
@@ -358,7 +374,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     const { settingsPage } = await setupInactivityAndIntention({
       context,
       timeoutMs: 3000,
-      inactivityMode: 'all',
+      inactivityMode: 'all-except-audio',
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
     });
@@ -369,15 +385,16 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     // Start audio
     await startAudioPlayback(tab);
 
-    // Create new window with duplicate - it will need to complete intention too
-    const newWindow = await context.newPage();
-    await gotoRobust(newWindow, AUDIO_TEST_URL);
+    // Create duplicate in a *new window* (same context) via window.open
+    const newWindow = await createNewWindowFromTab(tab, AUDIO_TEST_URL);
+
+    // Complete intention in the new window
     await completeIntention({ page: newWindow, phrase: 'Hello Intent' });
 
-    // Start audio on duplicate tab too
+    // Start audio in the new window
     await startAudioPlayback(newWindow);
 
-    // Open a new non-scope tab in original window
+    // Open a new non-scope tab
     const nonScopeTab = await context.newPage();
     await gotoRobust(nonScopeTab, 'https://google.com');
 
@@ -387,13 +404,13 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     // Force idle check since this is a sub-15s timeout test
     await forceInactivityCheck(settingsPage);
 
-    // Focus duplicate in new window - should stay on audio page
+    // Focus duplicate in new window - should stay on audio page (audio exemption)
     await newWindow.bringToFront();
     await expect(newWindow).toHaveURL(
       /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
     );
 
-    // Focus original - should stay on audio page
+    // Focus original - should stay on audio page (audio exemption)
     await tab.bringToFront();
     await expect(tab).toHaveURL(
       /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
@@ -886,22 +903,9 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await gotoRobust(tabA, AUDIO_TEST_URL);
     await completeIntention({ page: tabA, phrase: 'Hello Intent' });
 
-    // Window B with scoped tab (same scope)
-    const tabB = await context.newPage();
-    await gotoRobust(
-      tabB,
-      'https://jonathanmoregard.github.io/intender/test/assets/'
-    );
-    await expect(tabB).toHaveURL(
-      /chrome-extension:\/\/.+\/intention-page\.html\?target=/
-    );
-    await tabB.locator('#phrase').fill('Hello Intent');
-    await Promise.all([
-      tabB.waitForURL(
-        /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
-      ),
-      tabB.locator('#go').click(),
-    ]);
+    // Window B with scoped tab (same scope) - create as separate window
+    const tabB = await createNewWindowFromTab(tabA, AUDIO_TEST_URL);
+    await completeIntention({ page: tabB, phrase: 'Hello Intent' });
 
     // Focus A, go idle
     await tabA.bringToFront();
@@ -932,22 +936,9 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await gotoRobust(tabA, AUDIO_TEST_URL);
     await completeIntention({ page: tabA, phrase: 'Hello Intent' });
 
-    // Window B with scoped tab (same scope)
-    const tabB = await context.newPage();
-    await gotoRobust(
-      tabB,
-      'https://jonathanmoregard.github.io/intender/test/assets/'
-    );
-    await expect(tabB).toHaveURL(
-      /chrome-extension:\/\/.+\/intention-page\.html\?target=/
-    );
-    await tabB.locator('#phrase').fill('Hello Intent');
-    await Promise.all([
-      tabB.waitForURL(
-        /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
-      ),
-      tabB.locator('#go').click(),
-    ]);
+    // Window B with scoped tab (same scope) - create as separate window
+    const tabB = await createNewWindowFromTab(tabA, AUDIO_TEST_URL);
+    await completeIntention({ page: tabB, phrase: 'Hello Intent' });
 
     // Keep active for over timeout duration in A
     await tabA.bringToFront();
@@ -979,22 +970,9 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     const tabAPrime = await context.newPage();
     await gotoRobust(tabAPrime, 'https://google.com');
 
-    // Window B with tab b (scoped, same scope as a)
-    const tabB = await context.newPage();
-    await gotoRobust(
-      tabB,
-      'https://jonathanmoregard.github.io/intender/test/assets/'
-    );
-    await expect(tabB).toHaveURL(
-      /chrome-extension:\/\/.+\/intention-page\.html\?target=/
-    );
-    await tabB.locator('#phrase').fill('Hello Intent');
-    await Promise.all([
-      tabB.waitForURL(
-        /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
-      ),
-      tabB.locator('#go').click(),
-    ]);
+    // Window B with tab b (scoped, same scope as a) - create as separate window
+    const tabB = await createNewWindowFromTab(tabA, AUDIO_TEST_URL);
+    await completeIntention({ page: tabB, phrase: 'Hello Intent' });
 
     // Focus on b, then close window B
     await tabB.bringToFront();
