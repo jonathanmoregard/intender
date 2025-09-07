@@ -209,8 +209,18 @@ export default defineBackground(async () => {
           tabId: t as unknown as number,
         })
       );
-      console.log('[Intender] Focus handler map snapshot (pre)', mapSnapshot);
+      console.log(
+        '[Intender] handleFocusChange - lastActiveTabIdByWindow map snapshot',
+        mapSnapshot
+      );
     } catch {}
+
+    // Update tracking
+    lastActiveTabIdByWindow.set(windowId, toTabId);
+    console.log('[Intender] Updated lastActiveTabIdByWindow', {
+      windowId,
+      toTabId,
+    });
 
     // Compute scopes for both tabs
     const fromScope = fromTabId ? getScopeForTab(fromTabId) : null;
@@ -254,11 +264,6 @@ export default defineBackground(async () => {
       });
       // Bump activity for the scope and update tracking
       updateIntentionScopeActivity(toScope);
-      lastActiveTabIdByWindow.set(windowId, toTabId);
-      console.log('[Intender] Updated lastActiveTabIdByWindow (fast path)', {
-        windowId,
-        toTabId,
-      });
       return;
     } else {
       console.log('[Intender] NOT same-scope switch:', {
@@ -280,7 +285,6 @@ export default defineBackground(async () => {
           timeSinceActive: now - lastActive,
         });
         updateIntentionScopeActivity(toScope);
-        lastActiveTabIdByWindow.set(windowId, toTabId);
         return;
       }
     }
@@ -300,14 +304,6 @@ export default defineBackground(async () => {
     if (resolvedUrl && resolvedUrl.startsWith(intentionPageUrl)) {
       console.log(
         '[Intender] Target tab already on intention page, skipping redirect'
-      );
-      lastActiveTabIdByWindow.set(windowId, toTabId);
-      console.log(
-        '[Intender] Updated lastActiveTabIdByWindow (guard intention url)',
-        {
-          windowId,
-          toTabId,
-        }
       );
       return;
     }
@@ -332,13 +328,6 @@ export default defineBackground(async () => {
       // No redirect needed, just update activity
       updateIntentionScopeActivity(toScope);
     }
-
-    // Update tracking
-    lastActiveTabIdByWindow.set(windowId, toTabId);
-    console.log('[Intender] Updated lastActiveTabIdByWindow (post)', {
-      windowId,
-      toTabId,
-    });
   }
 
   // Central helper to redirect to intention page with cooldown protection
@@ -565,13 +554,6 @@ export default defineBackground(async () => {
     intentionScopePerTabId.delete(tId);
     lastRedirectAtByTabId.delete(tId);
 
-    // Remove from lastActiveTabIdByWindow if this was the last active tab in any window
-    for (const [windowId, activeTabId] of lastActiveTabIdByWindow.entries()) {
-      if (activeTabId === tId) {
-        lastActiveTabIdByWindow.delete(windowId);
-      }
-    }
-
     console.log('[Intender] Tab removed, cleared cache:', { tabId });
   });
 
@@ -594,10 +576,13 @@ export default defineBackground(async () => {
           tabId: t as unknown as number,
         })
       );
-      console.log('[Intender] Window focus map snapshot', {
-        lastFocusedWindowId,
-        map: mapSnapshot,
-      });
+      console.log(
+        '[Intender] browser.windows.onFocusChanged - lastFocusedWindowId map snapshot',
+        {
+          lastFocusedWindowId,
+          map: mapSnapshot,
+        }
+      );
     } catch {}
 
     // If windowId === -1 (no window focused), return early
