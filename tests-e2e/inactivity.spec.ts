@@ -587,61 +587,81 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
-      timeoutMs: 3000,
+      timeoutMs: 2000,
       inactivityMode: 'all-except-audio',
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
     });
 
-    // Two tabs in same scope playing audio
-    const tab1 = await context.newPage();
-    await gotoRobust(tab1, AUDIO_TEST_URL);
-    await completeIntention({ page: tab1, phrase: 'Hello Intent' });
-    await startAudioPlayback(tab1);
+    // Open audio1, don't play
+    const audio1 = await context.newPage();
+    await gotoRobust(audio1, AUDIO_TEST_URL);
+    await completeIntention({ page: audio1, phrase: 'Hello Intent' });
 
-    const tab2 = await context.newPage();
-    await gotoRobust(
-      tab2,
-      'https://jonathanmoregard.github.io/intender/test/assets/'
-    );
-    await expect(tab2).toHaveURL(
-      /chrome-extension:\/\/.+\/intention-page\.html\?target=/
-    );
-    await completeIntention({ page: tab2, phrase: 'Hello Intent' });
-    await startAudioPlayback(tab2);
+    // Open audio2, play
+    const audio2 = await context.newPage();
+    await gotoRobust(audio2, AUDIO_TEST_URL);
+    await completeIntention({ page: audio2, phrase: 'Hello Intent' });
+    await startAudioPlayback(audio2);
 
-    // Stop audio in one tab
-    await tab1.evaluate(() => {
-      // @ts-ignore
-      const audio = document.querySelector('audio');
-      if (audio) {
-        audio.pause();
-      }
-    });
+    // Open audio3, play
+    const audio3 = await context.newPage();
+    await gotoRobust(audio3, AUDIO_TEST_URL);
+    await completeIntention({ page: audio3, phrase: 'Hello Intent' });
+    await startAudioPlayback(audio3);
 
-    // Wait beyond timeout
-    await settingsPage.waitForTimeout(3500);
+    // Open new tab
+    const newTab = await context.newPage();
+    await gotoRobust(newTab, 'https://google.com');
 
-    // Focus either tab - should remain on destination (exemption holds due to tab2)
-    await tab1.bringToFront();
-    await expect(tab1).toHaveURL(
+    // Wait over inactivity
+    await settingsPage.waitForTimeout(2500);
+
+    // Go to audio1, verify no intention
+    await audio1.bringToFront();
+    await expect(audio1).toHaveURL(
       /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
     );
 
-    await tab2.bringToFront();
-    await expect(tab2).toHaveURL(
+    // Go to audio3, verify no intention
+    await audio3.bringToFront();
+    await expect(audio3).toHaveURL(
       /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
     );
 
-    // Close the last audible tab
-    await tab2.close();
+    // Close audio3
+    await audio3.close();
 
-    // Wait beyond timeout
-    await settingsPage.waitForTimeout(3500);
+    // Go to new tab
+    await newTab.bringToFront();
 
-    // Focus the scope - should now show intention page (exemption removed)
-    await tab1.bringToFront();
-    await expect(tab1).toHaveURL(
+    // Wait over inactivity
+    await settingsPage.waitForTimeout(2500);
+
+    // Go to audio1, verify no intention (exemption still holds due to audio2)
+    await audio1.bringToFront();
+    await expect(audio1).toHaveURL(
+      /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
+    );
+
+    // Go to audio2, verify no intention
+    await audio2.bringToFront();
+    await expect(audio2).toHaveURL(
+      /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
+    );
+
+    // Close audio2
+    await audio2.close();
+
+    // Go to new tab
+    await newTab.bringToFront();
+
+    // Wait over inactivity
+    await settingsPage.waitForTimeout(2500);
+
+    // Go to audio1, verify intention (exemption removed)
+    await audio1.bringToFront();
+    await expect(audio1).toHaveURL(
       /chrome-extension:\/\/.+\/intention-page\.html\?target=/
     );
 
