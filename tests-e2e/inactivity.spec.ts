@@ -689,19 +689,24 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     // Start audio and immediately mute it
     await startAudioPlayback(tab);
-    await tab.evaluate(() => {
-      // @ts-ignore
-      const audio = document.querySelector('audio');
-      if (audio) {
-        audio.muted = true;
+
+    // Mute the tab at the browser level (not just DOM audio element)
+    await settingsPage.evaluate(async () => {
+      const targets = await chrome.tabs.query({
+        url: '*://jonathanmoregard.github.io/intender/test/assets/*',
+      });
+      for (const t of targets) {
+        if (t.id) await chrome.tabs.update(t.id, { muted: true });
       }
     });
+    await tab.waitForTimeout(200); // let tab.mutedInfo/audible settle
 
-    // Wait beyond timeout
-    await settingsPage.waitForTimeout(3500);
+    // Open new tab
+    const newTab = await context.newPage();
+    await gotoRobust(newTab, 'https://google.com');
 
-    // Force idle check since this is a sub-15s timeout test
-    await forceInactivityCheck(settingsPage);
+    // Wait over inactivity
+    await settingsPage.waitForTimeout(2500);
 
     // Focus tab - should show intention page (muted doesn't count as audible)
     await tab.bringToFront();
