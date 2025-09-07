@@ -769,12 +769,12 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await context.close();
   });
 
-  // Test 8: Same as 7 but on-except-audio.
+  // Test 8: Same as 7 but all-except-audio.
   test('test-8: multiple same-site tabs, after revalidation other tabs should not show intention (all-except-audio)', async () => {
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
-      timeoutMs: 3000,
+      timeoutMs: 2000,
       inactivityMode: 'all-except-audio',
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
@@ -800,11 +800,13 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       sameSiteTabs.push(tab);
     }
 
-    // Wait beyond timeout
+    // Open new tab
+    const newTab = await context.newPage();
+    await gotoRobust(newTab, 'https://google.com');
+
+    // Wait over inactivity
     await settingsPage.waitForTimeout(3500);
 
-    // Force idle to trigger intention page on main tab
-    await forceInactivityCheck(settingsPage);
     await mainTab.bringToFront();
     await expect(mainTab).toHaveURL(
       /chrome-extension:\/\/.+\/intention-page\.html\?target=/
