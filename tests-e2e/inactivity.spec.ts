@@ -483,13 +483,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await expect(tabB).toHaveURL(
       /chrome-extension:\/\/.+\/intention-page\.html\?target=/
     );
-    await tabB.locator('#phrase').fill('Hello Intent');
-    await Promise.all([
-      tabB.waitForURL(
-        /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
-      ),
-      tabB.locator('#go').click(),
-    ]);
+    await completeIntention({ page: tabB, phrase: 'Hello Intent' });
 
     // Work on tab A longer than timeout (stay active)
     await bringToFrontAndWait(tabA);
@@ -569,13 +563,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await expect(tab2).toHaveURL(
       /chrome-extension:\/\/.+\/intention-page\.html\?target=/
     );
-    await tab2.locator('#phrase').fill('Hello Intent');
-    await Promise.all([
-      tab2.waitForURL(
-        /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
-      ),
-      tab2.locator('#go').click(),
-    ]);
+    await completeIntention({ page: tab2, phrase: 'Hello Intent' });
 
     // Work on tab1 for over inactivity time
     await tab1.bringToFront();
@@ -619,13 +607,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await expect(tab2).toHaveURL(
       /chrome-extension:\/\/.+\/intention-page\.html\?target=/
     );
-    await tab2.locator('#phrase').fill('Hello Intent');
-    await Promise.all([
-      tab2.waitForURL(
-        /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
-      ),
-      tab2.locator('#go').click(),
-    ]);
+    await completeIntention({ page: tab2, phrase: 'Hello Intent' });
     await startAudioPlayback(tab2);
 
     // Stop audio in one tab
@@ -732,13 +714,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       await expect(tab).toHaveURL(
         /chrome-extension:\/\/.+\/intention-page\.html\?target=/
       );
-      await tab.locator('#phrase').fill('Hello Intent');
-      await Promise.all([
-        tab.waitForURL(
-          '/https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//'
-        ),
-        tab.locator('#go').click(),
-      ]);
+      await completeIntention({ page: tab, phrase: 'Hello Intent' });
       sameSiteTabs.push(tab);
     }
 
@@ -753,13 +729,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     );
 
     // Pass intention check again
-    await mainTab.locator('#phrase').fill('Hello Intent');
-    await Promise.all([
-      mainTab.waitForURL(
-        /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
-      ),
-      mainTab.locator('#go').click(),
-    ]);
+    await completeIntention({ page: mainTab, phrase: 'Hello Intent' });
 
     // Focus other same-site tabs - should NOT show intention page
     for (const tab of sameSiteTabs) {
@@ -799,13 +769,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       await expect(tab).toHaveURL(
         /chrome-extension:\/\/.+\/intention-page\.html\?target=/
       );
-      await tab.locator('#phrase').fill('Hello Intent');
-      await Promise.all([
-        tab.waitForURL(
-          '/https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//'
-        ),
-        tab.locator('#go').click(),
-      ]);
+      await completeIntention({ page: tab, phrase: 'Hello Intent' });
       sameSiteTabs.push(tab);
     }
 
@@ -820,13 +784,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     );
 
     // Pass intention check again
-    await mainTab.locator('#phrase').fill('Hello Intent');
-    await Promise.all([
-      mainTab.waitForURL(
-        /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
-      ),
-      mainTab.locator('#go').click(),
-    ]);
+    await completeIntention({ page: mainTab, phrase: 'Hello Intent' });
 
     // Focus other same-site tabs - should NOT show intention page
     for (const tab of sameSiteTabs) {
@@ -1131,13 +1089,7 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
     await expect(tabB).toHaveURL(
       /chrome-extension:\/\/.+\/intention-page\.html\?target=/
     );
-    await tabB.locator('#phrase').fill('Hello Intent');
-    await Promise.all([
-      tabB.waitForURL(
-        /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//
-      ),
-      tabB.locator('#go').click(),
-    ]);
+    await completeIntention({ page: tabB, phrase: 'Hello Intent' });
 
     // Focus Window A and work beyond timeout
     await settingsPage.evaluate(async windowId => {
