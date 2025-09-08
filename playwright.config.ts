@@ -1,25 +1,42 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const isThrottled = !!process.env.INTENDER_THROTTLE;
+
 export default defineConfig({
   testDir: './tests-e2e',
-  fullyParallel: true,
+  fullyParallel: !isThrottled, // Disable parallel when throttled
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 2 : undefined,
+  workers: isThrottled ? 1 : process.env.CI ? 2 : undefined, // Single worker when throttled
   reporter: [['list']],
   use: {
     baseURL: 'http://localhost:5173',
     trace: 'retain-on-failure',
     video: 'off',
     screenshot: 'only-on-failure',
+    // Add throttling launch options
+    launchOptions: isThrottled
+      ? {
+          args: [
+            '--disable-gpu',
+            '--disable-dev-shm-usage',
+            '--max_old_space_size=128',
+            '--disable-background-timer-throttling',
+            '--disable-renderer-backgrounding',
+            '--disable-backgrounding-occluded-windows',
+            '--disable-ipc-flooding-protection',
+            '--force-device-scale-factor=0.5',
+          ],
+        }
+      : undefined,
   },
-  timeout: 60000, // 1 minute timeout
+  timeout: isThrottled ? 120000 : 60000, // 2 minutes when throttled, 1 minute normally
   projects: [
     {
       name: 'e2e-parallel',
       grepInvert: /@serial/,
-      fullyParallel: true,
-      workers: process.env.CI ? 2 : 4,
+      fullyParallel: !isThrottled,
+      workers: isThrottled ? 1 : process.env.CI ? 2 : 4,
       use: { ...devices['Desktop Chrome'] },
     },
     {

@@ -1,4 +1,4 @@
-import { expect, Page, test } from '@playwright/test';
+import { expect, Page, test } from './test-setup';
 import {
   launchExtension,
   openSettingsPage,

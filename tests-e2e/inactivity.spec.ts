@@ -1,5 +1,5 @@
-import { expect, Page, test } from '@playwright/test';
 import { execSync } from 'node:child_process';
+import { expect, Page, test } from './test-setup';
 import {
   launchExtension,
   openSettingsPage,
