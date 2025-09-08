@@ -165,6 +165,10 @@ export default defineBackground(async () => {
   ): Promise<boolean> {
     if (mode === 'off' || !scopeId) return false;
 
+    // Special E2E control: timeoutMs === 0 disables idle-based revalidation entirely.
+    // Tests should invoke the explicit e2e:forceInactivityCheck-idle path when needed.
+    if ((timeoutMs as number) === 0) return false;
+
     // Check audio exemption for all-except-audio mode
     if (mode === 'all-except-audio' && (await isScopeAudible(scopeId))) {
       return false;
@@ -794,16 +798,35 @@ export default defineBackground(async () => {
   // Idle-based inactivity for focused tab
 
   function updateIdleDetectionInterval(timeoutMs: TimeoutMs): void {
-    const timeoutSeconds = Math.max(15, Math.floor(timeoutMs / 1000));
+    const ms = timeoutMs as number;
+    if (ms === 0) {
+      // Disable OS idle listener entirely for E2E determinism (tests will force checks)
+      try {
+        chrome.idle.onStateChanged.removeListener(inactivityChange);
+        console.log('[Intender] Idle detection disabled (timeoutMs === 0)');
+      } catch (e) {
+        console.log('[Intender] Failed to disable idle detection:', e);
+      }
+      return;
+    }
+    const timeoutSeconds = Math.max(15, Math.floor(ms / 1000));
     try {
       chrome.idle.setDetectionInterval(timeoutSeconds);
+      console.log(
+        '[Intender] Idle detection interval set (s):',
+        timeoutSeconds
+      );
     } catch (e) {
       console.log('[Intender] Failed to set idle detection interval:', e);
     }
   }
 
   function toggleIdleDetection(mode: InactivityMode): void {
-    if (mode === 'off' || e2eDisableIdleListener) {
+    if (
+      mode === 'off' ||
+      e2eDisableIdleListener ||
+      (settingsCache.inactivityTimeoutMs as number) === 0
+    ) {
       chrome.idle.onStateChanged.removeListener(inactivityChange);
     } else {
       chrome.idle.onStateChanged.addListener(inactivityChange);
