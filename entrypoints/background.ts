@@ -760,27 +760,28 @@ export default defineBackground(async () => {
     }
 
     // Rule 4: Otherwise, check if we need to block using new matching system
-    const matchedIntention = lookupIntention(targetUrl, intentionIndex);
+    const targetIntention = lookupIntention(targetUrl, intentionIndex);
 
-    if (matchedIntention) {
+    if (targetIntention) {
       console.log(
         '[Intender] Rule 4: Blocking navigation, showing intention page for:',
-        matchedIntention
+        targetIntention
       );
 
       // Track the intention scope for this tab
-      const intentionScopeId = intentionToIntentionScopeId(matchedIntention);
+      const targetIntentionScopeId =
+        intentionToIntentionScopeId(targetIntention);
       intentionScopePerTabId.set(
         numberToTabId(details.tabId),
-        intentionScopeId
+        targetIntentionScopeId
       );
-      updateIntentionScopeActivity(intentionScopeId);
+      updateIntentionScopeActivity(targetIntentionScopeId);
 
       const redirectUrl = browser.runtime.getURL(
         'intention-page.html?target=' +
           encodeURIComponent(targetUrl) +
           '&intentionScopeId=' +
-          encodeURIComponent(matchedIntention.id)
+          encodeURIComponent(targetIntention.id)
       );
 
       try {
