@@ -862,7 +862,6 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await settingsPage.waitForTimeout(1500);
     await forceInactivityCheck(settingsPage);
     await tabA.waitForURL(INTENTION_PAGE_REGEX);
-    await settingsPage.waitForTimeout(1000);
 
     // Focus B window - should show intention page (stale)
     await tabB.bringToFront();
