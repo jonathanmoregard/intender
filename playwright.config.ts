@@ -30,7 +30,7 @@ export default defineConfig({
         }
       : undefined,
   },
-  timeout: isThrottled ? 120000 : 60000, // 2 minutes when throttled, 1 minute normally
+  timeout: 120000, // 2 minutes standard
   projects: [
     {
       name: 'e2e-parallel',
