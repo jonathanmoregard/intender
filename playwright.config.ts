@@ -20,11 +20,11 @@ export default defineConfig({
           args: [
             '--disable-gpu',
             '--disable-dev-shm-usage',
-            '--max_old_space_size=128',
             '--disable-background-timer-throttling',
             '--disable-renderer-backgrounding',
             '--disable-backgrounding-occluded-windows',
             '--disable-ipc-flooding-protection',
+            '--disable-automatic-tab-discarding',
             '--force-device-scale-factor=0.5',
           ],
         }
