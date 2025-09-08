@@ -859,8 +859,14 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     // Focus A, go idle
     await tabA.bringToFront();
-    await settingsPage.waitForTimeout(1500);
-    await forceInactivityCheck(settingsPage);
+    await tabA.waitForTimeout(2000);
+
+    // Ensure A's window is focused before sending force-idle from extension context
+    await settingsPage.evaluate(async () => {
+      await chrome.runtime.sendMessage({
+        type: 'e2e:forceInactivityCheck-idle',
+      });
+    });
     await tabA.waitForURL(INTENTION_PAGE_REGEX);
 
     // Focus B window - should show intention page (stale)
