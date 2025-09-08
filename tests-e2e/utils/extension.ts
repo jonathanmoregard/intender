@@ -4,6 +4,11 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import winston from 'winston';
 
+// Keep a module-scoped handle to the current test's tee logger so we can append
+// PASS/FAIL at the end of each test into the same file.
+let currentTeeLogger: winston.Logger | null = null;
+let currentTeeTestName: string | undefined;
+
 function resolveExtensionPath(): string {
   const currentDir = new URL('.', import.meta.url);
   const projectRoot = new URL('../../', currentDir);
@@ -96,6 +101,8 @@ export async function launchExtension(
   const actualTestName = testName || getCurrentTestName();
   const tee = await createSwTeeLogger(actualTestName);
   tee?.info('Winston tee logger initialized');
+  currentTeeLogger = tee ?? null;
+  currentTeeTestName = actualTestName;
 
   const context = await chromium.launchPersistentContext(userDataDir, {
     headless: false,
@@ -199,6 +206,24 @@ export async function launchExtension(
   setupConsoleInterception();
 
   return { context };
+}
+
+// Append a single-line test result marker into the same SW log file
+export function logSwTestResult(
+  status: 'PASSED' | 'FAILED' | 'TIMED_OUT' | 'SKIPPED',
+  meta?: { title?: string; repeatEachIndex?: number; retry?: number }
+): void {
+  if (!currentTeeLogger) return;
+  const parts: string[] = [
+    `[RESULT] ${status}`,
+    currentTeeTestName ? `testName=${currentTeeTestName}` : undefined,
+    meta?.title ? `title=${meta.title}` : undefined,
+    meta?.repeatEachIndex !== undefined
+      ? `repeat=${meta.repeatEachIndex}`
+      : undefined,
+    meta?.retry !== undefined ? `retry=${meta.retry}` : undefined,
+  ].filter(Boolean) as string[];
+  currentTeeLogger.info(parts.join(' '));
 }
 
 export async function getExtensionId(context: BrowserContext): Promise<string> {

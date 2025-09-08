@@ -1,4 +1,5 @@
 import { test as base, expect } from '@playwright/test';
+import { logSwTestResult } from './utils/extension';
 
 const isThrottled = !!process.env.INTENDER_THROTTLE;
 
@@ -31,3 +32,23 @@ export const test = base.extend({
 });
 
 export { expect };
+
+// Append PASS/FAIL/TIMEOUT markers to the SW log file for each test
+base.afterEach(async ({}, testInfo) => {
+  try {
+    const status =
+      testInfo.status === 'passed'
+        ? 'PASSED'
+        : testInfo.status === 'timedOut'
+          ? 'TIMED_OUT'
+          : testInfo.status === 'skipped'
+            ? 'SKIPPED'
+            : 'FAILED';
+
+    logSwTestResult(status as 'PASSED' | 'FAILED' | 'TIMED_OUT' | 'SKIPPED', {
+      title: testInfo.title,
+      repeatEachIndex: testInfo.repeatEachIndex,
+      retry: testInfo.retry,
+    });
+  } catch {}
+});
