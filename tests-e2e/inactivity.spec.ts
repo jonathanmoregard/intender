@@ -992,11 +992,8 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     await context.close();
   });
-});
 
-// Serial tests (for OS idle behavior and cross-window focus-sensitive tests)
-test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
-  // Test 16: Cross-window same-scope switch (serial due to window focus sensitivity)
+  // Test 16: Cross-window same-scope switch
   test('test-16: cross-window same-scope switch should not show intention page', async () => {
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
@@ -1067,7 +1064,10 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
 
     await context.close();
   });
+});
 
+// Serial tests (for OS idle behavior and cross-window focus-sensitive tests)
+test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
   test('test-13: long OS idle should trigger intention page', async () => {
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
