@@ -1,5 +1,7 @@
+import type { Page } from '@playwright/test';
+
 import { execSync } from 'node:child_process';
-import { expect, Page, test } from './test-setup';
+import { expect, test } from './test-setup';
 import {
   launchExtension,
   openSettingsPage,
@@ -591,11 +593,11 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     // Go to audio1, verify no intention
     await audio1.bringToFront();
-    await expect(audio1).toHaveURL(AUDIO_TEST_REGEX);
+    await audio1.waitForURL(AUDIO_TEST_REGEX);
 
     // Go to audio3, verify no intention
     await audio3.bringToFront();
-    await expect(audio3).toHaveURL(AUDIO_TEST_REGEX);
+    await audio3.waitForURL(AUDIO_TEST_REGEX);
 
     // Close audio3
     await audio3.close();
@@ -608,11 +610,11 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     // Go to audio1, verify no intention (exemption still holds due to audio2)
     await audio1.bringToFront();
-    await expect(audio1).toHaveURL(AUDIO_TEST_REGEX);
+    await audio1.waitForURL(AUDIO_TEST_REGEX);
 
     // Go to audio2, verify no intention
     await audio2.bringToFront();
-    await expect(audio2).toHaveURL(AUDIO_TEST_REGEX);
+    await audio2.waitForURL(AUDIO_TEST_REGEX);
 
     // Close audio2
     await audio2.close();
@@ -625,7 +627,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     // Go to audio1, verify intention (exemption removed)
     await audio1.bringToFront();
-    await expect(audio1).toHaveURL(INTENTION_PAGE_REGEX);
+    await audio1.waitForURL(INTENTION_PAGE_REGEX);
 
     await context.close();
   });
