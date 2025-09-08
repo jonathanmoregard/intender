@@ -135,6 +135,13 @@ async function forceInactivityCheck(optionsPage: Page) {
   });
 }
 
+async function toggleOsIdleEnabled(optionsPage: Page, enabled: boolean) {
+  await optionsPage.evaluate(enabledArg => {
+    // @ts-ignore
+    chrome.runtime.sendMessage({ type: 'e2e:setOsIdle', enabled: enabledArg });
+  }, enabled);
+}
+
 // Parallel-safe tests (can run concurrently)
 test.describe('Inactivity revalidation - parallel safe', () => {
   test('focus-switch: timeout in ms and revalidation on tab focus after inactivity', async () => {
@@ -146,6 +153,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
     });
+    await toggleOsIdleEnabled(settingsPage, false);
     const tab = await context.newPage();
     await gotoRobust(tab, AUDIO_TEST_URL);
     await completeIntention({ page: tab, phrase: 'Hello Intent' });
@@ -171,6 +179,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
     });
+    await toggleOsIdleEnabled(settingsPage, false);
 
     const tab = await context.newPage();
     await gotoRobust(tab, AUDIO_TEST_URL);
@@ -204,6 +213,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
     });
+    await toggleOsIdleEnabled(settingsPage, false);
 
     // Open an audio tab and start playback
     const audioTab = await context.newPage();
@@ -231,6 +241,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
     });
+    await toggleOsIdleEnabled(settingsPage, false);
     const tab = await context.newPage();
     await gotoRobust(tab, AUDIO_TEST_URL);
     await completeIntention({ page: tab, phrase: 'Hello Intent' });
@@ -261,6 +272,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
     });
+    await toggleOsIdleEnabled(settingsPage, false);
     const tab = await context.newPage();
     await gotoRobust(tab, AUDIO_TEST_URL);
     await completeIntention({ page: tab, phrase: 'Hello Intent' });
@@ -289,6 +301,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
     });
+    await toggleOsIdleEnabled(settingsPage, false);
     const tab = await context.newPage();
     await gotoRobust(tab, AUDIO_TEST_URL);
     await completeIntention({ page: tab, phrase: 'Hello Intent' });
@@ -328,6 +341,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
     });
+    await toggleOsIdleEnabled(settingsPage, false);
     const tab = await context.newPage();
     await gotoRobust(tab, AUDIO_TEST_URL);
     await completeIntention({ page: tab, phrase: 'Hello Intent' });
@@ -371,6 +385,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
     });
+    await toggleOsIdleEnabled(settingsPage, false);
     const tab = await context.newPage();
     await gotoRobust(tab, AUDIO_TEST_URL);
     await completeIntention({ page: tab, phrase: 'Hello Intent' });
@@ -418,6 +433,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
     });
+    await toggleOsIdleEnabled(settingsPage, false);
     const tab = await context.newPage();
     await gotoRobust(tab, AUDIO_TEST_URL);
     await completeIntention({ page: tab, phrase: 'Hello Intent' });
@@ -448,13 +464,14 @@ test.describe('Inactivity revalidation - parallel safe', () => {
   // Test 10: Same-scope tab switch is safe
   test('test-10: same-scope tab switch should not trigger intention page', async () => {
     const { context } = await launchExtension();
-    await setupInactivityAndIntention({
+    const { settingsPage } = await setupInactivityAndIntention({
       context,
       timeoutMs: 2000,
       inactivityMode: 'all',
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
     });
+    await toggleOsIdleEnabled(settingsPage, false);
 
     // Open and pass intention check for first tab
     const tabA = await context.newPage();
@@ -485,13 +502,14 @@ test.describe('Inactivity revalidation - parallel safe', () => {
   // Test 11: Pause audio in-place (grace on audible off)
   test('test-11: pause audio should refresh activity, delay intention page', async () => {
     const { context } = await launchExtension();
-    await setupInactivityAndIntention({
+    const { settingsPage } = await setupInactivityAndIntention({
       context,
       timeoutMs: 3000,
       inactivityMode: 'all-except-audio',
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
     });
+    await toggleOsIdleEnabled(settingsPage, false);
     const tab = await context.newPage();
     await gotoRobust(tab, AUDIO_TEST_URL);
     await completeIntention({ page: tab, phrase: 'Hello Intent' });
@@ -523,13 +541,14 @@ test.describe('Inactivity revalidation - parallel safe', () => {
   // Test 14: Work long in one tab
   test('test-14: work long in one tab, switch to other same-scope tab should not show intention', async () => {
     const { context } = await launchExtension();
-    await setupInactivityAndIntention({
+    const { settingsPage } = await setupInactivityAndIntention({
       context,
       timeoutMs: 3000,
       inactivityMode: 'all',
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
     });
+    await toggleOsIdleEnabled(settingsPage, false);
 
     // Open and pass intention check for 2 tabs in same scope
     const tab1 = await context.newPage();
@@ -566,6 +585,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
     });
+    await toggleOsIdleEnabled(settingsPage, false);
 
     // Open audio1, don't play
     const audio1 = await context.newPage();
@@ -642,6 +662,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
     });
+    await toggleOsIdleEnabled(settingsPage, false);
     const tab = await context.newPage();
     await gotoRobust(tab, AUDIO_TEST_URL);
     await completeIntention({ page: tab, phrase: 'Hello Intent' });
@@ -684,6 +705,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
     });
+    await toggleOsIdleEnabled(settingsPage, false);
 
     // Navigate to site and pass intention check
     const mainTab = await context.newPage();
@@ -732,6 +754,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
     });
+    await toggleOsIdleEnabled(settingsPage, false);
 
     // Navigate to site and pass intention check
     const mainTab = await context.newPage();
@@ -776,6 +799,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     const { settingsPage } = await openSettingsPage(context, {
       e2eInactivityTimeoutMs: 3000,
     });
+    await toggleOsIdleEnabled(settingsPage, false);
 
     const advancedToggle = settingsPage.getByTestId('advanced-settings-toggle');
     await advancedToggle.waitFor({ state: 'visible' });
@@ -826,6 +850,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
     });
+    await toggleOsIdleEnabled(settingsPage, false);
 
     // Window A with scoped tab
     const tabA = await context.newPage();
@@ -852,13 +877,14 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
   test('test-19b: two windows, keep active in A, focus B should not show intention', async () => {
     const { context } = await launchExtension();
-    await setupInactivityAndIntention({
+    const { settingsPage } = await setupInactivityAndIntention({
       context,
       timeoutMs: 3000,
       inactivityMode: 'all',
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
     });
+    await toggleOsIdleEnabled(settingsPage, false);
 
     // Window A with scoped tab
     const tabA = await context.newPage();
@@ -889,6 +915,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
     });
+    await toggleOsIdleEnabled(settingsPage, false);
 
     // Window A with tabs a (scoped) and a' (non-scoped)
     const tabA = await context.newPage();
@@ -934,6 +961,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
     });
+    await toggleOsIdleEnabled(settingsPage, false);
     const tab = await context.newPage();
     await gotoRobust(tab, AUDIO_TEST_URL);
     await completeIntention({ page: tab, phrase: 'Hello Intent' });
@@ -968,6 +996,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
     });
+    await toggleOsIdleEnabled(settingsPage, false);
     const tab = await context.newPage();
     await gotoRobust(tab, AUDIO_TEST_URL);
     await completeIntention({ page: tab, phrase: 'Hello Intent' });
@@ -1003,6 +1032,8 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
     });
+
+    await toggleOsIdleEnabled(settingsPage, false);
 
     // Open and pass intention check for tab in Window A
     const tabA = await context.newPage();
