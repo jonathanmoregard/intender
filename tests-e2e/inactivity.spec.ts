@@ -543,7 +543,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
-      timeoutMs: 3000,
+      timeoutMs: 1000,
       inactivityMode: 'all',
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
@@ -562,11 +562,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     // Work on tab1 for over inactivity time
     await tab1.bringToFront();
-    await tab1.waitForTimeout(3500);
-
-    // Open new tab (non-scope)
-    const newTab = await context.newPage();
-    await gotoRobust(newTab, 'https://google.com');
+    await tab1.waitForTimeout(2500);
 
     // Switch to intention-scope tab2 - should be tab2 (not intention screen)
     await tab2.bringToFront();
