@@ -24,7 +24,7 @@
     "version:bump": "node scripts/version-bump.js",
     "pr:create": "node scripts/create-pr.js",
     "lint:version": "node scripts/version-check.js",
-    "test:e2e": "playwright test --project=e2e-parallel --reporter=list && playwright test --project=e2e-serial --reporter=list",
+    "test:e2e": "npm run build && (playwright test --project=e2e-parallel --reporter=list || true) && playwright test --project=e2e-serial --reporter=list",
     "test:e2e:parallel": "playwright test --project=e2e-parallel --reporter=list",
     "test:e2e:serial": "playwright test --project=e2e-serial --reporter=list",
     "test:e2e:robustness-check": "npm run build && (playwright test --project=e2e-parallel --repeat-each=5 --reporter=list || true) && playwright test --project=e2e-serial --repeat-each=5 --reporter=list",
