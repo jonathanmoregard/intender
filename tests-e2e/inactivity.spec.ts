@@ -174,7 +174,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
-      timeoutMs: 3000,
+      timeoutMs: 1000,
       inactivityMode: 'all',
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
@@ -187,11 +187,10 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     const otherTab = await context.newPage();
     await otherTab.goto('about:blank');
     await bringToFrontAndWait(otherTab);
-    await settingsPage.waitForTimeout(3500);
+    await settingsPage.waitForTimeout(1500);
 
     await bringToFrontAndWait(tab);
     await expect(tab).toHaveURL(INTENTION_PAGE_REGEX);
-    await tab.waitForTimeout(100); // Settle time to prevent double-fires
 
     await context.close();
   });
@@ -200,7 +199,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
-      timeoutMs: 3000,
+      timeoutMs: 1000,
       inactivityMode: 'all-except-audio',
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
@@ -218,7 +217,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await startAudioPlayback(audioTab);
 
     // Wait beyond inactivity
-    await settingsPage.waitForTimeout(3500);
+    await settingsPage.waitForTimeout(1500);
 
     // Force idle check since this is a sub-15s timeout test
     await forceInactivityCheck(settingsPage);
@@ -234,7 +233,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
-      timeoutMs: 3000,
+      timeoutMs: 1000,
       inactivityMode: 'all-except-audio',
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
@@ -248,7 +247,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await startAudioPlayback(audioTab);
 
     // Stay on audio tab and wait beyond inactivity
-    await audioTab.waitForTimeout(3500);
+    await audioTab.waitForTimeout(1500);
     // Force idle check since this is a sub-15s timeout test
     await forceInactivityCheck(settingsPage);
     // No redirect expected due to audio exemption
@@ -262,7 +261,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
-      timeoutMs: 3000,
+      timeoutMs: 1000,
       inactivityMode: 'all',
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
@@ -278,12 +277,11 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await bringToFrontAndWait(other);
 
     // Wait beyond timeout
-    await settingsPage.waitForTimeout(3500);
+    await settingsPage.waitForTimeout(1500);
 
     // Switch back to scoped tab - should show intention page
     await bringToFrontAndWait(tab);
     await expect(tab).toHaveURL(INTENTION_PAGE_REGEX);
-    await tab.waitForTimeout(100); // Settle time to prevent double-fires
 
     await context.close();
   });
@@ -293,7 +291,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
-      timeoutMs: 3000,
+      timeoutMs: 1000,
       inactivityMode: 'all-except-audio',
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
@@ -308,7 +306,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await other.goto('about:blank');
 
     // Wait beyond timeout
-    await settingsPage.waitForTimeout(3500);
+    await settingsPage.waitForTimeout(1500);
 
     // Switch back to scoped tab - should show intention page
     await tab.bringToFront();
@@ -322,7 +320,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
-      timeoutMs: 3000,
+      timeoutMs: 1000,
       inactivityMode: 'all-except-audio',
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
@@ -341,7 +339,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await completeIntention({ page: duplicate, phrase: 'Hello Intent' });
 
     // Wait beyond timeout
-    await settingsPage.waitForTimeout(3500);
+    await settingsPage.waitForTimeout(1500);
 
     // Force idle check since this is a sub-15s timeout test
     await forceInactivityCheck(settingsPage);
@@ -362,7 +360,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
-      timeoutMs: 3000,
+      timeoutMs: 1000,
       inactivityMode: 'all-except-audio',
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
@@ -385,7 +383,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await gotoRobust(nonScopeTab, 'https://google.com');
 
     // Wait beyond timeout
-    await settingsPage.waitForTimeout(3500);
+    await settingsPage.waitForTimeout(1500);
 
     // Force idle check since this is a sub-15s timeout test
     await forceInactivityCheck(settingsPage);
@@ -406,7 +404,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
-      timeoutMs: 3000,
+      timeoutMs: 1000,
       inactivityMode: 'all-except-audio',
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
@@ -433,7 +431,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await gotoRobust(nonScopeTab, 'https://google.com');
 
     // Wait beyond timeout
-    await settingsPage.waitForTimeout(3500);
+    await settingsPage.waitForTimeout(1500);
 
     // Force idle check since this is a sub-15s timeout test
     await forceInactivityCheck(settingsPage);
@@ -454,7 +452,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
-      timeoutMs: 3000,
+      timeoutMs: 1000,
       inactivityMode: 'all',
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
@@ -468,7 +466,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await gotoRobust(tab, 'https://google.com');
 
     // Wait beyond timeout
-    await settingsPage.waitForTimeout(3500);
+    await settingsPage.waitForTimeout(1500);
 
     // Force idle - should not trigger intention page
     await forceInactivityCheck(settingsPage);
@@ -515,7 +513,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     // Work on tab A longer than timeout (stay active)
     await bringToFrontAndWait(tabA);
-    await tabA.waitForTimeout(3500);
+    await tabA.waitForTimeout(1500);
 
     // Switch to tab B - should NOT show intention page (same-scope switch is safe)
     await bringToFrontAndWait(tabB);
@@ -530,7 +528,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
-      timeoutMs: 3000,
+      timeoutMs: 1000,
       inactivityMode: 'all-except-audio',
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
@@ -679,7 +677,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
-      timeoutMs: 3000,
+      timeoutMs: 1000,
       inactivityMode: 'all-except-audio',
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
@@ -749,7 +747,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await gotoRobust(newTab, 'https://google.com');
 
     // Wait over inactivity
-    await settingsPage.waitForTimeout(3500);
+    await settingsPage.waitForTimeout(1500);
 
     await mainTab.bringToFront();
     await expect(mainTab).toHaveURL(INTENTION_PAGE_REGEX);
@@ -798,7 +796,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await gotoRobust(newTab, 'https://google.com');
 
     // Wait over inactivity
-    await settingsPage.waitForTimeout(3500);
+    await settingsPage.waitForTimeout(1500);
 
     await mainTab.bringToFront();
     await expect(mainTab).toHaveURL(INTENTION_PAGE_REGEX);
@@ -867,7 +865,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
-      timeoutMs: 3000,
+      timeoutMs: 1000,
       inactivityMode: 'all',
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
@@ -882,7 +880,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await otherTab.goto('about:blank');
 
     // Wait beyond timeout
-    await settingsPage.waitForTimeout(3500);
+    await settingsPage.waitForTimeout(1500);
 
     // Force idle and focus tab at the same time
     await Promise.all([forceInactivityCheck(settingsPage), tab.bringToFront()]);
@@ -902,7 +900,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
-      timeoutMs: 3000,
+      timeoutMs: 1000,
       inactivityMode: 'all',
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
@@ -916,7 +914,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     // but no valid active tab is available (what DevTools focus would cause)
 
     // Wait beyond timeout to ensure we're past the inactivity threshold
-    await tab.waitForTimeout(3500);
+    await tab.waitForTimeout(1500);
 
     // Focus on settings page (simulates DevTools/popup focus scenario)
     await settingsPage.bringToFront();
@@ -941,7 +939,7 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
-      timeoutMs: 3000,
+      timeoutMs: 1000,
       inactivityMode: 'all',
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
@@ -994,7 +992,7 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
       await chrome.windows.update(windowId, { focused: true });
     }, windowAId);
     await bringToFrontAndWait(tabA);
-    await tabA.waitForTimeout(3500);
+    await tabA.waitForTimeout(1500);
 
     // Focus Window B using chrome.windows.update - should NOT show intention page
     await settingsPage.evaluate(async windowId => {
@@ -1005,7 +1003,6 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
     await tabB.waitForTimeout(200);
 
     await expect(tabB).toHaveURL(AUDIO_TEST_REGEX);
-    await tabB.waitForTimeout(100); // Settle time to prevent double-fires
 
     await context.close();
   });
@@ -1048,7 +1045,7 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
-      timeoutMs: 3000,
+      timeoutMs: 1000,
       inactivityMode: 'all',
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
@@ -1066,7 +1063,7 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
 
     // Keep active for over timeout duration in A
     await tabA.bringToFront();
-    await tabA.waitForTimeout(3500);
+    await tabA.waitForTimeout(1500);
 
     // Focus B - should NOT show intention page
     await tabB.bringToFront();
@@ -1079,7 +1076,7 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
-      timeoutMs: 10000,
+      timeoutMs: 2000,
       inactivityMode: 'all',
       url: AUDIO_TEST_DOMAIN,
       phrase: 'Hello Intent',
@@ -1101,14 +1098,14 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
     await tabB.bringToFront();
     await tabB.close();
 
-    // Wait 5s
-    await settingsPage.waitForTimeout(5000);
+    // Wait 1s
+    await settingsPage.waitForTimeout(1000);
 
     // Switch to a'
     await tabAPrime.bringToFront();
 
-    // Wait 6s (total 11s > 10s timeout)
-    await settingsPage.waitForTimeout(6000);
+    // Wait 6s (total 2.2s > 2s timeout)
+    await settingsPage.waitForTimeout(1200);
 
     // Force idle check since this is a sub-15s timeout test
     await forceInactivityCheck(settingsPage);
@@ -1142,7 +1139,6 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
     await tab.waitForTimeout(16000);
 
     await expect(tab).toHaveURL(INTENTION_PAGE_REGEX);
-    await tab.waitForTimeout(100); // Settle time to prevent double-fires
 
     await context.close();
   });
