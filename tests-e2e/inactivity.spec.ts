@@ -713,7 +713,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     for (let i = 0; i < 5; i++) {
       const tab = await context.newPage();
       await gotoRobust(tab, AUDIO_TEST_URL);
-      await expect(tab).toHaveURL(INTENTION_PAGE_REGEX, { timeout: 15000 });
+      await expect(tab).toHaveURL(INTENTION_PAGE_REGEX);
       await completeIntention({ page: tab, phrase: 'Hello Intent' });
       sameSiteTabs.push(tab);
     }

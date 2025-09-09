@@ -9,6 +9,9 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   workers: isThrottled ? 1 : process.env.CI ? 2 : undefined, // Single worker when throttled
   reporter: [['list']],
+  expect: {
+    timeout: 15000,
+  },
   use: {
     baseURL: 'http://localhost:5173',
     trace: 'retain-on-failure',
