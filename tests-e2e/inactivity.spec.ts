@@ -1142,4 +1142,50 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
 
     await context.close();
   });
+
+  test('test-22: add intention after opening tab, then focus after timeout shows intention page', async () => {
+    const { context } = await launchExtension();
+
+    // Configure inactivity first (no intention yet)
+    const { settingsPage } = await openSettingsPage(context, {
+      e2eInactivityTimeoutMs: 2000,
+    });
+    const advancedToggle = settingsPage.getByTestId('advanced-settings-toggle');
+    await advancedToggle.waitFor({ state: 'visible' });
+    await advancedToggle.scrollIntoViewIfNeeded();
+    await advancedToggle.click();
+    await settingsPage.getByTestId('inactivity-mode-all').click();
+
+    // Open first tab (non-scoped initially)
+    const tab1 = await context.newPage();
+    await gotoRobust(tab1, AUDIO_TEST_URL);
+
+    // Now add intention in settings to make it scoped
+    await settingsPage.bringToFront();
+    const urlInput = settingsPage.locator('input.url-input').first();
+    const phraseInput = settingsPage.locator('textarea.phrase-input').first();
+    await urlInput.fill(AUDIO_TEST_DOMAIN);
+    await phraseInput.fill(
+      'test-22: add intention after opening tab, then focus after timeout shows intention page'
+    );
+    await waitForSyncStorageChange(settingsPage, ['intentions']);
+    await settingsPage.getByRole('button', { name: 'Save changes' }).click();
+    await settingsPage.waitForTimeout(300);
+
+    // Open second tab (non-scoped)
+    const tab2 = await context.newPage();
+    await gotoRobust(tab2, 'https://example.com');
+
+    // Wait past timeout (2.5s > 2s timeout)
+    await settingsPage.waitForTimeout(2500);
+
+    // Force inactivity check since this is a sub-15s timeout test
+    await forceInactivityCheck(settingsPage);
+
+    // Go to first tab - should show intention page
+    await tab1.bringToFront();
+    await expect(tab1).toHaveURL(INTENTION_PAGE_REGEX);
+
+    await context.close();
+  });
 });

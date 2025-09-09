@@ -922,6 +922,44 @@ export default defineBackground(async () => {
         const { intentions } = await storage.get();
         const parsedIntentions = mapNulls(parseIntention, intentions);
         intentionIndex = createIntentionIndex(parsedIntentions);
+
+        // Refresh tab → scope mappings and bump activity for newly scoped tabs
+        try {
+          for (const [tabId, url] of tabUrlMap.entries()) {
+            const priorScope = intentionScopePerTabId.get(tabId) || null;
+            const newScope = lookupIntentionScopeId(url);
+            if (newScope) {
+              intentionScopePerTabId.set(tabId, newScope);
+              if (priorScope === null || priorScope !== newScope) {
+                updateIntentionScopeActivity(newScope);
+                console.log(
+                  '[Intender] Intentions changed: mapped tab to scope and updated activity',
+                  {
+                    tabId: tabId as unknown as number,
+                    url,
+                    newScope,
+                    priorScope: priorScope || null,
+                  }
+                );
+              }
+            } else if (priorScope) {
+              intentionScopePerTabId.delete(tabId);
+              console.log(
+                '[Intender] Intentions changed: cleared scope mapping for tab',
+                {
+                  tabId: tabId as unknown as number,
+                  url,
+                  priorScope,
+                }
+              );
+            }
+          }
+        } catch (e) {
+          console.log(
+            '[Intender] Failed to refresh mappings after intentions change:',
+            e
+          );
+        }
       }
 
       // Inactivity settings updated → refresh snapshot and idle interval
