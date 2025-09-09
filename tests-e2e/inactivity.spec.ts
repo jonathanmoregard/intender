@@ -130,7 +130,7 @@ async function completeIntention(opts: { page: Page; phrase: string }) {
   }
 
   await opts.page.locator('#phrase').fill(opts.phrase);
-  await opts.page.locator('#go').click();
+  await opts.page.locator('#phrase').press('Enter');
 
   await opts.page.waitForURL(
     new RegExp(targetUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
