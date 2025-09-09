@@ -33,6 +33,22 @@ export const test = base.extend({
 
 export { expect };
 
+// Set up SW log basename before each test
+base.beforeEach(async ({}, testInfo) => {
+  if (process.env.TEST_SW_LOG) {
+    const titleSlug = testInfo.titlePath
+      .join(' _ ')
+      .replace(/[^a-zA-Z0-9-_.\s›:]/g, '_')
+      .replace(/[\s:]+/g, ' ')
+      .trim()
+      .replace(/\s+/g, '_')
+      .substring(0, 100);
+    const worker = process.env.TEST_WORKER_INDEX || '0';
+    const basename = `${testInfo.project.name}.${titleSlug} - ${testInfo.repeatEachIndex}.w${worker}.log`;
+    process.env.INTENDER_SW_LOG_BASENAME = basename;
+  }
+});
+
 // Append PASS/FAIL/TIMEOUT markers to the SW log file for each test
 base.afterEach(async ({}, testInfo) => {
   try {

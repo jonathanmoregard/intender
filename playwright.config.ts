@@ -1,9 +1,21 @@
 import { defineConfig, devices } from '@playwright/test';
+import { join } from 'path';
 
 const isThrottled = !!process.env.INTENDER_THROTTLE;
 
+// Compute a per-run output directory and expose it to tests/globalSetup
+const runDir = (() => {
+  const pre = process.env.INTENDER_TEST_RUN_DIR;
+  if (pre && pre.length > 0) return pre;
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+  const dir = join(process.cwd(), '.test-results', `run-${timestamp}`);
+  process.env.INTENDER_TEST_RUN_DIR = dir;
+  return dir;
+})();
+
 export default defineConfig({
   testDir: './tests-e2e',
+  globalSetup: './tests-e2e/global-setup.ts',
   fullyParallel: !isThrottled, // Disable parallel when throttled
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
@@ -50,5 +62,6 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
-  outputDir: '.test-results',
+  // Store Playwright artifacts inside the run-specific directory
+  outputDir: runDir,
 });
