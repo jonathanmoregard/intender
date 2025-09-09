@@ -9,11 +9,6 @@ import {
   type IntentionIndex,
   type IntentionScopeId,
 } from '../components/intention';
-import {
-  normalizeUrl,
-  parseUrlString,
-  toComponents,
-} from '../components/normalized-url';
 import { storage, type InactivityMode } from '../components/storage';
 import {
   createTimestamp,
@@ -53,20 +48,6 @@ const lastActiveTabIdByWindow = new Map<WindowId, TabId>();
 // never -1, ignore non proper browser windows
 let lastFocusedWindowId: WindowId | null = null;
 const lastRedirectAtByTabId = new Map<TabId, Timestamp>();
-
-const getDomain = (input: string): string => {
-  const url = parseUrlString(input);
-  if (!url) return '';
-  const normalized = normalizeUrl(url);
-  const comps = toComponents(normalized);
-  return comps.domain || '';
-};
-
-const domainEquals = (url1: string, url2: string): boolean => {
-  const domain1 = getDomain(url1);
-  const domain2 = getDomain(url2);
-  return domain1 === domain2 && domain1 !== '';
-};
 
 // Update activity for an intention scope
 const updateIntentionScopeActivity = (intentionScopeId: IntentionScopeId) => {
@@ -728,9 +709,13 @@ export default defineBackground(async () => {
       frameId: details.frameId,
     });
 
-    // Rule 1: If navigating from same domain → same domain, allow
-    if (sourceUrl && domainEquals(sourceUrl, targetUrl)) {
-      console.log('[Intender] Rule 1: Same domain navigation, allowing');
+    // Rule 1: If navigating within same intention scope, allow
+    const sourceScope = sourceUrl ? lookupIntentionScopeId(sourceUrl) : null;
+    const targetScope = lookupIntentionScopeId(targetUrl);
+    if (sourceScope && targetScope && sourceScope === targetScope) {
+      console.log(
+        '[Intender] Rule 1: Same intention scope navigation, allowing'
+      );
       return;
     }
 
@@ -771,20 +756,25 @@ export default defineBackground(async () => {
       }
     }
 
-    // Rule 3: If active tab is on same domain as target (and not same tab), allow
+    // Rule 3: If active tab is on same intention scope as target (and not same tab), allow
     // This handles cases like:
-    // - Opening new tab from Facebook (active tab is Facebook) → navigating to Facebook
-    // - Duplicating Facebook tab (active tab is Facebook) → navigating within Facebook
-    // - Middle-click link from Facebook (active tab is Facebook) → opening Facebook link
+    // - Opening new tab from scoped site (active tab is scoped) → navigating to same scope
+    // - Duplicating scoped tab (active tab is scoped) → navigating within same scope
+    // - Middle-click link from scoped site (active tab is scoped) → opening same scope link
     // The !== check is to avoid allowing everything. Without it,
     // navigation that is happening in the active tab would always pass
 
+    const activeTabScope = activeTabUrl
+      ? lookupIntentionScopeId(activeTabUrl)
+      : null;
     if (
       !isNavigationTabActive &&
-      activeTabUrl &&
-      domainEquals(activeTabUrl, targetUrl)
+      activeTabScope &&
+      activeTabScope === targetScope
     ) {
-      console.log('[Intender] Rule 3: Active tab on same domain, allowing');
+      console.log(
+        '[Intender] Rule 3: Active tab on same intention scope, allowing'
+      );
       return;
     }
 
