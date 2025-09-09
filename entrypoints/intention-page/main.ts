@@ -111,6 +111,11 @@ function draw() {
 
 draw();
 
+// After first paint, upgrade background sources (MV3-safe; no inline script)
+requestAnimationFrame(() => {
+  document.documentElement.classList.add('bg-ready');
+});
+
 const query = new URLSearchParams(window.location.search);
 const target = query.get('target');
 const intentionId = query.get('intentionScopeId');
