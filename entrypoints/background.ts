@@ -579,12 +579,10 @@ export default defineBackground(async () => {
     // If windowId === -1 (no window focused), return early
     if (windowId === -1) return;
 
-    // Skip if same window (duplicate focus event)
+    // Do not skip duplicate window focus events. We still resolve the active
+    // tab and run focus handling to guarantee inactivity checks run reliably
+    // across window switches (prevents missed checks in certain sequences).
     const currentWindowId = numberToWindowId(windowId);
-    if (prevWindowId && prevWindowId === currentWindowId) {
-      console.log('[Intender] Duplicate window focus, skipping');
-      return;
-    }
 
     // Get the active tab in the newly focused window
     try {
@@ -806,7 +804,6 @@ export default defineBackground(async () => {
         numberToTabId(details.tabId),
         targetIntentionScopeId
       );
-      updateIntentionScopeActivity(targetIntentionScopeId);
 
       const redirectUrl = browser.runtime.getURL(
         'intention-page.html?target=' +
