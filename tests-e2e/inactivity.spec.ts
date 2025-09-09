@@ -28,6 +28,32 @@ async function gotoRobust(page: Page, url: string): Promise<void> {
       `Navigation to ${url} redirected or aborted (expected for scoped URLs)`
     );
   }
+
+  // Special-case: when explicitly navigating to about:blank, accept it as the
+  // stable end state and return once it is reached.
+  if (url === 'about:blank') {
+    try {
+      await page.waitForURL('about:blank', { timeout: 5000 });
+    } catch {}
+    return;
+  }
+
+  // Ensure we don't return while still at about:blank or empty URL.
+  // Wait for either the intention page, the exact target URL, or simply a non-blank URL.
+  try {
+    const escaped = url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const targetRegex = new RegExp(escaped);
+    await Promise.race([
+      page.waitForURL(INTENTION_PAGE_REGEX, { timeout: 15000 }),
+      page.waitForURL(targetRegex, { timeout: 15000 }),
+      page.waitForFunction(
+        () => location.href !== '' && location.href !== 'about:blank',
+        { timeout: 15000 }
+      ),
+    ]);
+  } catch {
+    // Best-effort stabilization; safe to proceed for callers that do their own waits
+  }
 }
 
 async function bringToFrontAndWait(page: Page): Promise<void> {
