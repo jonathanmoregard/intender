@@ -42,19 +42,30 @@ async function createSwTeeLogger(
     return null;
   }
 
-  const logDir = join(process.cwd(), '.test-results/logs');
+  // Use run-specific directory if available, fallback to legacy location
+  const runDir = process.env.INTENDER_TEST_RUN_DIR;
+  const logDir = runDir
+    ? join(runDir, 'logs')
+    : join(process.cwd(), '.test-results/logs');
   await mkdir(logDir, { recursive: true });
 
-  // Clean up old logs (> 2 days)
-  await cleanupOldLogs(logDir);
+  // Clean up old logs (> 2 days) only for legacy location
+  if (!runDir) {
+    await cleanupOldLogs(logDir);
+  }
 
-  // Generate unique filename per test
-  const timestamp = Date.now();
-  const workerIndex = process.env.TEST_WORKER_INDEX || '0';
-  const sanitizedTestName = testName
-    ? testName.replace(/[^a-zA-Z0-9-_]/g, '_').substring(0, 50)
-    : 'unknown';
-  const filename = `sw-background.${sanitizedTestName}.${workerIndex}.${timestamp}.log`;
+  // Use precomputed basename if available, otherwise fallback to timestamped name
+  const precomputedBasename = process.env.INTENDER_SW_LOG_BASENAME;
+  const filename = precomputedBasename
+    ? `sw-background.${precomputedBasename}`
+    : (() => {
+        const timestamp = Date.now();
+        const workerIndex = process.env.TEST_WORKER_INDEX || '0';
+        const sanitizedTestName = testName
+          ? testName.replace(/[^a-zA-Z0-9-_]/g, '_').substring(0, 50)
+          : 'unknown';
+        return `sw-background.${sanitizedTestName}.${workerIndex}.${timestamp}.log`;
+      })();
 
   const fileTransport = new winston.transports.File({
     filename: join(logDir, filename),
@@ -202,8 +213,10 @@ export async function launchExtension(
     }
   };
 
-  // Setup interception
-  setupConsoleInterception();
+  // Setup interception only when logger is active
+  if (currentTeeLogger) {
+    setupConsoleInterception();
+  }
 
   return { context };
 }
@@ -211,7 +224,11 @@ export async function launchExtension(
 // Append a single-line test result marker into the same SW log file
 export function logSwTestResult(
   status: 'PASSED' | 'FAILED' | 'TIMED_OUT' | 'SKIPPED',
-  meta?: { title?: string; repeatEachIndex?: number; retry?: number }
+  meta?: {
+    title?: string;
+    repeatEachIndex?: number;
+    retry?: number;
+  }
 ): void {
   if (!currentTeeLogger) return;
   const parts: string[] = [
