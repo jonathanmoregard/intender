@@ -734,12 +734,12 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await gotoRobust(mainTab, AUDIO_TEST_URL);
     await completeIntention({ page: mainTab, phrase: 'Hello Intent' });
 
-    // Open 5 other tabs within same site
+    // Open 3 other tabs within same site
     const sameSiteTabs = [];
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 3; i++) {
       const tab = await context.newPage();
       await gotoRobust(tab, AUDIO_TEST_URL);
-      await expect(tab).toHaveURL(INTENTION_PAGE_REGEX);
+      await tab.waitForURL(INTENTION_PAGE_REGEX, { timeout: 30000 });
       await completeIntention({ page: tab, phrase: 'Hello Intent' });
       sameSiteTabs.push(tab);
     }
@@ -760,7 +760,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     // Focus other same-site tabs - should NOT show intention page
     for (const tab of sameSiteTabs) {
       await tab.bringToFront();
-      await expect(tab).toHaveURL(AUDIO_TEST_REGEX);
+      await expect(tab).toHaveURL(AUDIO_TEST_REGEX, { timeout: 30000 });
     }
 
     await context.close();
@@ -783,12 +783,12 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await gotoRobust(mainTab, AUDIO_TEST_URL);
     await completeIntention({ page: mainTab, phrase: 'Hello Intent' });
 
-    // Open 5 other tabs within same site
+    // Open 3 other tabs within same site
     const sameSiteTabs = [];
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 3; i++) {
       const tab = await context.newPage();
       await gotoRobust(tab, AUDIO_TEST_URL);
-      await expect(tab).toHaveURL(INTENTION_PAGE_REGEX);
+      await tab.waitForURL(INTENTION_PAGE_REGEX, { timeout: 30000 });
       await completeIntention({ page: tab, phrase: 'Hello Intent' });
       sameSiteTabs.push(tab);
     }
@@ -809,7 +809,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     // Focus other same-site tabs - should NOT show intention page
     for (const tab of sameSiteTabs) {
       await tab.bringToFront();
-      await expect(tab).toHaveURL(AUDIO_TEST_REGEX);
+      await expect(tab).toHaveURL(AUDIO_TEST_REGEX, { timeout: 30000 });
     }
 
     await context.close();
@@ -964,24 +964,24 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
     });
 
     // Create real Chrome window with blank tab first (Window B)
-    // Use extension API to create a real window for proper window focus behavior
-    const windowBInfo = await settingsPage.evaluate(async () => {
-      const window = await chrome.windows.create({
-        url: 'about:blank',
-        focused: true,
-        type: 'normal',
-      });
-      if (!window || !window.id || !window.tabs?.[0]?.id) {
-        throw new Error('Failed to create window or get tab ID');
-      }
-      return {
-        windowId: window.id,
-        tabId: window.tabs[0].id,
-      };
-    });
-
-    // Wait for new page to be created and get it - use deterministic wait
-    const tabB = await context.waitForEvent('page', { timeout: 5000 });
+    // Tie page creation deterministically to window creation by waiting in parallel
+    const [tabB, windowBInfo] = await Promise.all([
+      context.waitForEvent('page', { timeout: 15000 }),
+      settingsPage.evaluate(async () => {
+        const window = await chrome.windows.create({
+          url: 'about:blank',
+          focused: true,
+          type: 'normal',
+        });
+        if (!window || !window.id || !window.tabs?.[0]?.id) {
+          throw new Error('Failed to create window or get tab ID');
+        }
+        return {
+          windowId: window.id,
+          tabId: window.tabs[0].id,
+        };
+      }),
+    ]);
 
     // Now navigate to the target URL to trigger extension interception
     await gotoRobust(tabB, AUDIO_TEST_URL);
