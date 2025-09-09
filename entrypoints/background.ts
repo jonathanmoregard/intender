@@ -634,47 +634,6 @@ export default defineBackground(async () => {
     const targetUrl = details.url;
     const sourceUrl = tabUrlMap.get(numberToTabId(details.tabId)) || null; // last committed URL
 
-    // Feature-detect modern fields for robust gating
-    const anyDetails = details as unknown as {
-      documentId?: string;
-      frameType?: string;
-      documentLifecycle?: string;
-      transitionType?: string;
-      transitionQualifiers?: string[];
-    };
-
-    // Ignore prerender/BFCache/pre-activation lifecycles
-    if (
-      anyDetails.documentLifecycle &&
-      anyDetails.documentLifecycle !== 'active'
-    ) {
-      console.log(
-        '[Intender] onBeforeNavigate: ignoring non-active lifecycle',
-        {
-          documentLifecycle: anyDetails.documentLifecycle,
-        }
-      );
-      return;
-    }
-
-    // Filter churn: skip reloads and redirects when signaled
-    const transitionType = anyDetails.transitionType;
-    const qualifiers = anyDetails.transitionQualifiers || [];
-    if (
-      transitionType === 'reload' ||
-      qualifiers.includes('client_redirect') ||
-      qualifiers.includes('server_redirect')
-    ) {
-      console.log(
-        '[Intender] onBeforeNavigate: skipping churn (reload/redirect)',
-        {
-          transitionType,
-          qualifiers,
-        }
-      );
-      return;
-    }
-
     // Determine active tab snapshot without querying (race-safe)
     const navigationTabId = details.tabId;
     const focusedWindowId = lastFocusedWindowId;
@@ -699,9 +658,6 @@ export default defineBackground(async () => {
       activeTabUrl: activeTabUrl || 'null',
       isNavigationTabActive,
       frameId: details.frameId,
-      documentLifecycle: anyDetails.documentLifecycle || 'n/a',
-      transitionType: transitionType || 'n/a',
-      transitionQualifiers: qualifiers,
     });
 
     // Rule 1: If navigating within same intention scope, allow
