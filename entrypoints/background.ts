@@ -736,10 +736,41 @@ export default defineBackground(async () => {
       return;
     }
 
-    // Rule 2: If origin is intention page, allow
+    // Rule 2: If redirect is initiated from intention page, allow
     if (sourceUrl && sourceUrl.startsWith(intentionPageUrl)) {
-      console.log('[Intender] Rule 2: Origin is intention page, allowing');
-      return;
+      try {
+        const targetUrlObj = new URL(targetUrl);
+        const intentionCompleted = targetUrlObj.searchParams.get(
+          'intention_completed'
+        );
+
+        if (intentionCompleted === 'true') {
+          console.log(
+            '[Intender] Rule 2: Origin intention page with completion flag, allowing (initiated from intention page)'
+          );
+          return;
+        } else {
+          console.log(
+            '[Intender] Rule 2b: Origin intention page without completion flag, disallowing (race condition)'
+          );
+          // Keep user on the intention page by setting it again (no-op visually)
+          try {
+            await browser.tabs.update(details.tabId, { url: sourceUrl });
+          } catch (error) {
+            console.log(
+              '[Intender] Rule 2b update failed (tab may be closed):',
+              error
+            );
+          }
+          return;
+        }
+      } catch (error) {
+        console.log(
+          '[Intender] Rule 2: Failed to parse target URL, allowing:',
+          error
+        );
+        return;
+      }
     }
 
     // Rule 3: If active tab is on same domain as target (and not same tab), allow

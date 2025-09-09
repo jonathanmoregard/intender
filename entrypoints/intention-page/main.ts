@@ -191,7 +191,9 @@ storage.get().then(({ intentions, fuzzyMatching = true }) => {
       if (e.key === 'Enter') {
         e.preventDefault(); // Prevent newline from being added
         if (acceptableCompletePrompt(inputEl.value)) {
-          window.location.href = target!;
+          const targetUrl = new URL(target!);
+          targetUrl.searchParams.set('intention_completed', 'true');
+          window.location.href = targetUrl.toString();
         }
       }
     });
@@ -205,7 +207,9 @@ storage.get().then(({ intentions, fuzzyMatching = true }) => {
 
         // Navigate after animation
         setTimeout(() => {
-          window.location.href = target!;
+          const targetUrl = new URL(target!);
+          targetUrl.searchParams.set('intention_completed', 'true');
+          window.location.href = targetUrl.toString();
         }, 200);
       }
     };
