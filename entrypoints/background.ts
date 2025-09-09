@@ -430,15 +430,6 @@ export default defineBackground(async () => {
     browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
       const tId = numberToTabId(tabId);
 
-      // Update URL cache when available to keep it fresher between webNavigation commits
-      if (changeInfo.url) {
-        tabUrlMap.set(tId, changeInfo.url);
-        console.log('[Intender] Tab URL updated via onUpdated:', {
-          tabId,
-          url: changeInfo.url,
-        });
-      }
-
       const intentionScopeId = getScopeForTab(tId);
 
       // Handle audible state changes - update activity when audio starts/stops
@@ -527,6 +518,34 @@ export default defineBackground(async () => {
     lastRedirectAtByTabId.delete(tId);
 
     console.log('[Intender] Tab removed, cleared cache:', { tabId });
+  });
+
+  // Handle tab replacement (e.g., prerender activation swaps tab IDs)
+  browser.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
+    const added = numberToTabId(addedTabId);
+    const removed = numberToTabId(removedTabId);
+
+    // Move cached URL/state from removed → added when present
+    const removedUrl = tabUrlMap.get(removed);
+    if (removedUrl) {
+      tabUrlMap.set(added, removedUrl);
+      tabUrlMap.delete(removed);
+    }
+
+    const removedScope = intentionScopePerTabId.get(removed);
+    if (removedScope) {
+      intentionScopePerTabId.set(added, removedScope);
+      intentionScopePerTabId.delete(removed);
+    }
+
+    lastRedirectAtByTabId.delete(removed);
+
+    console.log('[Intender] Tab replaced:', {
+      addedTabId,
+      removedTabId,
+      migratedUrl: removedUrl || null,
+      migratedScope: removedScope || null,
+    });
   });
 
   // Handle window focus changes
@@ -673,29 +692,62 @@ export default defineBackground(async () => {
     if (details.frameId !== 0) return;
 
     const targetUrl = details.url;
-    const sourceUrl = tabUrlMap.get(numberToTabId(details.tabId)) || null;
+    const sourceUrl = tabUrlMap.get(numberToTabId(details.tabId)) || null; // last committed URL
 
-    let activeTabs: browser.Tabs.Tab[];
-    try {
-      activeTabs = await browser.tabs.query({
-        active: true,
-        currentWindow: true,
-      });
-    } catch (error) {
+    // Feature-detect modern fields for robust gating
+    const anyDetails = details as unknown as {
+      documentId?: string;
+      frameType?: string;
+      documentLifecycle?: string;
+      transitionType?: string;
+      transitionQualifiers?: string[];
+    };
+
+    // Ignore prerender/BFCache/pre-activation lifecycles
+    if (
+      anyDetails.documentLifecycle &&
+      anyDetails.documentLifecycle !== 'active'
+    ) {
       console.log(
-        '[Intender] Failed to query active tabs, treating as different tab:',
-        error
+        '[Intender] onBeforeNavigate: ignoring non-active lifecycle',
+        {
+          documentLifecycle: anyDetails.documentLifecycle,
+        }
       );
-      activeTabs = [];
+      return;
     }
 
-    const navigationTabId = details.tabId;
-    const activeTabId = activeTabs[0]?.id;
-    const activeTabUrl = activeTabs[0]?.url;
+    // Filter churn: skip reloads and redirects when signaled
+    const transitionType = anyDetails.transitionType;
+    const qualifiers = anyDetails.transitionQualifiers || [];
+    if (
+      transitionType === 'reload' ||
+      qualifiers.includes('client_redirect') ||
+      qualifiers.includes('server_redirect')
+    ) {
+      console.log(
+        '[Intender] onBeforeNavigate: skipping churn (reload/redirect)',
+        {
+          transitionType,
+          qualifiers,
+        }
+      );
+      return;
+    }
 
-    // If no active tab (window unfocused), treat as different tab to be safe
+    // Determine active tab snapshot without querying (race-safe)
+    const navigationTabId = details.tabId;
+    const focusedWindowId = lastFocusedWindowId;
+    const activeTabId = focusedWindowId
+      ? (lastActiveTabIdByWindow.get(focusedWindowId) as unknown as
+          | number
+          | undefined)
+      : undefined;
     const isNavigationTabActive =
-      activeTabId === navigationTabId && activeTabs.length > 0;
+      activeTabId === navigationTabId && focusedWindowId != null;
+    const activeTabUrl = activeTabId
+      ? tabUrlMap.get(numberToTabId(activeTabId)) || null
+      : null;
 
     // Development logging
     console.log('[Intender] Navigation check:', {
@@ -707,6 +759,9 @@ export default defineBackground(async () => {
       activeTabUrl: activeTabUrl || 'null',
       isNavigationTabActive,
       frameId: details.frameId,
+      documentLifecycle: anyDetails.documentLifecycle || 'n/a',
+      transitionType: transitionType || 'n/a',
+      transitionQualifiers: qualifiers,
     });
 
     // Rule 1: If navigating within same intention scope, allow
