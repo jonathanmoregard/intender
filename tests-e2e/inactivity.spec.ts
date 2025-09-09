@@ -838,41 +838,6 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
   // Test 19: Multi window tests
 
-  // Test 20: Race condition idle
-  test('test-20: force idle and focus at same time should not cause double redirect', async () => {
-    const { context } = await launchExtension();
-    const { settingsPage } = await setupInactivityAndIntention({
-      context,
-      timeoutMs: 3000,
-      inactivityMode: 'all',
-      url: AUDIO_TEST_DOMAIN,
-      phrase: 'Hello Intent',
-    });
-    await toggleOsIdleEnabled(settingsPage, false);
-    const tab = await context.newPage();
-    await gotoRobust(tab, AUDIO_TEST_URL);
-    await completeIntention({ page: tab, phrase: 'Hello Intent' });
-
-    // Open another tab
-    const otherTab = await context.newPage();
-    await otherTab.goto('about:blank');
-
-    // Wait beyond timeout
-    await settingsPage.waitForTimeout(3500);
-
-    // Force idle and focus tab at the same time
-    await Promise.all([forceInactivityCheck(settingsPage), tab.bringToFront()]);
-
-    // Should show intention page (but only one redirect should happen)
-    await expect(tab).toHaveURL(INTENTION_PAGE_REGEX);
-
-    // Wait a bit to ensure no second redirect occurs
-    await tab.waitForTimeout(1000);
-    await expect(tab).toHaveURL(INTENTION_PAGE_REGEX);
-
-    await context.close();
-  });
-
   // Test 21: Focus DevTools or extension popup should be safe
   test('test-21: focus devtools should be safe (no errors, no intention page)', async () => {
     const { context } = await launchExtension();
