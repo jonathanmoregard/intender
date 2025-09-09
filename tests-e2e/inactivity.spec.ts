@@ -744,7 +744,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       sameSiteTabs.push(tab);
     }
 
-    // Open new tab
+    // Open new tab!
     const newTab = await context.newPage();
     await gotoRobust(newTab, 'https://google.com');
 
