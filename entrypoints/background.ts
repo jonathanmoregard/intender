@@ -83,8 +83,7 @@ export default defineBackground(async () => {
   let inactivityTimeoutMs: TimeoutMs = minutesToMs(30) as TimeoutMs;
 
   // E2E: test control flag must be initialized before any calls that read it
-  let e2eDisableIdleListener = false;
-  let e2eDisableOsIdle = false; // Decoupled switch: disables OS idle listener only
+  let e2eDisableOSIdle = false;
 
   // Get intention scope ID for a URL (outside try so polling can use it)
   const lookupIntentionScopeId = (url: string): IntentionScopeId | null => {
@@ -824,7 +823,7 @@ export default defineBackground(async () => {
   }
 
   function toggleIdleDetection(mode: InactivityMode): void {
-    if (mode === 'off' || e2eDisableIdleListener || e2eDisableOsIdle) {
+    if (mode === 'off' || e2eDisableOSIdle) {
       chrome.idle.onStateChanged.removeListener(inactivityChange);
     } else {
       chrome.idle.onStateChanged.addListener(inactivityChange);
@@ -838,14 +837,14 @@ export default defineBackground(async () => {
     const msg = message as { type?: string } | null | undefined;
     if (!msg || typeof msg.type !== 'string') return;
     if (msg.type === 'e2e:forceInactivityCheck-idle') {
-      e2eDisableIdleListener = true;
+      e2eDisableOSIdle = true;
       toggleIdleDetection(inactivityMode);
       await inactivityChange('idle');
     } else if (msg.type === 'e2e:setOsIdle') {
       const m = message as { type: 'e2e:setOsIdle'; enabled?: boolean };
       const enabled = m.enabled === true;
-      e2eDisableOsIdle = !enabled;
-      console.log('[Intender] E2E setOsIdle =>', { enabled, e2eDisableOsIdle });
+      e2eDisableOSIdle = !enabled;
+      console.log('[Intender] E2E setOsIdle =>', { enabled, e2eDisableOSIdle });
       toggleIdleDetection(inactivityMode);
     }
   });
