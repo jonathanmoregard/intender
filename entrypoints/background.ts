@@ -22,11 +22,6 @@ import {
   type Timestamp,
 } from '../components/time';
 
-type SettingsCache = Readonly<{
-  inactivityMode: InactivityMode;
-  inactivityTimeoutMs: TimeoutMs;
-}>;
-
 // Branded type for tab ID
 export type TabId = Brand<number, 'TabId'>;
 
@@ -83,11 +78,9 @@ export default defineBackground(async () => {
   // Cache data that won't change during session
   let intentionIndex: IntentionIndex = createIntentionIndex([]);
   const intentionPageUrl = browser.runtime.getURL('intention-page.html');
-  // Immutable settings cache (read by listeners, written only here and on storage changes)
-  let settingsCache: SettingsCache = Object.freeze({
-    inactivityMode: 'off',
-    inactivityTimeoutMs: minutesToMs(30) as TimeoutMs,
-  });
+  // Settings variables
+  let inactivityMode: InactivityMode = 'off';
+  let inactivityTimeoutMs: TimeoutMs = minutesToMs(30) as TimeoutMs;
 
   // E2E: test control flag must be initialized before any calls that read it
   let e2eDisableIdleListener = false;
@@ -300,9 +293,9 @@ export default defineBackground(async () => {
     // Check if we should trigger inactivity intention check
     if (
       await shouldTriggerInactivityIntentionCheck(
-        settingsCache.inactivityMode,
+        inactivityMode,
         toScope,
-        settingsCache.inactivityTimeoutMs
+        inactivityTimeoutMs
       )
     ) {
       console.log(
@@ -399,18 +392,16 @@ export default defineBackground(async () => {
   try {
     const {
       intentions,
-      inactivityMode = 'off',
-      inactivityTimeoutMs = minutesToMs(30),
+      inactivityMode: storedInactivityMode = 'off',
+      inactivityTimeoutMs: storedInactivityTimeoutMs = minutesToMs(30),
     } = await storage.get();
     const parsedIntentions = mapNulls(parseIntention, intentions);
     intentionIndex = createIntentionIndex(parsedIntentions);
 
-    settingsCache = Object.freeze({
-      inactivityMode: inactivityMode as InactivityMode,
-      inactivityTimeoutMs: inactivityTimeoutMs as TimeoutMs,
-    });
-    updateIdleDetectionInterval(settingsCache.inactivityTimeoutMs);
-    toggleIdleDetection(settingsCache.inactivityMode);
+    inactivityMode = storedInactivityMode as InactivityMode;
+    inactivityTimeoutMs = storedInactivityTimeoutMs as TimeoutMs;
+    updateIdleDetectionInterval(inactivityTimeoutMs);
+    toggleIdleDetection(inactivityMode);
 
     // Set up event listeners with access to the functions
     browser.tabs.onActivated.addListener(async activeInfo => {
@@ -848,14 +839,14 @@ export default defineBackground(async () => {
     if (!msg || typeof msg.type !== 'string') return;
     if (msg.type === 'e2e:forceInactivityCheck-idle') {
       e2eDisableIdleListener = true;
-      toggleIdleDetection(settingsCache.inactivityMode);
+      toggleIdleDetection(inactivityMode);
       await inactivityChange('idle');
     } else if (msg.type === 'e2e:setOsIdle') {
       const m = message as { type: 'e2e:setOsIdle'; enabled?: boolean };
       const enabled = m.enabled === true;
       e2eDisableOsIdle = !enabled;
       console.log('[Intender] E2E setOsIdle =>', { enabled, e2eDisableOsIdle });
-      toggleIdleDetection(settingsCache.inactivityMode);
+      toggleIdleDetection(inactivityMode);
     }
   });
 
@@ -864,7 +855,7 @@ export default defineBackground(async () => {
   ): Promise<void> {
     if (newState === 'idle') {
       try {
-        if (settingsCache.inactivityMode === 'off') return;
+        if (inactivityMode === 'off') return;
 
         // Strictly check for a currently focused window at idle time
         let focusedWindowId: number | null = null;
@@ -900,7 +891,7 @@ export default defineBackground(async () => {
         if (!intentionScopeId) return;
 
         // Check audio exemption for all-except-audio mode
-        if (settingsCache.inactivityMode === 'all-except-audio') {
+        if (inactivityMode === 'all-except-audio') {
           if (await isScopeAudible(intentionScopeId)) return;
         }
 
@@ -963,15 +954,16 @@ export default defineBackground(async () => {
 
       // Inactivity settings updated → refresh snapshot and idle interval
       if (changes.inactivityMode || changes.inactivityTimeoutMs) {
-        const { inactivityMode, inactivityTimeoutMs } = await storage.get();
-        settingsCache = Object.freeze({
-          inactivityMode: (inactivityMode ??
-            settingsCache.inactivityMode) as InactivityMode,
-          inactivityTimeoutMs: (inactivityTimeoutMs ??
-            settingsCache.inactivityTimeoutMs) as TimeoutMs,
-        });
-        updateIdleDetectionInterval(settingsCache.inactivityTimeoutMs);
-        toggleIdleDetection(settingsCache.inactivityMode);
+        const {
+          inactivityMode: newInactivityMode,
+          inactivityTimeoutMs: newInactivityTimeoutMs,
+        } = await storage.get();
+        inactivityMode = (newInactivityMode ??
+          inactivityMode) as InactivityMode;
+        inactivityTimeoutMs = (newInactivityTimeoutMs ??
+          inactivityTimeoutMs) as TimeoutMs;
+        updateIdleDetectionInterval(inactivityTimeoutMs);
+        toggleIdleDetection(inactivityMode);
       }
     } catch (error) {
       console.error('[Intender] Failed handling storage change:', error);
