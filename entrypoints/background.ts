@@ -9,6 +9,7 @@ import {
   type IntentionIndex,
   type IntentionScopeId,
 } from '../components/intention';
+import { normalizeUrl, parseUrlString } from '../components/normalized-url';
 import { storage, type InactivityMode } from '../components/storage';
 import {
   createTimestamp,
@@ -38,8 +39,8 @@ function numberToWindowId(num: number): WindowId {
   return num as WindowId;
 }
 
-// Tab URL cache to track last-known URLs for each tab
-const tabUrlMap = new Map<TabId, string>();
+// Last-committed URL cache per tab (source of truth from onCommitted)
+const committedTabUrlMap = new Map<TabId, string>();
 
 // Inactivity tracking
 const lastActiveByScope = new Map<IntentionScopeId, Timestamp>();
@@ -48,6 +49,8 @@ const lastActiveTabIdByWindow = new Map<WindowId, TabId>();
 // never -1, ignore non proper browser windows
 let lastFocusedWindowId: WindowId | null = null;
 const lastRedirectAtByTabId = new Map<TabId, Timestamp>();
+// Separate per-tab decision debounce (distinct from redirect cooldown)
+const lastDecisionAtByTabId = new Map<TabId, Timestamp>();
 
 // Update activity for an intention scope
 const updateIntentionScopeActivity = (intentionScopeId: IntentionScopeId) => {
@@ -122,7 +125,7 @@ export default defineBackground(async () => {
     }
 
     // 2. derive via tabUrlMap → scope lookup
-    const cachedUrl = tabUrlMap.get(tabId);
+    const cachedUrl = committedTabUrlMap.get(tabId);
     const resolvedUrl = url || cachedUrl;
     if (resolvedUrl) {
       const scopeFromUrl = lookupIntentionScopeId(resolvedUrl);
@@ -270,7 +273,7 @@ export default defineBackground(async () => {
     }
 
     // Guard: if the target tab URL is already the intention page URL, skip redirect
-    const resolvedUrl = toUrl || tabUrlMap.get(toTabId);
+    const resolvedUrl = toUrl || committedTabUrlMap.get(toTabId);
     if (resolvedUrl && resolvedUrl.startsWith(intentionPageUrl)) {
       console.log(
         '[Intender] Target tab already on intention page, skipping redirect'
@@ -405,7 +408,7 @@ export default defineBackground(async () => {
       if (fromTabId && fromTabId === toTabId) return;
 
       // Get the URL for the "to" tab
-      const toUrl = tabUrlMap.get(toTabId);
+      const toUrl = committedTabUrlMap.get(toTabId);
 
       // Diagnostic: explicit tab focus event log
       const toScopeForLog = getScopeForTab(toTabId, toUrl);
@@ -456,7 +459,7 @@ export default defineBackground(async () => {
   // Track new tabs to initialize cache
   browser.tabs.onCreated.addListener(tab => {
     if (tab.id !== undefined && typeof tab.url === 'string') {
-      tabUrlMap.set(numberToTabId(tab.id), tab.url);
+      committedTabUrlMap.set(numberToTabId(tab.id), tab.url);
       console.log('[Intender] Tab created, cached URL:', {
         tabId: tab.id,
         url: tab.url,
@@ -472,7 +475,7 @@ export default defineBackground(async () => {
     }
 
     const tabId = numberToTabId(details.tabId);
-    tabUrlMap.set(tabId, details.url);
+    committedTabUrlMap.set(tabId, details.url);
 
     console.log('[Intender] Navigation committed, updated cache:', {
       tabId: details.tabId,
@@ -508,14 +511,60 @@ export default defineBackground(async () => {
     }
   });
 
+  // Handle same-document SPA route changes to keep scope in sync and enforce if needed
+  browser.webNavigation.onHistoryStateUpdated.addListener(details => {
+    if (details.frameId !== 0) return;
+    const tabId = numberToTabId(details.tabId);
+    // Decision debounce for SPA changes
+    const now = createTimestamp();
+    const lastDecisionAt = lastDecisionAtByTabId.get(tabId);
+    const DECISION_DEBOUNCE_MS = 300;
+    if (lastDecisionAt && now - lastDecisionAt < DECISION_DEBOUNCE_MS) {
+      console.log(
+        '[Intender] onHistoryStateUpdated: debounced per-tab decision'
+      );
+      return;
+    }
+    lastDecisionAtByTabId.set(tabId, now);
+
+    committedTabUrlMap.set(tabId, details.url);
+
+    const priorScope = intentionScopePerTabId.get(tabId) || null;
+    const newScope = lookupIntentionScopeId(details.url);
+
+    if (newScope) {
+      intentionScopePerTabId.set(tabId, newScope);
+      if (priorScope === null || priorScope !== newScope) {
+        updateIntentionScopeActivity(newScope);
+        // Enforce if SPA route change moved into a scoped URL
+        // Skip if already on intention page
+        if (!details.url.startsWith(intentionPageUrl)) {
+          redirectToIntentionPage(tabId, details.url, newScope).catch(err =>
+            console.log('[Intender] SPA enforcement redirect failed:', err)
+          );
+        }
+      }
+    } else if (priorScope) {
+      intentionScopePerTabId.delete(tabId);
+    }
+  });
+
   // Clean up cache when tabs are removed
   browser.tabs.onRemoved.addListener(tabId => {
     const tId = numberToTabId(tabId);
 
     // Clean up all tracking maps
-    tabUrlMap.delete(tId);
+    committedTabUrlMap.delete(tId);
     intentionScopePerTabId.delete(tId);
     lastRedirectAtByTabId.delete(tId);
+    lastDecisionAtByTabId.delete(tId);
+
+    // Purge any window→tab pointers referencing this tab
+    for (const [wId, cachedTabId] of lastActiveTabIdByWindow.entries()) {
+      if (cachedTabId === tId) {
+        lastActiveTabIdByWindow.delete(wId);
+      }
+    }
 
     console.log('[Intender] Tab removed, cleared cache:', { tabId });
   });
@@ -526,10 +575,10 @@ export default defineBackground(async () => {
     const removed = numberToTabId(removedTabId);
 
     // Move cached URL/state from removed → added when present
-    const removedUrl = tabUrlMap.get(removed);
+    const removedUrl = committedTabUrlMap.get(removed);
     if (removedUrl) {
-      tabUrlMap.set(added, removedUrl);
-      tabUrlMap.delete(removed);
+      committedTabUrlMap.set(added, removedUrl);
+      committedTabUrlMap.delete(removed);
     }
 
     const removedScope = intentionScopePerTabId.get(removed);
@@ -579,100 +628,26 @@ export default defineBackground(async () => {
     // If windowId === -1 (no window focused), return early
     if (windowId === -1) return;
 
-    // Do not skip duplicate window focus events. We still resolve the active
-    // tab and run focus handling to guarantee inactivity checks run reliably
-    // across window switches (prevents missed checks in certain sequences).
+    // Use only cached per-window active tab snapshot; avoid live queries
     const currentWindowId = numberToWindowId(windowId);
+    const toTabId = lastActiveTabIdByWindow.get(currentWindowId);
+    const fromTabId = prevWindowId
+      ? lastActiveTabIdByWindow.get(prevWindowId)
+      : undefined;
 
-    // Get the active tab in the newly focused window
-    try {
-      const [activeTab] = await browser.tabs.query({
-        active: true,
-        windowId: windowId,
-      });
+    console.log('[Intender] Window focus change resolved from cache:', {
+      currentWindowId,
+      toTabId: toTabId || null,
+      fromTabId: fromTabId || null,
+    });
 
-      if (!activeTab || typeof activeTab.id !== 'number') return;
+    if (!toTabId) return;
 
-      const activeTabId = numberToTabId(activeTab.id);
-
-      // Compute fromTabId with fallback to query previous window
-      const cachedFromTabId = prevWindowId
-        ? lastActiveTabIdByWindow.get(prevWindowId)
-        : undefined;
-
-      // Check if cached tab has a scope
-      const fromScope = cachedFromTabId
-        ? getScopeForTab(cachedFromTabId)
-        : null;
-
-      // Determine if fallback is needed: no cached tab OR cached tab has no scope
-      const willUseFallback = prevWindowId && (!cachedFromTabId || !fromScope);
-
-      console.log('[Intender] Window focus fromTabId resolution:', {
-        prevWindowId,
-        cachedFromTabId,
-        fromScope,
-        willUseFallback,
-      });
-
-      let fromTabId = cachedFromTabId;
-
-      // Fallback: if no cached fromTabId OR cached tab has no scope, query previous window
-      if (willUseFallback) {
-        try {
-          // WindowId is just a branded number, cast it back to number for the query
-          const prevWindowIdNumber = prevWindowId as unknown as number;
-          console.log(
-            '[Intender] Attempting fallback query for window:',
-            prevWindowIdNumber
-          );
-          const [prevActiveTab] = await browser.tabs.query({
-            active: true,
-            windowId: prevWindowIdNumber,
-          });
-          if (prevActiveTab && typeof prevActiveTab.id === 'number') {
-            const fallbackTabId = numberToTabId(prevActiveTab.id);
-            const fallbackFromScope = getScopeForTab(
-              fallbackTabId,
-              prevActiveTab.url
-            );
-
-            if (fallbackFromScope) {
-              // Bump the scope of the fallback-found tab
-              updateIntentionScopeActivity(fallbackFromScope);
-
-              // Update cache to keep it warm
-              lastActiveTabIdByWindow.set(prevWindowId, fallbackTabId);
-
-              console.log('[Intender] Fallback from-bump successful:', {
-                fallbackTabId,
-                fallbackFromScope,
-                updatedCache: true,
-              });
-
-              // Use the fallback tab for further processing
-              fromTabId = fallbackTabId;
-            } else {
-              console.log('[Intender] Fallback tab has no scope');
-            }
-          } else {
-            console.log('[Intender] Fallback query found no active tab');
-          }
-        } catch (fallbackError) {
-          console.log('[Intender] Fallback query failed:', fallbackError);
-        }
-      }
-
-      // Use unified focus handler
-      await handleFocusChange({
-        fromTabId,
-        toTabId: activeTabId,
-        toUrl: activeTab.url,
-        windowId: currentWindowId,
-      });
-    } catch (error) {
-      console.log('[Intender] Failed to handle window focus change:', error);
-    }
+    await handleFocusChange({
+      fromTabId,
+      toTabId,
+      windowId: currentWindowId,
+    });
   });
 
   // Handle window removal cleanup
@@ -692,7 +667,19 @@ export default defineBackground(async () => {
     if (details.frameId !== 0) return;
 
     const targetUrl = details.url;
-    const sourceUrl = tabUrlMap.get(numberToTabId(details.tabId)) || null; // last committed URL
+    const sourceUrl =
+      committedTabUrlMap.get(numberToTabId(details.tabId)) || null; // last committed URL
+
+    // Per-tab decision debounce to prevent multiple actions from one gesture
+    const tabId = numberToTabId(details.tabId);
+    const now = createTimestamp();
+    const lastDecisionAt = lastDecisionAtByTabId.get(tabId);
+    const DECISION_DEBOUNCE_MS = 300;
+    if (lastDecisionAt && now - lastDecisionAt < DECISION_DEBOUNCE_MS) {
+      console.log('[Intender] onBeforeNavigate: debounced per-tab decision');
+      return;
+    }
+    lastDecisionAtByTabId.set(tabId, now);
 
     // Determine active tab snapshot without querying (race-safe)
     const navigationTabId = details.tabId;
@@ -705,7 +692,7 @@ export default defineBackground(async () => {
     const isNavigationTabActive =
       activeTabId === navigationTabId && focusedWindowId != null;
     const activeTabUrl = activeTabId
-      ? tabUrlMap.get(numberToTabId(activeTabId)) || null
+      ? committedTabUrlMap.get(numberToTabId(activeTabId)) || null
       : null;
 
     // Development logging
@@ -720,10 +707,23 @@ export default defineBackground(async () => {
       frameId: details.frameId,
     });
 
+    // Normalize for churn detection (ignore trivial same-to-same within short window)
+    const parsedFrom = sourceUrl ? parseUrlString(sourceUrl) : null;
+    const parsedTo = parseUrlString(targetUrl);
+    const normalizedFrom = parsedFrom ? normalizeUrl(parsedFrom) : null;
+    const normalizedTo = parsedTo ? normalizeUrl(parsedTo) : null;
+
     // Rule 1: If navigating within same intention scope, allow
     const sourceScope = sourceUrl ? lookupIntentionScopeId(sourceUrl) : null;
     const targetScope = lookupIntentionScopeId(targetUrl);
     if (sourceScope && targetScope && sourceScope === targetScope) {
+      // Additionally, if URLs are identical (normalized), treat as churn and ignore
+      if (normalizedFrom === normalizedTo) {
+        console.log(
+          '[Intender] Churn: same normalized URL within same scope, ignoring'
+        );
+        return;
+      }
       console.log(
         '[Intender] Rule 1: Same intention scope navigation, allowing'
       );
@@ -827,17 +827,39 @@ export default defineBackground(async () => {
   function updateIdleDetectionInterval(timeoutMs: TimeoutMs): void {
     const timeoutSeconds = Math.max(15, Math.floor(timeoutMs / 1000));
     try {
-      chrome.idle.setDetectionInterval(timeoutSeconds);
+      const idleApi: any =
+        (browser as any).idle ||
+        (typeof chrome !== 'undefined' && (chrome as any).idle);
+      if (idleApi && typeof idleApi.setDetectionInterval === 'function') {
+        idleApi.setDetectionInterval(timeoutSeconds);
+      } else {
+        console.log('[Intender] Idle API not available: setDetectionInterval');
+      }
     } catch (e) {
       console.log('[Intender] Failed to set idle detection interval:', e);
     }
   }
 
   function toggleIdleDetection(mode: InactivityMode): void {
-    if (mode === 'off' || e2eDisableIdleListener || e2eDisableOsIdle) {
-      chrome.idle.onStateChanged.removeListener(inactivityChange);
-    } else {
-      chrome.idle.onStateChanged.addListener(inactivityChange);
+    try {
+      const idleApi: any =
+        (browser as any).idle ||
+        (typeof chrome !== 'undefined' && (chrome as any).idle);
+      if (!idleApi || !idleApi.onStateChanged) {
+        console.log('[Intender] Idle API not available: toggle');
+        return;
+      }
+      if (mode === 'off' || e2eDisableIdleListener || e2eDisableOsIdle) {
+        if (typeof idleApi.onStateChanged.removeListener === 'function') {
+          idleApi.onStateChanged.removeListener(inactivityChange);
+        }
+      } else {
+        if (typeof idleApi.onStateChanged.addListener === 'function') {
+          idleApi.onStateChanged.addListener(inactivityChange);
+        }
+      }
+    } catch (e) {
+      console.log('[Intender] Failed to toggle idle listener:', e);
     }
   }
 
@@ -860,9 +882,7 @@ export default defineBackground(async () => {
     }
   });
 
-  async function inactivityChange(
-    newState: chrome.idle.IdleState
-  ): Promise<void> {
+  async function inactivityChange(newState: string): Promise<void> {
     if (newState === 'idle') {
       try {
         if (settingsCache.inactivityMode === 'off') return;
@@ -892,7 +912,7 @@ export default defineBackground(async () => {
         if (!activeTab || typeof activeTab.id !== 'number') return;
 
         const tabId = numberToTabId(activeTab.id);
-        const cachedUrl = tabUrlMap.get(tabId);
+        const cachedUrl = committedTabUrlMap.get(tabId);
         const url =
           cachedUrl || (typeof activeTab.url === 'string' ? activeTab.url : '');
         if (!url) return;
@@ -925,7 +945,7 @@ export default defineBackground(async () => {
 
         // Refresh tab → scope mappings and bump activity for newly scoped tabs
         try {
-          for (const [tabId, url] of tabUrlMap.entries()) {
+          for (const [tabId, url] of committedTabUrlMap.entries()) {
             const priorScope = intentionScopePerTabId.get(tabId) || null;
             const newScope = lookupIntentionScopeId(url);
             if (newScope) {
