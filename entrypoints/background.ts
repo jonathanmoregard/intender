@@ -197,26 +197,8 @@ export default defineBackground(async () => {
     toUrl?: string;
     windowId: WindowId;
   }): Promise<void> {
-    // Snapshot of window → last active tab mapping prior to handling
-    try {
-      const mapSnapshot = Array.from(lastActiveTabIdByWindow.entries()).map(
-        ([w, t]) => ({
-          windowId: w as unknown as number,
-          tabId: t as unknown as number,
-        })
-      );
-      console.log(
-        '[Intender] handleFocusChange - lastActiveTabIdByWindow map snapshot',
-        mapSnapshot
-      );
-    } catch {}
-
     // Update tracking
     lastActiveTabIdByWindow.set(windowId, toTabId);
-    console.log('[Intender] Updated lastActiveTabIdByWindow', {
-      windowId,
-      toTabId,
-    });
 
     // Compute scopes for both tabs
     const fromScope = fromTabId ? getScopeForTab(fromTabId) : null;
@@ -231,24 +213,6 @@ export default defineBackground(async () => {
       toScope,
       scopeComparison: fromScope === toScope ? 'SAME' : 'DIFFERENT',
     });
-
-    // Debug: log scope activity states
-    if (fromScope) {
-      const fromActivity = lastActiveByScope.get(fromScope);
-      console.log('[Intender] From scope activity:', {
-        scope: fromScope,
-        lastActive: fromActivity,
-        ageMs: fromActivity ? createTimestamp() - fromActivity : 'never',
-      });
-    }
-    if (toScope) {
-      const toActivity = lastActiveByScope.get(toScope);
-      console.log('[Intender] To scope activity:', {
-        scope: toScope,
-        lastActive: toActivity,
-        ageMs: toActivity ? createTimestamp() - toActivity : 'never',
-      });
-    }
 
     // FAST PATH: Same-scope switch - skip inactivity check entirely
     if (fromScope && toScope && fromScope === toScope) {
@@ -271,14 +235,7 @@ export default defineBackground(async () => {
     }
 
     // From bump: update activity for the previous tab's scope
-    if (fromTabId && fromScope) {
-      updateIntentionScopeActivity(fromScope);
-      console.log('[Intender] Focus from bump:', {
-        windowId,
-        fromTabId,
-        fromScope,
-      });
-    }
+    if (fromTabId && fromScope) updateIntentionScopeActivity(fromScope);
 
     // Guard: if the target tab URL is already the intention page URL, skip redirect
     const resolvedUrl = toUrl || tabUrlMap.get(toTabId);
@@ -416,16 +373,6 @@ export default defineBackground(async () => {
       // Get the URL for the "to" tab
       const toUrl = tabUrlMap.get(toTabId);
 
-      // Diagnostic: explicit tab focus event log
-      const toScopeForLog = getScopeForTab(toTabId, toUrl);
-      console.log('[Intender] Tab focus event:', {
-        windowId,
-        fromTabId,
-        toTabId,
-        toUrl: toUrl || '',
-        toScope: toScopeForLog,
-      });
-
       // Use unified focus handler
       await handleFocusChange({
         fromTabId,
@@ -453,16 +400,19 @@ export default defineBackground(async () => {
       // Handle audible state changes - update activity when audio starts/stops
       if (changeInfo.audible !== undefined) {
         if (changeInfo.audible) {
-          console.log('[Intender] Tab became audible, resetting activity:', {
+          console.log('[Intender] Tab became audible, bumping activity:', {
             tabId,
             intentionScopeId: intentionScopeId || 'unknown',
           });
           if (intentionScopeId) updateIntentionScopeActivity(intentionScopeId);
         } else {
-          console.log('[Intender] Tab stopped being audible:', {
-            tabId,
-            intentionScopeId: intentionScopeId || 'unknown',
-          });
+          console.log(
+            '[Intender] Tab stopped being audible, bumping activity:',
+            {
+              tabId,
+              intentionScopeId: intentionScopeId || 'unknown',
+            }
+          );
           if (intentionScopeId) updateIntentionScopeActivity(intentionScopeId);
         }
       }
