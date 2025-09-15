@@ -33,7 +33,6 @@ const SettingsTab = memo(
       type: 'success',
     });
     const [showExamples, setShowExamples] = useState(false);
-    const [showMoreOptions, setShowMoreOptions] = useState(false);
     const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
     const [fuzzyMatching, setFuzzyMatching] = useState(false);
     const [inactivityMode, setInactivityMode] = useState<InactivityMode>('off');
@@ -91,7 +90,6 @@ const SettingsTab = memo(
     // ============================================================================
 
     const urlInputRefs = useRef<(HTMLInputElement | null)[]>([]);
-    const moreOptionsRef = useRef<HTMLDivElement>(null);
 
     const isIntentionEmpty = useCallback((intention: RawIntention) => {
       return isEmpty(intention);
@@ -229,22 +227,7 @@ const SettingsTab = memo(
       };
     }, []);
 
-    // Close more options dropdown when clicking outside
-    useEffect(() => {
-      const handleClickOutside = (event: MouseEvent) => {
-        if (
-          moreOptionsRef.current &&
-          !moreOptionsRef.current.contains(event.target as Node)
-        ) {
-          setShowMoreOptions(false);
-        }
-      };
-
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => {
-        document.removeEventListener('mousedown', handleClickOutside);
-      };
-    }, []);
+    // (removed) more options dropdown handling
 
     const update = async () => {
       await saveIntentions(intentions);
@@ -563,27 +546,12 @@ const SettingsTab = memo(
           <button className='save-btn' onClick={update}>
             Save changes
           </button>
-          <div className='more-options' ref={moreOptionsRef}>
-            <button
-              className='more-options-btn'
-              onClick={() => setShowMoreOptions(!showMoreOptions)}
-              title='More options'
-            >
-              ⋯
-            </button>
-            <div
-              className={`more-options-dropdown ${
-                showMoreOptions ? 'show' : ''
-              }`}
-            >
-              <button className='dropdown-item' onClick={exportIntentions}>
-                Export Intentions
-              </button>
-              <button className='dropdown-item' onClick={importIntentions}>
-                Import Intentions
-              </button>
-            </div>
-          </div>
+          <button className='export-btn' onClick={exportIntentions}>
+            Export intentions
+          </button>
+          <button className='import-btn' onClick={importIntentions}>
+            Import intentions
+          </button>
         </div>
 
         {/* 2. Example Intentions */}
