@@ -39,6 +39,12 @@ Download the latest version: [intender-chrome.zip](https://github.com/jonathanmo
 - You should see the Intender icon in your Chrome toolbar
 - Click the icon to open the popup and test the extension
 
+## Updating
+
+- Before switching builds or reinstalling, open Intender → Settings.
+- Click "Export intentions" to download a `.json` backup.
+- After installing the new build, open Settings and click "Import intentions" to restore.
+
 ## Troubleshooting
 
 **Extension not appearing in toolbar:**
@@ -51,13 +57,6 @@ Download the latest version: [intender-chrome.zip](https://github.com/jonathanmo
 - Check that you selected the `chrome-mv3` folder (not the parent folder)
 - Ensure Developer mode is enabled
 - Try refreshing the extensions page
-
-## Migrating intentions between installs
-
-- Before switching builds or reinstalling, open Intender → Settings.
-- Click "Export intentions" to download a `.json` backup.
-- After installing the new build, open Settings and click "Import intentions" to restore.
-- The export format is stable across minor versions.
 
 **Permission errors:**
 
