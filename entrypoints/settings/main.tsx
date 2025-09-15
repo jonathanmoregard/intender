@@ -5,6 +5,7 @@ import {
   canParseIntention,
   emptyRawIntention,
   isEmpty,
+  isPhraseEmpty,
   makeRawIntention,
   type RawIntention,
 } from '../../components/intention';
@@ -39,7 +40,8 @@ const SettingsTab = memo(
     const [inactivityTimeoutMinutes, setInactivityTimeoutMinutes] =
       useState(30);
 
-    const [blurredIntentionIds, setBlurredIntentionIds] = useState<Set<string>>(
+    const [blurredUrlIds, setBlurredUrlIds] = useState<Set<string>>(new Set());
+    const [blurredPhraseIds, setBlurredPhraseIds] = useState<Set<string>>(
       new Set()
     );
     const [loadedIntentionIds, setLoadedIntentionIds] = useState<Set<string>>(
@@ -55,20 +57,36 @@ const SettingsTab = memo(
     // - Loaded state tracking (for initial vs new intentions)
     // - Focus/blur state management
 
-    const markBlurred = (id: string) => {
-      setBlurredIntentionIds(prev => new Set([...prev, id]));
+    const markUrlBlurred = (id: string) => {
+      setBlurredUrlIds(prev => new Set([...prev, id]));
     };
 
-    const markFocused = (id: string) => {
-      setBlurredIntentionIds(prev => {
+    const markUrlFocused = (id: string) => {
+      setBlurredUrlIds(prev => {
         const newSet = new Set(prev);
         newSet.delete(id);
         return newSet;
       });
     };
 
-    const isBlurred = (id: string) => {
-      return blurredIntentionIds.has(id);
+    const isUrlBlurred = (id: string) => {
+      return blurredUrlIds.has(id);
+    };
+
+    const markPhraseBlurred = (id: string) => {
+      setBlurredPhraseIds(prev => new Set([...prev, id]));
+    };
+
+    const markPhraseFocused = (id: string) => {
+      setBlurredPhraseIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(id);
+        return newSet;
+      });
+    };
+
+    const isPhraseBlurred = (id: string) => {
+      return blurredPhraseIds.has(id);
     };
 
     const isLoaded = (id: string) => {
@@ -447,13 +465,15 @@ const SettingsTab = memo(
                       }}
                       type='text'
                       className={`url-input ${
-                        (isBlurred(intention.id) || isLoaded(intention.id)) &&
+                        (isUrlBlurred(intention.id) ||
+                          isLoaded(intention.id)) &&
                         !isEmpty(intention) &&
                         !canParseIntention(intention)
                           ? 'error'
                           : ''
                       } ${
-                        (isBlurred(intention.id) || isLoaded(intention.id)) &&
+                        (isUrlBlurred(intention.id) ||
+                          isLoaded(intention.id)) &&
                         canParseIntention(intention)
                           ? 'parseable'
                           : ''
@@ -467,18 +487,18 @@ const SettingsTab = memo(
                         };
                         setIntentions(newIntentions);
                       }}
-                      onFocus={() => markFocused(intention.id)}
-                      onBlur={() => markBlurred(intention.id)}
+                      onFocus={() => markUrlFocused(intention.id)}
+                      onBlur={() => markUrlBlurred(intention.id)}
                       placeholder='Website (e.g., example.com)'
                     />
                     <label className='input-label'>Website</label>
-                    {(isBlurred(intention.id) || isLoaded(intention.id)) &&
+                    {(isUrlBlurred(intention.id) || isLoaded(intention.id)) &&
                       canParseIntention(intention) && (
                         <span className='valid-checkmark'>✓</span>
                       )}
                   </div>
 
-                  {(isBlurred(intention.id) || isLoaded(intention.id)) &&
+                  {(isUrlBlurred(intention.id) || isLoaded(intention.id)) &&
                     !isEmpty(intention) &&
                     !canParseIntention(intention) && (
                       <div className='error-text show'>
@@ -489,7 +509,14 @@ const SettingsTab = memo(
 
                 <div className='input-group'>
                   <textarea
-                    className='phrase-input'
+                    className={`phrase-input ${
+                      isPhraseBlurred(intention.id) &&
+                      !isEmpty(intention) &&
+                      canParseIntention(intention) &&
+                      isPhraseEmpty(intention.phrase)
+                        ? 'error'
+                        : ''
+                    }`}
                     value={intention.phrase}
                     onChange={e => {
                       const newIntentions = [...intentions];
@@ -499,13 +526,25 @@ const SettingsTab = memo(
                       };
                       setIntentions(newIntentions);
                     }}
-                    onBlur={() => handlePhraseBlur(i)}
+                    onFocus={() => markPhraseFocused(intention.id)}
+                    onBlur={() => {
+                      markPhraseBlurred(intention.id);
+                      handlePhraseBlur(i);
+                    }}
                     onKeyDown={e => handlePhraseKeyDown(e, i)}
                     placeholder='Write your intention'
                     maxLength={150}
                     rows={2}
                   />
                   <label className='input-label'>Intention</label>
+                  {isPhraseBlurred(intention.id) &&
+                    !isEmpty(intention) &&
+                    canParseIntention(intention) &&
+                    isPhraseEmpty(intention.phrase) && (
+                      <div className='error-text show'>
+                        Please write your intention
+                      </div>
+                    )}
                 </div>
               </div>
 

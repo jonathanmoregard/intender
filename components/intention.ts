@@ -205,6 +205,13 @@ export function isEmpty(intention: RawIntention): boolean {
   );
 }
 
+/**
+ * Checks if a phrase is empty (no meaningful content).
+ */
+export function isPhraseEmpty(phrase: string): boolean {
+  return !phrase || phrase.trim() === '';
+}
+
 // ============================================================================
 // INTENTION INDEXING AND LOOKUP
 // ============================================================================
