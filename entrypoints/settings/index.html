@@ -109,7 +109,7 @@
       /* Left-aligned content column with constrained width */
       .settings-tab,
       .about-tab {
-        max-width: 880px;
+        max-width: 720px;
       }
 
       /* Settings Tab */
@@ -1175,7 +1175,7 @@
         border: 1px solid rgba(158, 142, 51, 0.2);
         border-radius: 12px;
         backdrop-filter: blur(10px);
-        overflow: hidden;
+        overflow: visible; /* allow tooltips to extend beyond container */
       }
 
       .advanced-settings-header {
