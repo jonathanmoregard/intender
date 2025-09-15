@@ -2,11 +2,7 @@
   "name": "intender",
   "description": "manifest.json description",
   "private": true,
-<<<<<<< HEAD
-  "version": "0.1.4",
-=======
   "version": "0.2.0",
->>>>>>> 1d45491 (chore(release): bump version to 0.2.0)
   "type": "module",
   "scripts": {
     "dev": "wxt",
