@@ -2,7 +2,7 @@
   "name": "intender",
   "description": "manifest.json description",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "scripts": {
     "dev": "wxt",
@@ -57,6 +57,10 @@
       "prettier --write"
     ]
   },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "packageManager": "pnpm@10.0.0",
   "dependencies": {
     "@faker-js/faker": "^9.9.0",
     "@types/uuid": "^10.0.0",
