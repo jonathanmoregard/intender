@@ -109,7 +109,7 @@
       /* Left-aligned content column with constrained width */
       .settings-tab,
       .about-tab {
-        max-width: 880px;
+        max-width: 720px;
       }
 
       /* Settings Tab */
@@ -129,20 +129,19 @@
         font-family: 'Inter', sans-serif;
       }
 
-      .fuzzy-matching-setting {
-        padding: 0;
-        background: none;
-        border-radius: 0;
-        border: none;
-        backdrop-filter: none;
-      }
-
       .setting-label {
         display: flex;
         align-items: center;
         gap: 0.75rem;
         cursor: pointer;
         font-family: 'Inter', sans-serif;
+        transition: all 0.3s ease;
+        padding: 0.5rem;
+        border-radius: 6px;
+      }
+
+      .setting-label:hover input[type='checkbox'] {
+        transform: scale(1.1);
       }
 
       .setting-label input[type='checkbox'] {
@@ -431,9 +430,7 @@
       }
 
       .add-btn,
-      .save-btn,
-      .export-btn,
-      .import-btn {
+      .save-btn {
         padding: 0.75rem 1.5rem;
         border: none;
         border-radius: 12px;
@@ -454,9 +451,7 @@
       }
 
       .add-btn:hover,
-      .save-btn:hover,
-      .export-btn:hover,
-      .import-btn:hover {
+      .save-btn:hover {
         background: linear-gradient(
           135deg,
           rgba(158, 142, 51, 0.9),
@@ -464,6 +459,79 @@
         );
         transform: translateY(-1px) scale(1.02);
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      }
+
+      /* More Options Dropdown */
+      .more-options {
+        position: relative;
+        margin-left: auto;
+      }
+
+      .more-options-btn {
+        background: rgba(255, 255, 255, 0.8);
+        border: 1px solid rgba(158, 142, 51, 0.3);
+        border-radius: 8px;
+        padding: 0.75rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-family: 'Inter', sans-serif;
+        color: #30332e;
+        font-size: 1.5rem;
+        font-weight: 600;
+        line-height: 1;
+        min-width: 44px;
+        height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .more-options-btn:hover {
+        background: rgba(255, 255, 255, 0.9);
+        border-color: #9e8e33;
+      }
+
+      .more-options-dropdown {
+        position: absolute;
+        top: 100%;
+        right: 0;
+        background: rgba(255, 255, 255, 0.95);
+        border: 1px solid rgba(158, 142, 51, 0.3);
+        border-radius: 8px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+        min-width: 150px;
+        z-index: 1000;
+        backdrop-filter: blur(10px);
+        display: none;
+      }
+
+      .more-options-dropdown.show {
+        display: block;
+      }
+
+      .dropdown-item {
+        padding: 0.75rem 1rem;
+        cursor: pointer;
+        transition: background 0.3s ease;
+        font-family: 'Inter', sans-serif;
+        font-size: 0.9rem;
+        color: #30332e;
+        border: none;
+        background: none;
+        width: 100%;
+        text-align: left;
+      }
+
+      .dropdown-item:hover {
+        background: rgba(158, 142, 51, 0.1);
+      }
+
+      .dropdown-item:first-child {
+        border-radius: 8px 8px 0 0;
+      }
+
+      .dropdown-item:last-child {
+        border-radius: 0 0 8px 8px;
       }
 
       /* Example Intentions */
@@ -723,6 +791,18 @@
         color: rgba(48, 51, 46, 0.8);
         line-height: 1.5;
         font-family: 'Inter', sans-serif;
+      }
+
+      .confirmation-dialog .hint {
+        margin: 1rem -2rem -2rem -2rem;
+        padding: 0.75rem 0.5rem;
+        background: rgba(158, 142, 51, 0.1);
+        border-radius: 0 0 12px 12px;
+        border-left: none;
+        border-top: 1px solid rgba(158, 142, 51, 0.2);
+        font-size: 0.9rem;
+        color: rgba(48, 51, 46, 0.7);
+        text-align: center;
       }
 
       .confirmation-actions {
@@ -1041,7 +1121,12 @@
       }
 
       .radio-option:hover {
-        background: rgba(158, 142, 51, 0.05);
+        border-color: rgba(158, 142, 51, 0.3);
+        box-shadow: 0 2px 8px rgba(158, 142, 51, 0.1);
+      }
+
+      .radio-option:hover input[type='radio'] {
+        transform: scale(1.1);
       }
 
       .radio-option input[type='radio'] {
@@ -1094,7 +1179,7 @@
         border: 1px solid rgba(158, 142, 51, 0.2);
         border-radius: 12px;
         backdrop-filter: blur(10px);
-        overflow: hidden;
+        overflow: visible; /* allow tooltips to extend beyond container */
       }
 
       .advanced-settings-header {

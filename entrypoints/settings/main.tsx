@@ -5,6 +5,7 @@ import {
   canParseIntention,
   emptyRawIntention,
   isEmpty,
+  isPhraseEmpty,
   makeRawIntention,
   type RawIntention,
 } from '../../components/intention';
@@ -33,13 +34,15 @@ const SettingsTab = memo(
       type: 'success',
     });
     const [showExamples, setShowExamples] = useState(false);
+    const [showMoreOptions, setShowMoreOptions] = useState(false);
     const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
     const [fuzzyMatching, setFuzzyMatching] = useState(false);
     const [inactivityMode, setInactivityMode] = useState<InactivityMode>('off');
     const [inactivityTimeoutMinutes, setInactivityTimeoutMinutes] =
       useState(30);
 
-    const [blurredIntentionIds, setBlurredIntentionIds] = useState<Set<string>>(
+    const [blurredUrlIds, setBlurredUrlIds] = useState<Set<string>>(new Set());
+    const [blurredPhraseIds, setBlurredPhraseIds] = useState<Set<string>>(
       new Set()
     );
     const [loadedIntentionIds, setLoadedIntentionIds] = useState<Set<string>>(
@@ -55,20 +58,36 @@ const SettingsTab = memo(
     // - Loaded state tracking (for initial vs new intentions)
     // - Focus/blur state management
 
-    const markBlurred = (id: string) => {
-      setBlurredIntentionIds(prev => new Set([...prev, id]));
+    const markUrlBlurred = (id: string) => {
+      setBlurredUrlIds(prev => new Set([...prev, id]));
     };
 
-    const markFocused = (id: string) => {
-      setBlurredIntentionIds(prev => {
+    const markUrlFocused = (id: string) => {
+      setBlurredUrlIds(prev => {
         const newSet = new Set(prev);
         newSet.delete(id);
         return newSet;
       });
     };
 
-    const isBlurred = (id: string) => {
-      return blurredIntentionIds.has(id);
+    const isUrlBlurred = (id: string) => {
+      return blurredUrlIds.has(id);
+    };
+
+    const markPhraseBlurred = (id: string) => {
+      setBlurredPhraseIds(prev => new Set([...prev, id]));
+    };
+
+    const markPhraseFocused = (id: string) => {
+      setBlurredPhraseIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(id);
+        return newSet;
+      });
+    };
+
+    const isPhraseBlurred = (id: string) => {
+      return blurredPhraseIds.has(id);
     };
 
     const isLoaded = (id: string) => {
@@ -90,6 +109,7 @@ const SettingsTab = memo(
     // ============================================================================
 
     const urlInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+    const moreOptionsRef = useRef<HTMLDivElement>(null);
 
     const isIntentionEmpty = useCallback((intention: RawIntention) => {
       return isEmpty(intention);
@@ -227,7 +247,22 @@ const SettingsTab = memo(
       };
     }, []);
 
-    // (removed) more options dropdown handling
+    // Close more options dropdown when clicking outside
+    useEffect(() => {
+      const handleClickOutside = (event: MouseEvent) => {
+        if (
+          moreOptionsRef.current &&
+          !moreOptionsRef.current.contains(event.target as Node)
+        ) {
+          setShowMoreOptions(false);
+        }
+      };
+
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }, []);
 
     const update = async () => {
       await saveIntentions(intentions);
@@ -406,6 +441,12 @@ const SettingsTab = memo(
           setIntentions(importedIntentions);
           await storage.set({ intentions: importedIntentions });
 
+          // Mark all imported intentions as loaded so they show proper validation highlighting
+          const importedIds = new Set(
+            importedIntentions.map(intention => intention.id)
+          );
+          updateLoadedIntentionIds(importedIds);
+
           setToast({
             show: true,
             message: `Imported ${importedIntentions.length} intention(s)`,
@@ -447,13 +488,15 @@ const SettingsTab = memo(
                       }}
                       type='text'
                       className={`url-input ${
-                        (isBlurred(intention.id) || isLoaded(intention.id)) &&
+                        (isUrlBlurred(intention.id) ||
+                          isLoaded(intention.id)) &&
                         !isEmpty(intention) &&
                         !canParseIntention(intention)
                           ? 'error'
                           : ''
                       } ${
-                        (isBlurred(intention.id) || isLoaded(intention.id)) &&
+                        (isUrlBlurred(intention.id) ||
+                          isLoaded(intention.id)) &&
                         canParseIntention(intention)
                           ? 'parseable'
                           : ''
@@ -467,18 +510,18 @@ const SettingsTab = memo(
                         };
                         setIntentions(newIntentions);
                       }}
-                      onFocus={() => markFocused(intention.id)}
-                      onBlur={() => markBlurred(intention.id)}
+                      onFocus={() => markUrlFocused(intention.id)}
+                      onBlur={() => markUrlBlurred(intention.id)}
                       placeholder='Website (e.g., example.com)'
                     />
                     <label className='input-label'>Website</label>
-                    {(isBlurred(intention.id) || isLoaded(intention.id)) &&
+                    {(isUrlBlurred(intention.id) || isLoaded(intention.id)) &&
                       canParseIntention(intention) && (
                         <span className='valid-checkmark'>✓</span>
                       )}
                   </div>
 
-                  {(isBlurred(intention.id) || isLoaded(intention.id)) &&
+                  {(isUrlBlurred(intention.id) || isLoaded(intention.id)) &&
                     !isEmpty(intention) &&
                     !canParseIntention(intention) && (
                       <div className='error-text show'>
@@ -489,7 +532,14 @@ const SettingsTab = memo(
 
                 <div className='input-group'>
                   <textarea
-                    className='phrase-input'
+                    className={`phrase-input ${
+                      isPhraseBlurred(intention.id) &&
+                      !isEmpty(intention) &&
+                      canParseIntention(intention) &&
+                      isPhraseEmpty(intention.phrase)
+                        ? 'error'
+                        : ''
+                    }`}
                     value={intention.phrase}
                     onChange={e => {
                       const newIntentions = [...intentions];
@@ -499,13 +549,25 @@ const SettingsTab = memo(
                       };
                       setIntentions(newIntentions);
                     }}
-                    onBlur={() => handlePhraseBlur(i)}
+                    onFocus={() => markPhraseFocused(intention.id)}
+                    onBlur={() => {
+                      markPhraseBlurred(intention.id);
+                      handlePhraseBlur(i);
+                    }}
                     onKeyDown={e => handlePhraseKeyDown(e, i)}
                     placeholder='Write your intention'
                     maxLength={150}
                     rows={2}
                   />
                   <label className='input-label'>Intention</label>
+                  {isPhraseBlurred(intention.id) &&
+                    !isEmpty(intention) &&
+                    canParseIntention(intention) &&
+                    isPhraseEmpty(intention.phrase) && (
+                      <div className='error-text show'>
+                        Please write your intention
+                      </div>
+                    )}
                 </div>
               </div>
 
@@ -546,12 +608,27 @@ const SettingsTab = memo(
           <button className='save-btn' onClick={update}>
             Save changes
           </button>
-          <button className='export-btn' onClick={exportIntentions}>
-            Export intentions
-          </button>
-          <button className='import-btn' onClick={importIntentions}>
-            Import intentions
-          </button>
+          <div className='more-options' ref={moreOptionsRef}>
+            <button
+              className='more-options-btn'
+              onClick={() => setShowMoreOptions(!showMoreOptions)}
+              title='More options'
+            >
+              ⋯
+            </button>
+            <div
+              className={`more-options-dropdown ${
+                showMoreOptions ? 'show' : ''
+              }`}
+            >
+              <button className='dropdown-item' onClick={exportIntentions}>
+                Export Intentions
+              </button>
+              <button className='dropdown-item' onClick={importIntentions}>
+                Import Intentions
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* 2. Example Intentions */}
@@ -713,46 +790,20 @@ const SettingsTab = memo(
 
             {/* Move typos card below inactivity */}
             <div className='setting-group'>
-              <div
-                className='clickable-setting-item'
-                onClick={() => {
-                  const enabled = !fuzzyMatching;
-                  setFuzzyMatching(enabled);
-                  saveFuzzyMatching(enabled);
-                }}
-                role='button'
-                aria-pressed={fuzzyMatching}
-                tabIndex={0}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    const enabled = !fuzzyMatching;
+              <label className='setting-label clickable-setting-item'>
+                <input
+                  type='checkbox'
+                  checked={fuzzyMatching}
+                  onChange={e => {
+                    const enabled = e.target.checked;
                     setFuzzyMatching(enabled);
                     saveFuzzyMatching(enabled);
-                  }
-                }}
-              >
-                <div className='fuzzy-matching-setting'>
-                  <label
-                    className='setting-label'
-                    onClick={e => e.stopPropagation()}
-                  >
-                    <input
-                      type='checkbox'
-                      checked={fuzzyMatching}
-                      onClick={e => e.stopPropagation()}
-                      onChange={e => {
-                        const enabled = e.target.checked;
-                        setFuzzyMatching(enabled);
-                        saveFuzzyMatching(enabled);
-                      }}
-                    />
-                    <span className='setting-text'>
-                      Allow small typos when typing your intention
-                    </span>
-                  </label>
-                </div>
-              </div>
+                  }}
+                />
+                <span className='setting-text'>
+                  Allow small typos when typing your intention
+                </span>
+              </label>
             </div>
           </div>
         </div>
@@ -777,6 +828,9 @@ const SettingsTab = memo(
                   Delete
                 </button>
               </div>
+              <p className='hint'>
+                💡 Tip: Hold Shift and click delete to skip this dialog.
+              </p>
             </div>
           </div>
         )}
@@ -824,9 +878,8 @@ const AboutTab = memo(() => {
           <li>Configure websites and phrases in the Settings tab</li>
           <li>
             When you visit a configured website, Intender shows a pause page
-            page
           </li>
-          <li>Type the exact phrase to continue to the website</li>
+          <li>Type your intention phrase to continue to the website</li>
           <li>This creates a moment of intentionality before browsing</li>
         </ol>
 
