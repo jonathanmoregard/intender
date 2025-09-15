@@ -42,8 +42,8 @@ Download the latest version: [intender-chrome.zip](https://github.com/jonathanmo
 ## Updating
 
 - Before switching builds or reinstalling, open Intender → Settings.
-- Click "Export intentions" to download a `.json` backup.
-- After installing the new build, open Settings and click "Import intentions" to restore.
+- Click the "⋯" (more options) button and select "Export Intentions" to download a `.json` backup.
+- After installing the new build, open Settings, click "⋯" and select "Import Intentions" to restore.
 
 ## Troubleshooting
 
