@@ -405,13 +405,14 @@ export default defineBackground(async () => {
   });
 
   // Update cache when navigation is committed (reliable source of truth)
-  browser.webNavigation.onCommitted.addListener(details => {
+  browser.webNavigation.onCommitted.addListener(async details => {
     // Only track main frame navigation
     if (details.frameId !== 0) {
       return;
     }
 
     const tabId = numberToTabId(details.tabId);
+    const priorUrl = tabUrlMap.get(tabId) || null;
     tabUrlMap.set(tabId, details.url);
 
     console.log('[Intender] Navigation committed, updated cache:', {
@@ -419,11 +420,28 @@ export default defineBackground(async () => {
       url: details.url,
     });
 
-    // If the destination URL matches an intention, record scope per tab and mark activity
+    // If the destination URL matches an intention, record scope and possibly redirect.
     const matched = lookupIntention(details.url, intentionIndex);
     if (matched) {
       const scopeId = intentionToIntentionScopeId(matched);
       intentionScopePerTabId.set(tabId, scopeId);
+
+      // If we landed here via a server/client redirect (e.g., faceboo.com -> facebook.com),
+      // enforce the intention gate even post-commit. Skip if coming from intention page
+      // or if a recent redirect happened to avoid loops.
+      const cameFromIntentionPage =
+        priorUrl?.startsWith(intentionPageUrl) === true;
+      if (!cameFromIntentionPage) {
+        try {
+          await redirectToIntentionPage(tabId, details.url, scopeId);
+          // redirectToIntentionPage handles cooldown and logging
+          return;
+        } catch (e) {
+          // If redirect fails, fall through to activity bump
+          console.log('[Intender] Post-commit redirect attempt failed:', e);
+        }
+      }
+
       updateIntentionScopeActivity(scopeId);
       console.log(
         '[Intender] Navigation committed to scoped page, set scope:',
