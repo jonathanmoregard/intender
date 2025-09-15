@@ -863,9 +863,8 @@ const AboutTab = memo(() => {
           <li>Configure websites and phrases in the Settings tab</li>
           <li>
             When you visit a configured website, Intender shows a pause page
-            page
           </li>
-          <li>Type the exact phrase to continue to the website</li>
+          <li>Type your intention phrase to continue to the website</li>
           <li>This creates a moment of intentionality before browsing</li>
         </ol>
 
