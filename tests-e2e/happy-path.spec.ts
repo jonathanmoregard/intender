@@ -1,12 +1,22 @@
-import { expect, Page, test } from './test-setup';
+import type { Page } from '@playwright/test';
+import { expect, test } from './test-setup';
 import {
   launchExtension,
   openSettingsPage,
   waitForSyncStorageChange,
 } from './utils/extension';
 
+// Helper to get current test name with run number
+function getTestNameWithRun(): string {
+  const testInfo = test.info();
+  const testName = testInfo.title;
+  const runNumber = testInfo.repeatEachIndex + 1;
+  return `${testName} (run ${runNumber})`;
+}
+
 test.describe('Happy path intention flow', () => {
-  test('add intention, get intention page, type phrase, and enter', async () => {
+  test('test-26: add intention, get intention page, type phrase, and enter', async () => {
+    const testPhrase = getTestNameWithRun();
     const { context } = await launchExtension();
 
     // Open options page
@@ -16,7 +26,7 @@ test.describe('Happy path intention flow', () => {
     const urlInput = options.locator('input.url-input').first();
     const phraseInput = options.locator('textarea.phrase-input').first();
     await urlInput.fill('google.com');
-    await phraseInput.fill('Hello Intent');
+    await phraseInput.fill(testPhrase);
 
     // Prepare a listener for storage change (intentions)
     await waitForSyncStorageChange(options, ['intentions']);
@@ -41,7 +51,7 @@ test.describe('Happy path intention flow', () => {
     // Type the exact phrase and click Go
     const intentionTextarea = page.locator('#phrase');
     await intentionTextarea.click();
-    await intentionTextarea.fill('Hello Intent');
+    await intentionTextarea.fill(testPhrase);
     const goButton = page.locator('#go');
     await expect(goButton).toBeEnabled();
     await Promise.all([

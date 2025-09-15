@@ -8,6 +8,14 @@ import {
   waitForSyncStorageChange,
 } from './utils/extension';
 
+// Helper to get current test name with run number
+function getTestNameWithRun(): string {
+  const testInfo = test.info();
+  const testName = testInfo.title;
+  const runNumber = testInfo.repeatEachIndex + 1;
+  return `${testName} (run ${runNumber})`;
+}
+
 // Global constants for test URLs and patterns
 const AUDIO_TEST_URL =
   'https://jonathanmoregard.github.io/intender/test/assets/';
@@ -170,19 +178,20 @@ async function toggleOsIdleEnabled(optionsPage: Page, enabled: boolean) {
 
 // Parallel-safe tests (can run concurrently)
 test.describe('Inactivity revalidation - parallel safe', () => {
-  test('focus-switch: timeout in ms and revalidation on tab focus after inactivity', async () => {
+  test('test-1: timeout in ms and revalidation on tab focus after inactivity', async () => {
+    const testPhrase = getTestNameWithRun();
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
       timeoutMs: 1000,
       inactivityMode: 'all',
       url: AUDIO_TEST_DOMAIN,
-      phrase: 'Hello Intent',
+      phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
     const tab = await context.newPage();
     await gotoRobust(tab, AUDIO_TEST_URL);
-    await completeIntention({ page: tab, phrase: 'Hello Intent' });
+    await completeIntention({ page: tab, phrase: testPhrase });
 
     const otherTab = await context.newPage();
     await otherTab.goto('about:blank');
@@ -195,25 +204,26 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await context.close();
   });
 
-  test('sound: same-scope tab with audio should bypass inactivity revalidation', async () => {
+  test('test-2: same-scope tab with audio should bypass inactivity revalidation', async () => {
+    const testPhrase = getTestNameWithRun();
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
       timeoutMs: 1000,
       inactivityMode: 'all-except-audio',
       url: AUDIO_TEST_DOMAIN,
-      phrase: 'Hello Intent',
+      phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
 
     const tab = await context.newPage();
     await gotoRobust(tab, AUDIO_TEST_URL);
-    await completeIntention({ page: tab, phrase: 'Hello Intent' });
+    await completeIntention({ page: tab, phrase: testPhrase });
 
     // Open another tab with the same fixture (same scope) with audio and start playback
     const audioTab = await context.newPage();
     await gotoRobust(audioTab, AUDIO_TEST_URL);
-    await completeIntention({ page: audioTab, phrase: 'Hello Intent' });
+    await completeIntention({ page: audioTab, phrase: testPhrase });
     await startAudioPlayback(audioTab);
 
     // Wait beyond inactivity
@@ -229,21 +239,22 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await context.close();
   });
 
-  test('sound: active tab with audio should not revalidate while passively listening', async () => {
+  test('test-3: active tab with audio should not revalidate while passively listening', async () => {
+    const testPhrase = getTestNameWithRun();
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
       timeoutMs: 1000,
       inactivityMode: 'all-except-audio',
       url: AUDIO_TEST_DOMAIN,
-      phrase: 'Hello Intent',
+      phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
 
     // Open an audio tab and start playback
     const audioTab = await context.newPage();
     await gotoRobust(audioTab, AUDIO_TEST_URL);
-    await completeIntention({ page: audioTab, phrase: 'Hello Intent' });
+    await completeIntention({ page: audioTab, phrase: testPhrase });
     await startAudioPlayback(audioTab);
 
     // Stay on audio tab and wait beyond inactivity
@@ -256,20 +267,21 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await context.close();
   });
 
-  // Test 3: Idle on (3s). Navigate to page with intention, pass the intention check, open another tab (any). Wait > timeout, switch back to scoped tab, should show intention page.
-  test('test-3: open another tab, wait timeout, switch back shows intention page', async () => {
+  // Test 4: Idle on (3s). Navigate to page with intention, pass the intention check, open another tab (any). Wait > timeout, switch back to scoped tab, should show intention page.
+  test('test-4: open another tab, wait timeout, switch back shows intention page', async () => {
+    const testPhrase = getTestNameWithRun();
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
       timeoutMs: 1000,
       inactivityMode: 'all',
       url: AUDIO_TEST_DOMAIN,
-      phrase: 'Hello Intent',
+      phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
     const tab = await context.newPage();
     await gotoRobust(tab, AUDIO_TEST_URL);
-    await completeIntention({ page: tab, phrase: 'Hello Intent' });
+    await completeIntention({ page: tab, phrase: testPhrase });
 
     // Open another tab (any)
     const other = await context.newPage();
@@ -286,20 +298,21 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await context.close();
   });
 
-  // Test 4: Same as 3 but on-except-audio.
-  test('test-4: open another tab, wait timeout, switch back shows intention page (all-except-audio mode)', async () => {
+  // Test 5: Same as 4 but on-except-audio.
+  test('test-5: open another tab, wait timeout, switch back shows intention page (all-except-audio mode)', async () => {
+    const testPhrase = getTestNameWithRun();
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
       timeoutMs: 1000,
       inactivityMode: 'all-except-audio',
       url: AUDIO_TEST_DOMAIN,
-      phrase: 'Hello Intent',
+      phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
     const tab = await context.newPage();
     await gotoRobust(tab, AUDIO_TEST_URL);
-    await completeIntention({ page: tab, phrase: 'Hello Intent' });
+    await completeIntention({ page: tab, phrase: testPhrase });
 
     // Open another tab (any)
     const other = await context.newPage();
@@ -315,20 +328,21 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await context.close();
   });
 
-  // Test 5: Idle on-except-audio (3s). Navigate to test audio page with intention, pass the intention check, start audio, duplicate the tab. Wait > timeout, focusing either should remain on the audio page (audio exemption).
-  test('test-5: duplicate audio tab, both stay on audio page due to exemption', async () => {
+  // Test 6: Idle on-except-audio (3s). Navigate to test audio page with intention, pass the intention check, start audio, duplicate the tab. Wait > timeout, focusing either should remain on the audio page (audio exemption).
+  test('test-6: duplicate audio tab, both stay on audio page due to exemption', async () => {
+    const testPhrase = getTestNameWithRun();
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
       timeoutMs: 1000,
       inactivityMode: 'all-except-audio',
       url: AUDIO_TEST_DOMAIN,
-      phrase: 'Hello Intent',
+      phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
     const tab = await context.newPage();
     await gotoRobust(tab, AUDIO_TEST_URL);
-    await completeIntention({ page: tab, phrase: 'Hello Intent' });
+    await completeIntention({ page: tab, phrase: testPhrase });
 
     // Start audio
     await startAudioPlayback(tab);
@@ -336,7 +350,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     // Duplicate the tab - it will need to complete intention too
     const duplicate = await context.newPage();
     await gotoRobust(duplicate, AUDIO_TEST_URL);
-    await completeIntention({ page: duplicate, phrase: 'Hello Intent' });
+    await completeIntention({ page: duplicate, phrase: testPhrase });
 
     // Wait beyond timeout
     await settingsPage.waitForTimeout(1500);
@@ -355,20 +369,21 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await context.close();
   });
 
-  // Test 6: Idle on-except-audio (3s). Navigate to test audio page with intention, pass the intention check, start audio, duplicate tab, open a new non-scope tab, wait > timeout, focusing the duplicate stays on audio page; focusing the original stays on audio page.
-  test('test-6: duplicate audio tab with non-scope tab, both stay on audio page', async () => {
+  // Test 7: Idle on-except-audio (3s). Navigate to test audio page with intention, pass the intention check, start audio, duplicate tab, open a new non-scope tab, wait > timeout, focusing the duplicate stays on audio page; focusing the original stays on audio page.
+  test('test-7: duplicate audio tab with non-scope tab, both stay on audio page', async () => {
+    const testPhrase = getTestNameWithRun();
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
       timeoutMs: 1000,
       inactivityMode: 'all-except-audio',
       url: AUDIO_TEST_DOMAIN,
-      phrase: 'Hello Intent',
+      phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
     const tab = await context.newPage();
     await gotoRobust(tab, AUDIO_TEST_URL);
-    await completeIntention({ page: tab, phrase: 'Hello Intent' });
+    await completeIntention({ page: tab, phrase: testPhrase });
 
     // Start audio
     await startAudioPlayback(tab);
@@ -376,7 +391,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     // Duplicate the tab - it will need to complete intention too
     const duplicate = await context.newPage();
     await gotoRobust(duplicate, AUDIO_TEST_URL);
-    await completeIntention({ page: duplicate, phrase: 'Hello Intent' });
+    await completeIntention({ page: duplicate, phrase: testPhrase });
 
     // Open a new non-scope tab
     const nonScopeTab = await context.newPage();
@@ -399,20 +414,21 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await context.close();
   });
 
-  // Test 6b: Same as 6, but the duplicate is moved to its own window just after creation
-  test('test-6b: duplicate audio tab in separate window, both stay on audio page', async () => {
+  // Test 8: Same as 7, but the duplicate is moved to its own window just after creation
+  test('test-8: duplicate audio tab in separate window, both stay on audio page', async () => {
+    const testPhrase = getTestNameWithRun();
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
       timeoutMs: 1000,
       inactivityMode: 'all-except-audio',
       url: AUDIO_TEST_DOMAIN,
-      phrase: 'Hello Intent',
+      phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
     const tab = await context.newPage();
     await gotoRobust(tab, AUDIO_TEST_URL);
-    await completeIntention({ page: tab, phrase: 'Hello Intent' });
+    await completeIntention({ page: tab, phrase: testPhrase });
 
     // Start audio
     await startAudioPlayback(tab);
@@ -421,7 +437,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     const newWindow = await createNewWindowFromTab(tab, AUDIO_TEST_URL);
 
     // Complete intention in the new window
-    await completeIntention({ page: newWindow, phrase: 'Hello Intent' });
+    await completeIntention({ page: newWindow, phrase: testPhrase });
 
     // Start audio in the new window
     await startAudioPlayback(newWindow);
@@ -449,18 +465,19 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
   // Test 9: Mapping cleared when leaving scope
   test('test-9: navigate away from scope, then idle should not trigger intention page', async () => {
+    const testPhrase = getTestNameWithRun();
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
       timeoutMs: 1000,
       inactivityMode: 'all',
       url: AUDIO_TEST_DOMAIN,
-      phrase: 'Hello Intent',
+      phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
     const tab = await context.newPage();
     await gotoRobust(tab, AUDIO_TEST_URL);
-    await completeIntention({ page: tab, phrase: 'Hello Intent' });
+    await completeIntention({ page: tab, phrase: testPhrase });
 
     // Navigate away to a non-scoped page
     await gotoRobust(tab, 'https://google.com');
@@ -487,20 +504,21 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
   // Test 10: Same-scope tab switch is safe
   test('test-10: same-scope tab switch should not trigger intention page', async () => {
+    const testPhrase = getTestNameWithRun();
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
       timeoutMs: 2000,
       inactivityMode: 'all',
       url: AUDIO_TEST_DOMAIN,
-      phrase: 'Hello Intent',
+      phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
 
     // Open and pass intention check for first tab
     const tabA = await context.newPage();
     await gotoRobust(tabA, AUDIO_TEST_URL);
-    await completeIntention({ page: tabA, phrase: 'Hello Intent' });
+    await completeIntention({ page: tabA, phrase: testPhrase });
 
     // Open second tab in same scope
     const tabB = await context.newPage();
@@ -509,7 +527,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       'https://jonathanmoregard.github.io/intender/test/assets/'
     );
     await expect(tabB).toHaveURL(INTENTION_PAGE_REGEX);
-    await completeIntention({ page: tabB, phrase: 'Hello Intent' });
+    await completeIntention({ page: tabB, phrase: testPhrase });
 
     // Work on tab A longer than timeout (stay active)
     await bringToFrontAndWait(tabA);
@@ -525,18 +543,19 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
   // Test 11: Pause audio in-place (grace on audible off)
   test('test-11: pause audio should refresh activity, delay intention page', async () => {
+    const testPhrase = getTestNameWithRun();
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
       timeoutMs: 1000,
       inactivityMode: 'all-except-audio',
       url: AUDIO_TEST_DOMAIN,
-      phrase: 'Hello Intent',
+      phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
     const tab = await context.newPage();
     await gotoRobust(tab, AUDIO_TEST_URL);
-    await completeIntention({ page: tab, phrase: 'Hello Intent' });
+    await completeIntention({ page: tab, phrase: testPhrase });
 
     // Start audio
     await startAudioPlayback(tab);
@@ -562,27 +581,28 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await context.close();
   });
 
-  // Test 14: Work long in one tab
-  test('test-14: work long in one tab, switch to other same-scope tab should not show intention', async () => {
+  // Test 12: Work long in one tab
+  test('test-12: work long in one tab, switch to other same-scope tab should not show intention', async () => {
+    const testPhrase = getTestNameWithRun();
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
       timeoutMs: 1000,
       inactivityMode: 'all',
       url: AUDIO_TEST_DOMAIN,
-      phrase: 'Hello Intent',
+      phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
 
     // Open and pass intention check for 2 tabs in same scope
     const tab1 = await context.newPage();
     await gotoRobust(tab1, AUDIO_TEST_URL);
-    await completeIntention({ page: tab1, phrase: 'Hello Intent' });
+    await completeIntention({ page: tab1, phrase: testPhrase });
 
     const tab2 = await context.newPage();
     await gotoRobust(tab2, AUDIO_TEST_URL);
     await expect(tab2).toHaveURL(INTENTION_PAGE_REGEX);
-    await completeIntention({ page: tab2, phrase: 'Hello Intent' });
+    await completeIntention({ page: tab2, phrase: testPhrase });
 
     // Work on tab1 for over inactivity time
     await tab1.bringToFront();
@@ -595,33 +615,34 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await context.close();
   });
 
-  // Test 15: Parallel audibles within a scope (close-one/close-last)
-  test('test-15: parallel audibles, close one keeps exemption, close last removes exemption', async () => {
+  // Test 13: Parallel audibles within a scope (close-one/close-last)
+  test('test-13: parallel audibles, close one keeps exemption, close last removes exemption', async () => {
+    const testPhrase = getTestNameWithRun();
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
       timeoutMs: 2000,
       inactivityMode: 'all-except-audio',
       url: AUDIO_TEST_DOMAIN,
-      phrase: 'Hello Intent',
+      phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
 
     // Open audio1, don't play
     const audio1 = await context.newPage();
     await gotoRobust(audio1, AUDIO_TEST_URL);
-    await completeIntention({ page: audio1, phrase: 'Hello Intent' });
+    await completeIntention({ page: audio1, phrase: testPhrase });
 
     // Open audio2, play
     const audio2 = await context.newPage();
     await gotoRobust(audio2, AUDIO_TEST_URL);
-    await completeIntention({ page: audio2, phrase: 'Hello Intent' });
+    await completeIntention({ page: audio2, phrase: testPhrase });
     await startAudioPlayback(audio2);
 
     // Open audio3, play
     const audio3 = await context.newPage();
     await gotoRobust(audio3, AUDIO_TEST_URL);
-    await completeIntention({ page: audio3, phrase: 'Hello Intent' });
+    await completeIntention({ page: audio3, phrase: testPhrase });
     await startAudioPlayback(audio3);
 
     // Open new tab
@@ -672,20 +693,21 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await context.close();
   });
 
-  // Test 17: Muted-audio exemption correctness
-  test('test-17: muted audio should not count as audible, expect intention page', async () => {
+  // Test 14: Muted-audio exemption correctness
+  test('test-14: muted audio should not count as audible, expect intention page', async () => {
+    const testPhrase = getTestNameWithRun();
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
       timeoutMs: 1000,
       inactivityMode: 'all-except-audio',
       url: AUDIO_TEST_DOMAIN,
-      phrase: 'Hello Intent',
+      phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
     const tab = await context.newPage();
     await gotoRobust(tab, AUDIO_TEST_URL);
-    await completeIntention({ page: tab, phrase: 'Hello Intent' });
+    await completeIntention({ page: tab, phrase: testPhrase });
 
     // Start audio and immediately mute it
     await startAudioPlayback(tab);
@@ -715,22 +737,23 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await context.close();
   });
 
-  // Test 7: Idle on (3s). Navigate to a site with intention, pass the intention check, open 5 other tabs within same site, go idle, return to intention page (pass the intention check again), focusing the other same-site tabs should not show intention page.
-  test('test-7: multiple same-site tabs, after revalidation other tabs should not show intention', async () => {
+  // Test 15: Idle on (3s). Navigate to a site with intention, pass the intention check, open 5 other tabs within same site, go idle, return to intention page (pass the intention check again), focusing the other same-site tabs should not show intention page.
+  test('test-15: multiple same-site tabs, after revalidation other tabs should not show intention', async () => {
+    const testPhrase = getTestNameWithRun();
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
       timeoutMs: 2000,
       inactivityMode: 'all',
       url: AUDIO_TEST_DOMAIN,
-      phrase: 'Hello Intent',
+      phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
 
     // Navigate to site and pass intention check
     const mainTab = await context.newPage();
     await gotoRobust(mainTab, AUDIO_TEST_URL);
-    await completeIntention({ page: mainTab, phrase: 'Hello Intent' });
+    await completeIntention({ page: mainTab, phrase: testPhrase });
 
     // Open 3 other tabs within same site
     const sameSiteTabs = [];
@@ -738,7 +761,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       const tab = await context.newPage();
       await gotoRobust(tab, AUDIO_TEST_URL);
       await tab.waitForURL(INTENTION_PAGE_REGEX, { timeout: 30000 });
-      await completeIntention({ page: tab, phrase: 'Hello Intent' });
+      await completeIntention({ page: tab, phrase: testPhrase });
       sameSiteTabs.push(tab);
     }
 
@@ -753,7 +776,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await expect(mainTab).toHaveURL(INTENTION_PAGE_REGEX);
 
     // Pass intention check again
-    await completeIntention({ page: mainTab, phrase: 'Hello Intent' });
+    await completeIntention({ page: mainTab, phrase: testPhrase });
 
     // Focus other same-site tabs - should NOT show intention page
     for (const tab of sameSiteTabs) {
@@ -764,22 +787,23 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await context.close();
   });
 
-  // Test 8: Same as 7 but all-except-audio.
-  test('test-8: multiple same-site tabs, after revalidation other tabs should not show intention (all-except-audio)', async () => {
+  // Test 16: Same as 15 but all-except-audio.
+  test('test-16: multiple same-site tabs, after revalidation other tabs should not show intention (all-except-audio)', async () => {
+    const testPhrase = getTestNameWithRun();
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
       timeoutMs: 2000,
       inactivityMode: 'all-except-audio',
       url: AUDIO_TEST_DOMAIN,
-      phrase: 'Hello Intent',
+      phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
 
     // Navigate to site and pass intention check
     const mainTab = await context.newPage();
     await gotoRobust(mainTab, AUDIO_TEST_URL);
-    await completeIntention({ page: mainTab, phrase: 'Hello Intent' });
+    await completeIntention({ page: mainTab, phrase: testPhrase });
 
     // Open 3 other tabs within same site
     const sameSiteTabs = [];
@@ -787,7 +811,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       const tab = await context.newPage();
       await gotoRobust(tab, AUDIO_TEST_URL);
       await tab.waitForURL(INTENTION_PAGE_REGEX, { timeout: 30000 });
-      await completeIntention({ page: tab, phrase: 'Hello Intent' });
+      await completeIntention({ page: tab, phrase: testPhrase });
       sameSiteTabs.push(tab);
     }
 
@@ -802,7 +826,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await expect(mainTab).toHaveURL(INTENTION_PAGE_REGEX);
 
     // Pass intention check again
-    await completeIntention({ page: mainTab, phrase: 'Hello Intent' });
+    await completeIntention({ page: mainTab, phrase: testPhrase });
 
     // Focus other same-site tabs - should NOT show intention page
     for (const tab of sameSiteTabs) {
@@ -813,8 +837,9 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await context.close();
   });
 
-  // Test 18: Intention page is not a scope
-  test('test-18: intention page URL should not be treated as a scope', async () => {
+  // Test 17: Intention page is not a scope
+  test('test-17: intention page URL should not be treated as a scope', async () => {
+    const testPhrase = getTestNameWithRun();
     const { context } = await launchExtension();
     const { settingsPage } = await openSettingsPage(context, {
       e2eInactivityTimeoutMs: 3000,
@@ -860,20 +885,21 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await context.close();
   });
 
-  // Test 20: Race condition idle
-  test('test-20: force idle and focus at same time should not cause double redirect', async () => {
+  // Test 18: Race condition idle
+  test('test-18: force idle and focus at same time should not cause double redirect', async () => {
+    const testPhrase = getTestNameWithRun();
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
       timeoutMs: 1000,
       inactivityMode: 'all',
       url: AUDIO_TEST_DOMAIN,
-      phrase: 'Hello Intent',
+      phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
     const tab = await context.newPage();
     await gotoRobust(tab, AUDIO_TEST_URL);
-    await completeIntention({ page: tab, phrase: 'Hello Intent' });
+    await completeIntention({ page: tab, phrase: testPhrase });
 
     // Open another tab
     const otherTab = await context.newPage();
@@ -895,20 +921,21 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await context.close();
   });
 
-  // Test 21: Focus DevTools or extension popup should be safe
-  test('test-21: focus devtools should be safe (no errors, no intention page)', async () => {
+  // Test 19: Focus DevTools or extension popup should be safe
+  test('test-19: focus devtools should be safe (no errors, no intention page)', async () => {
+    const testPhrase = getTestNameWithRun();
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
       timeoutMs: 1000,
       inactivityMode: 'all',
       url: AUDIO_TEST_DOMAIN,
-      phrase: 'Hello Intent',
+      phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
     const tab = await context.newPage();
     await gotoRobust(tab, AUDIO_TEST_URL);
-    await completeIntention({ page: tab, phrase: 'Hello Intent' });
+    await completeIntention({ page: tab, phrase: testPhrase });
 
     // Simulate DevTools focus by creating a situation where window focus changes
     // but no valid active tab is available (what DevTools focus would cause)
@@ -934,15 +961,16 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
 // Serial tests (for OS idle behavior and cross-window focus-sensitive tests)
 test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
-  // Test 16: Cross-window same-scope switch
-  test('test-16: cross-window same-scope switch should not show intention page', async () => {
+  // Test 20: Cross-window same-scope switch
+  test('test-20: cross-window same-scope switch should not show intention page', async () => {
+    const testPhrase = getTestNameWithRun();
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
       timeoutMs: 1000,
       inactivityMode: 'all',
       url: AUDIO_TEST_DOMAIN,
-      phrase: 'Hello Intent',
+      phrase: testPhrase,
     });
 
     await toggleOsIdleEnabled(settingsPage, false);
@@ -950,7 +978,7 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
     // Open and pass intention check for tab in Window A
     const tabA = await context.newPage();
     await gotoRobust(tabA, AUDIO_TEST_URL);
-    await completeIntention({ page: tabA, phrase: 'Hello Intent' });
+    await completeIntention({ page: tabA, phrase: testPhrase });
 
     // Get Window A's ID for later focus control - use getCurrent() for deterministic selection
     const windowAId = await settingsPage.evaluate(async () => {
@@ -985,7 +1013,7 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
     await gotoRobust(tabB, AUDIO_TEST_URL);
 
     await expect(tabB).toHaveURL(INTENTION_PAGE_REGEX);
-    await completeIntention({ page: tabB, phrase: 'Hello Intent' });
+    await completeIntention({ page: tabB, phrase: testPhrase });
 
     // Focus Window A and work beyond timeout
     await settingsPage.evaluate(async windowId => {
@@ -1006,25 +1034,26 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
 
     await context.close();
   });
-  test('test-19a: two windows, stale tab in B, focus A then B should show intention', async () => {
+  test('test-21: two windows, stale tab in B, focus A then B should show intention', async () => {
+    const testPhrase = getTestNameWithRun();
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
       timeoutMs: 1000,
       inactivityMode: 'all',
       url: AUDIO_TEST_DOMAIN,
-      phrase: 'Hello Intent',
+      phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
 
     // Window A with scoped tab
     const tabA = await context.newPage();
     await gotoRobust(tabA, AUDIO_TEST_URL);
-    await completeIntention({ page: tabA, phrase: 'Hello Intent' });
+    await completeIntention({ page: tabA, phrase: testPhrase });
 
     // Window B with scoped tab (same scope) - create as separate window
     const tabB = await createNewWindowFromTab(tabA, AUDIO_TEST_URL);
-    await completeIntention({ page: tabB, phrase: 'Hello Intent' });
+    await completeIntention({ page: tabB, phrase: testPhrase });
 
     // Focus A, go idle
     await tabA.bringToFront();
@@ -1041,25 +1070,26 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
     await context.close();
   });
 
-  test('test-19b: two windows, keep active in A, focus B should not show intention', async () => {
+  test('test-22: two windows, keep active in A, focus B should not show intention', async () => {
+    const testPhrase = getTestNameWithRun();
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
       timeoutMs: 1000,
       inactivityMode: 'all',
       url: AUDIO_TEST_DOMAIN,
-      phrase: 'Hello Intent',
+      phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
 
     // Window A with scoped tab
     const tabA = await context.newPage();
     await gotoRobust(tabA, AUDIO_TEST_URL);
-    await completeIntention({ page: tabA, phrase: 'Hello Intent' });
+    await completeIntention({ page: tabA, phrase: testPhrase });
 
     // Window B with scoped tab (same scope) - create as separate window
     const tabB = await createNewWindowFromTab(tabA, AUDIO_TEST_URL);
-    await completeIntention({ page: tabB, phrase: 'Hello Intent' });
+    await completeIntention({ page: tabB, phrase: testPhrase });
 
     // Keep active for over timeout duration in A
     await tabA.bringToFront();
@@ -1072,27 +1102,28 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
     await context.close();
   });
 
-  test('test-19c: complex multi-window scenario with window close', async () => {
+  test('test-23: complex multi-window scenario with window close', async () => {
+    const testPhrase = getTestNameWithRun();
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
       timeoutMs: 2000,
       inactivityMode: 'all',
       url: AUDIO_TEST_DOMAIN,
-      phrase: 'Hello Intent',
+      phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
 
     // Window A with tabs a (scoped) and a' (non-scoped)
     const tabA = await context.newPage();
     await gotoRobust(tabA, AUDIO_TEST_URL);
-    await completeIntention({ page: tabA, phrase: 'Hello Intent' });
+    await completeIntention({ page: tabA, phrase: testPhrase });
     const tabAPrime = await context.newPage();
     await gotoRobust(tabAPrime, 'https://google.com');
 
     // Window B with tab b (scoped, same scope as a) - create as separate window
     const tabB = await createNewWindowFromTab(tabA, AUDIO_TEST_URL);
-    await completeIntention({ page: tabB, phrase: 'Hello Intent' });
+    await completeIntention({ page: tabB, phrase: testPhrase });
 
     // Focus on b, then close window B
     await tabB.bringToFront();
@@ -1117,20 +1148,21 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
     await context.close();
   });
 
-  test('test-13: long OS idle should trigger intention page', async () => {
+  test('test-24: long OS idle should trigger intention page', async () => {
+    const testPhrase = getTestNameWithRun();
     const { context } = await launchExtension();
     const { settingsPage } = await setupInactivityAndIntention({
       context,
       timeoutMs: 15000,
       inactivityMode: 'all',
       url: AUDIO_TEST_DOMAIN,
-      phrase: 'test-13: long OS idle should trigger intention page',
+      phrase: testPhrase,
     });
     const tab = await context.newPage();
     await gotoRobust(tab, AUDIO_TEST_URL);
     await completeIntention({
       page: tab,
-      phrase: 'test-13: long OS idle should trigger intention page',
+      phrase: testPhrase,
     });
 
     // Ensure system is truly idle by jiggling mouse slightly
@@ -1143,7 +1175,8 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
     await context.close();
   });
 
-  test('test-22: add intention after opening tab, then focus after timeout shows intention page', async () => {
+  test('test-25: add intention after opening tab, then focus after timeout shows intention page', async () => {
+    const testPhrase = getTestNameWithRun();
     const { context } = await launchExtension();
 
     // Configure inactivity first (no intention yet)
@@ -1166,7 +1199,7 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
     const phraseInput = settingsPage.locator('textarea.phrase-input').first();
     await urlInput.fill(AUDIO_TEST_DOMAIN);
     await phraseInput.fill(
-      'test-22: add intention after opening tab, then focus after timeout shows intention page'
+      'test-25: add intention after opening tab, then focus after timeout shows intention page'
     );
     await waitForSyncStorageChange(settingsPage, ['intentions']);
     await settingsPage.getByRole('button', { name: 'Save changes' }).click();
