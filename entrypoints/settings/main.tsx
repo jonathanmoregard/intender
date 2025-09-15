@@ -854,6 +854,9 @@ const SettingsTab = memo(
                   Delete
                 </button>
               </div>
+              <p className='hint'>
+                💡 Tip: Hold Shift and click delete to skip this dialog.
+              </p>
             </div>
           </div>
         )}
