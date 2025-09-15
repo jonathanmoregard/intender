@@ -47,10 +47,12 @@ export function toComponents(normalizedUrl: NormalizedUrl): {
       : `https://${normalizedUrl}`;
 
     const parsedUrl = new URL(urlWithProtocol);
-    const { domain, publicSuffix, subdomain } = parse(parsedUrl.hostname);
+    const { domainWithoutSuffix, publicSuffix, subdomain } = parse(
+      parsedUrl.hostname
+    );
 
     return {
-      domain: domain || '',
+      domain: domainWithoutSuffix || '',
       publicSuffix: publicSuffix || '',
       subdomain: subdomain || null,
       path: parsedUrl.pathname === '/' ? '' : parsedUrl.pathname,

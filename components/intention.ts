@@ -227,7 +227,7 @@ export function createIntentionIndex(intentions: Intention[]): IntentionIndex {
 
   for (const intention of intentions) {
     const { scope } = intention;
-    const key = scope.domain + '.' + scope.publicSuffix;
+    const key = scope.domain;
 
     if (!index.has(key)) {
       index.set(key, []);
@@ -348,7 +348,7 @@ export function lookupIntention(
     return null;
   }
 
-  const key = targetScope.domain + '.' + targetScope.publicSuffix;
+  const key = targetScope.domain; // Use just the domain, not domain + suffix
   const intentions = intentionIndex.get(key);
 
   if (!intentions) {

@@ -43,8 +43,8 @@ describe('Intender URL Matching - Test Specification', () => {
     it('should correctly separate domain and publicSuffix for gmail.com', () => {
       const scope = parseUrlToScope('gmail.com');
       expect(scope).not.toBeNull();
-      // tldts uses domain="registrableDomain" which includes the public suffix
-      expect(scope!.domain).toBe('gmail.com');
+      // domain should be the base domain without suffix
+      expect(scope!.domain).toBe('gmail');
       expect(scope!.publicSuffix).toBe('com');
       expect(scope!.subdomain).toBeNull();
       expect(scope!.path).toBe('');
