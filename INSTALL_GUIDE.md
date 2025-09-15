@@ -52,6 +52,13 @@ Download the latest version: [intender-chrome.zip](https://github.com/jonathanmo
 - Ensure Developer mode is enabled
 - Try refreshing the extensions page
 
+## Migrating intentions between installs
+
+- Before switching builds or reinstalling, open Intender → Settings.
+- Click "Export intentions" to download a `.json` backup.
+- After installing the new build, open Settings and click "Import intentions" to restore.
+- The export format is stable across minor versions.
+
 **Permission errors:**
 
 - The extension needs storage and web navigation permissions
