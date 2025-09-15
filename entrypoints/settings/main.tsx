@@ -441,6 +441,12 @@ const SettingsTab = memo(
           setIntentions(importedIntentions);
           await storage.set({ intentions: importedIntentions });
 
+          // Mark all imported intentions as loaded so they show proper validation highlighting
+          const importedIds = new Set(
+            importedIntentions.map(intention => intention.id)
+          );
+          updateLoadedIntentionIds(importedIds);
+
           setToast({
             show: true,
             message: `Imported ${importedIntentions.length} intention(s)`,
