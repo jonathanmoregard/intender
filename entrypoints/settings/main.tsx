@@ -790,46 +790,20 @@ const SettingsTab = memo(
 
             {/* Move typos card below inactivity */}
             <div className='setting-group'>
-              <div
-                className='clickable-setting-item'
-                onClick={() => {
-                  const enabled = !fuzzyMatching;
-                  setFuzzyMatching(enabled);
-                  saveFuzzyMatching(enabled);
-                }}
-                role='button'
-                aria-pressed={fuzzyMatching}
-                tabIndex={0}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    const enabled = !fuzzyMatching;
+              <label className='setting-label clickable-setting-item'>
+                <input
+                  type='checkbox'
+                  checked={fuzzyMatching}
+                  onChange={e => {
+                    const enabled = e.target.checked;
                     setFuzzyMatching(enabled);
                     saveFuzzyMatching(enabled);
-                  }
-                }}
-              >
-                <div className='fuzzy-matching-setting'>
-                  <label
-                    className='setting-label'
-                    onClick={e => e.stopPropagation()}
-                  >
-                    <input
-                      type='checkbox'
-                      checked={fuzzyMatching}
-                      onClick={e => e.stopPropagation()}
-                      onChange={e => {
-                        const enabled = e.target.checked;
-                        setFuzzyMatching(enabled);
-                        saveFuzzyMatching(enabled);
-                      }}
-                    />
-                    <span className='setting-text'>
-                      Allow small typos when typing your intention
-                    </span>
-                  </label>
-                </div>
-              </div>
+                  }}
+                />
+                <span className='setting-text'>
+                  Allow small typos when typing your intention
+                </span>
+              </label>
             </div>
           </div>
         </div>
