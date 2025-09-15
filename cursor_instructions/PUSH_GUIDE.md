@@ -9,7 +9,7 @@ If we don't, the push fails!
 
 ## How to set version & commit
 
-1. **Analyze changes**: start with `git diff HEAD master` and run commands until you have a clear idea of the changes
+1. **Analyze changes**: start with `git diff master HEAD` and run commands until you have a clear idea of the changes
 2. **Create commit summary**: writes succinct title + paragraph summary in chat window
 3. **Check version**: `npm run version:check`
 4. **Suggest version bump**: AI analyzes changes and suggests semantic version
