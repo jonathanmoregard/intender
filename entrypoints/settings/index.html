@@ -106,6 +106,12 @@
         overflow-y: auto;
       }
 
+      /* Left-aligned content column with constrained width */
+      .settings-tab,
+      .about-tab {
+        max-width: 880px;
+      }
+
       /* Settings Tab */
       .settings-tab h2 {
         font-size: 1.8rem;
@@ -195,10 +201,18 @@
         background: rgba(255, 255, 255, 0.8);
         border-radius: 8px;
         border: 1px solid rgba(158, 142, 51, 0.1);
-        transition: all 0.3s ease;
       }
 
-      .setting-item:hover {
+      .clickable-setting-item {
+        padding: 1rem;
+        background: rgba(255, 255, 255, 0.8);
+        border-radius: 8px;
+        border: 1px solid rgba(158, 142, 51, 0.1);
+        transition: all 0.3s ease;
+        cursor: pointer;
+      }
+
+      .clickable-setting-item:hover {
         border-color: rgba(158, 142, 51, 0.3);
         box-shadow: 0 2px 8px rgba(158, 142, 51, 0.1);
       }
@@ -212,7 +226,6 @@
         border: 1px solid rgba(158, 142, 51, 0.2);
         border-radius: 12px;
         margin-bottom: 1.5rem;
-        transition: all 0.3s ease;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
         position: relative;
         padding: 1.5rem;
@@ -221,10 +234,7 @@
         gap: 1rem;
       }
 
-      .intention-item:hover {
-        border-color: #9e8e33;
-        box-shadow: 0 4px 16px rgba(158, 142, 51, 0.15);
-      }
+      /* Remove hover affordance from intention items */
 
       .intention-header {
         display: none;
@@ -566,12 +576,7 @@
         background: rgba(255, 255, 255, 0.8);
         border-radius: 8px;
         border: 1px solid rgba(158, 142, 51, 0.1);
-        transition: all 0.3s ease;
-      }
-
-      .example-item:hover {
-        border-color: rgba(158, 142, 51, 0.3);
-        box-shadow: 0 2px 8px rgba(158, 142, 51, 0.1);
+        /* no hover affordance */
       }
 
       .example-content {
@@ -951,6 +956,397 @@
       .warning-dialog-btn:hover {
         background: #e55a1a;
         transform: translateY(-1px);
+      }
+
+      /* Inactivity Settings */
+      .inactivity-mode-setting {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+      }
+
+      .setting-help {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: rgba(158, 142, 51, 0.2);
+        color: #9e8e33;
+        font-size: 0.8rem;
+        font-weight: 600;
+        cursor: help;
+        transition: all 0.3s ease;
+        font-family: 'Inter', sans-serif;
+        position: relative;
+        z-index: 1; /* create stacking context */
+      }
+
+      .setting-help:hover {
+        background: rgba(158, 142, 51, 0.3);
+        transform: scale(1.1);
+      }
+
+      /* Custom tooltip on hover via data-tooltip; keep native title for a11y readers only */
+      .setting-help[data-tooltip] {
+        position: relative;
+      }
+      .setting-help:hover {
+        z-index: 9998;
+      }
+      .setting-help[data-tooltip]::after {
+        content: attr(data-tooltip);
+        position: absolute;
+        left: 0;
+        top: calc(100% + 10px);
+        transform: translateX(0);
+        background: #ffffff; /* fully opaque */
+        color: #30332e;
+        border: 1px solid rgba(158, 142, 51, 0.28);
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-size: 13px;
+        line-height: 1.4;
+        width: max-content;
+        min-width: 220px;
+        max-width: 320px;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: normal;
+        text-align: left;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 120ms ease;
+        z-index: 9999; /* ensure above everything locally */
+      }
+      .setting-help[data-tooltip]::before {
+        content: '';
+        position: absolute;
+        top: calc(100% + 4px);
+        left: 6px;
+        border-width: 6px;
+        border-style: solid;
+        border-color: rgba(158, 142, 51, 0.28) transparent transparent
+          transparent;
+        opacity: 0;
+        transition: opacity 120ms ease;
+        z-index: 9998;
+      }
+      .setting-help[data-tooltip]:hover::after,
+      .setting-help[data-tooltip]:hover::before {
+        opacity: 1;
+      }
+
+      .inactivity-mode-select {
+        padding: 0.5rem;
+        border: 1px solid rgba(158, 142, 51, 0.3);
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.9);
+        font-family: 'Inter', sans-serif;
+        font-size: 0.9rem;
+        color: #30332e;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        min-width: 200px;
+      }
+
+      .inactivity-mode-select:focus {
+        outline: none;
+        border-color: #9e8e33;
+        box-shadow: 0 0 0 2px rgba(158, 142, 51, 0.1);
+      }
+
+      .timeout-setting {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+      }
+
+      .timeout-input {
+        padding: 0.5rem;
+        border: 1px solid rgba(158, 142, 51, 0.3);
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.9);
+        font-family: 'Inter', sans-serif;
+        font-size: 0.9rem;
+        color: #30332e;
+        width: 80px;
+        text-align: center;
+        transition: all 0.3s ease;
+      }
+
+      .timeout-input:focus {
+        outline: none;
+        border-color: #9e8e33;
+        box-shadow: 0 0 0 2px rgba(158, 142, 51, 0.1);
+      }
+
+      .timeout-input::-webkit-inner-spin-button,
+      .timeout-input::-webkit-outer-spin-button {
+        opacity: 1;
+      }
+
+      /* Radio Button Styles */
+      .radio-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        margin-top: 0.5rem;
+      }
+
+      .radio-option {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        cursor: pointer;
+        padding: 0.5rem;
+        border-radius: 6px;
+        transition: all 0.3s ease;
+        font-family: 'Inter', sans-serif;
+      }
+
+      .radio-option:hover {
+        background: rgba(158, 142, 51, 0.05);
+      }
+
+      .radio-option input[type='radio'] {
+        width: 18px;
+        height: 18px;
+        accent-color: #9e8e33;
+        cursor: pointer;
+        margin: 0;
+      }
+
+      .radio-label {
+        color: #30332e;
+        font-size: 0.95rem;
+        line-height: 1.4;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      /* Updated Timeout Input Styling */
+      .timeout-input {
+        padding: 0.75rem;
+        border: 1px solid rgba(158, 142, 51, 0.3);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.9);
+        font-family: 'Inter', sans-serif;
+        font-size: 0.9rem;
+        color: #30332e;
+        width: 100px;
+        text-align: center;
+        transition: all 0.3s ease;
+        font-weight: 500;
+      }
+
+      .timeout-input:focus {
+        outline: none;
+        border-color: #9e8e33;
+        box-shadow: 0 0 0 3px rgba(158, 142, 51, 0.1);
+      }
+
+      .timeout-input:hover {
+        border-color: rgba(158, 142, 51, 0.5);
+      }
+
+      /* Advanced Settings Collapsible */
+      .advanced-settings {
+        margin-top: 2rem;
+        background: rgba(255, 255, 255, 0.6);
+        border: 1px solid rgba(158, 142, 51, 0.2);
+        border-radius: 12px;
+        backdrop-filter: blur(10px);
+        overflow: hidden;
+      }
+
+      .advanced-settings-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 1rem 1.5rem;
+        background: rgba(255, 255, 255, 0.8);
+        border-bottom: 1px solid rgba(158, 142, 51, 0.1);
+        cursor: pointer;
+        transition: all 0.3s ease;
+      }
+
+      .advanced-settings-header:hover {
+        background: rgba(255, 255, 255, 0.9);
+        border-color: rgba(158, 142, 51, 0.2);
+      }
+
+      .advanced-settings-header h3 {
+        margin: 0;
+        font-size: 1.2rem;
+        color: #30332e;
+        font-weight: 600;
+        font-family: 'Inter', sans-serif;
+        pointer-events: none;
+      }
+
+      .toggle-icon {
+        font-size: 0.8rem;
+        transition: transform 0.3s ease;
+        color: #9e8e33;
+      }
+
+      .toggle-icon.expanded {
+        transform: rotate(180deg);
+      }
+
+      .advanced-settings-content {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.3s ease;
+      }
+
+      .advanced-settings-content.expanded {
+        max-height: 1000px;
+        padding: 1.5rem;
+        overflow: visible; /* allow tooltips to render outside */
+      }
+
+      .advanced-settings h4 {
+        margin: 0 0 0.5rem 0;
+        font-size: 1.1rem;
+        color: #30332e;
+        font-weight: 600;
+        font-family: 'Inter', sans-serif;
+      }
+
+      /* Improved Advanced Settings Layout */
+      .setting-group {
+        margin-bottom: 1.5rem;
+      }
+
+      .setting-group:last-child {
+        margin-bottom: 0;
+      }
+
+      .setting-divider {
+        height: 1px;
+        background: rgba(158, 142, 51, 0.1);
+        margin: 1.5rem 0;
+      }
+
+      .setting-description {
+        color: rgba(48, 51, 46, 0.7);
+        margin-bottom: 1rem;
+        line-height: 1.5;
+        font-size: 0.95rem;
+        font-family: 'Inter', sans-serif;
+      }
+
+      .setting-header {
+        margin-bottom: 0.75rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .radio-group-horizontal {
+        display: flex;
+        gap: 1.5rem;
+        flex-wrap: wrap;
+      }
+
+      /* Add spacing between radio group and timeout row */
+      .radio-group-horizontal + .timeout-setting {
+        margin-top: 1rem;
+      }
+
+      .radio-group-horizontal .radio-option {
+        flex: 1;
+        min-width: 120px;
+        padding: 0.75rem;
+        background: rgba(255, 255, 255, 0.8);
+        border: 1px solid rgba(158, 142, 51, 0.2);
+        border-radius: 8px;
+        transition: all 0.3s ease;
+        margin: 0;
+      }
+
+      .radio-group-horizontal
+        .radio-option
+        input[type='radio']:checked
+        + .radio-label {
+        color: #9e8e33;
+        font-weight: 600;
+      }
+
+      /* Stack radio options vertically on small screens */
+      @media (max-width: 640px) {
+        .radio-group-horizontal {
+          flex-direction: column;
+          gap: 0.75rem;
+        }
+        .radio-group-horizontal .radio-option {
+          width: 100%;
+          min-width: 0;
+        }
+      }
+
+      .timeout-setting {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+      }
+
+      .timeout-label-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        flex: 1;
+      }
+
+      .timeout-unit {
+        font-size: 0.8rem;
+        color: rgba(48, 51, 46, 0.6);
+        font-family: 'Inter', sans-serif;
+      }
+
+      .timeout-input {
+        width: 80px;
+        text-align: center;
+        padding: 0.5rem;
+        border: 1px solid rgba(158, 142, 51, 0.3);
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.9);
+        font-family: 'Inter', sans-serif;
+        font-size: 0.9rem;
+        color: #30332e;
+        transition: all 0.3s ease;
+        flex-shrink: 0;
+      }
+
+      .timeout-input:focus {
+        outline: none;
+        border-color: #9e8e33;
+        box-shadow: 0 0 0 2px rgba(158, 142, 51, 0.1);
+      }
+
+      .timeout-setting.disabled {
+        opacity: 0.5;
+        pointer-events: none;
+      }
+
+      .timeout-setting.disabled .timeout-input {
+        background: rgba(128, 128, 128, 0.1);
+        border-color: rgba(128, 128, 128, 0.3);
+        color: rgba(48, 51, 46, 0.5);
+        cursor: not-allowed;
+      }
+
+      .timeout-setting.disabled .setting-text,
+      .timeout-setting.disabled .timeout-unit {
+        color: rgba(48, 51, 46, 0.5);
       }
     </style>
   </head>

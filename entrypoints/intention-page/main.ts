@@ -111,9 +111,14 @@ function draw() {
 
 draw();
 
+// After first paint, upgrade background sources (MV3-safe; no inline script)
+requestAnimationFrame(() => {
+  document.documentElement.classList.add('bg-ready');
+});
+
 const query = new URLSearchParams(window.location.search);
 const target = query.get('target');
-const intentionId = query.get('intention');
+const intentionId = query.get('intentionScopeId');
 
 const phraseDisplayEl = document.getElementById(
   'phrase-display'
@@ -191,7 +196,9 @@ storage.get().then(({ intentions, fuzzyMatching = true }) => {
       if (e.key === 'Enter') {
         e.preventDefault(); // Prevent newline from being added
         if (acceptableCompletePrompt(inputEl.value)) {
-          window.location.href = target!;
+          const targetUrl = new URL(target!);
+          targetUrl.searchParams.set('intention_completed', 'true');
+          window.location.href = targetUrl.toString();
         }
       }
     });
@@ -205,7 +212,9 @@ storage.get().then(({ intentions, fuzzyMatching = true }) => {
 
         // Navigate after animation
         setTimeout(() => {
-          window.location.href = target!;
+          const targetUrl = new URL(target!);
+          targetUrl.searchParams.set('intention_completed', 'true');
+          window.location.href = targetUrl.toString();
         }, 200);
       }
     };
