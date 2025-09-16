@@ -120,6 +120,16 @@ export async function launchExtension(
     args: [
       `--disable-extensions-except=${pathToExtension}`,
       `--load-extension=${pathToExtension}`,
+      // Relax security interstitials for tests to avoid flakiness with redirects/HSTS/SSL
+      '--test-type',
+      '--ignore-certificate-errors',
+      '--allow-insecure-localhost',
+      '--allow-running-insecure-content',
+      '--disable-features=SSLKeyLogFile,IsolateOrigins,site-per-process,BlockInsecurePrivateNetworkRequests',
+      '--disable-web-security',
+      '--no-default-browser-check',
+      '--no-first-run',
+      '--disable-popup-blocking',
     ],
   });
 

@@ -78,22 +78,6 @@ test.describe('URL Matching', () => {
       // Navigation aborted due to extension redirect is expected
     }
 
-    // Handle Chrome security warning if it appears
-    try {
-      // Look for "Advanced" button on Chrome interstitial
-      const advancedButton = page.locator('text=Advanced').first();
-      if (await advancedButton.isVisible({ timeout: 2000 })) {
-        await advancedButton.click();
-        // Look for "Proceed" button after clicking Advanced
-        const proceedButton = page.locator('text=Proceed').first();
-        if (await proceedButton.isVisible({ timeout: 2000 })) {
-          await proceedButton.click();
-        }
-      }
-    } catch {
-      // No interstitial appeared, continue
-    }
-
     // Should land on intention page (even though original was a redirect)
     await expect(page).toHaveURL(
       /chrome-extension:\/\/.+\/intention-page\.html\?target=/
