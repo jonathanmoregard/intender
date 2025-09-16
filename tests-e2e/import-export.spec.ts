@@ -45,7 +45,9 @@ test.describe('Import/Export', () => {
 
     // Handle file selection
     const fileChooser = await fileChooserPromise;
-    await fileChooser.setFiles('./tests-e2e/fixtures/test-intentions.json');
+    await fileChooser.setFiles(
+      join(__dirname, 'fixtures/test-intentions.json')
+    );
 
     // Wait for import to complete
     await settingsPage.waitForTimeout(2000);
@@ -163,7 +165,7 @@ test.describe('Import/Export', () => {
     // Handle file selection with malformed JSON
     const fileChooser = await fileChooserPromise;
     await fileChooser.setFiles(
-      './tests-e2e/fixtures/malformed-intentions.json'
+      join(__dirname, 'fixtures/malformed-intentions.json')
     );
 
     // Wait for import attempt
@@ -200,7 +202,7 @@ test.describe('Import/Export', () => {
     // Handle file selection with duplicate GUIDs
     const fileChooser = await fileChooserPromise;
     await fileChooser.setFiles(
-      './tests-e2e/fixtures/duplicate-guids-intentions.json'
+      join(__dirname, 'fixtures/duplicate-guids-intentions.json')
     );
 
     // Wait for import to complete
