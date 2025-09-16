@@ -11,6 +11,7 @@ import {
 } from '../../components/intention';
 import { storage, type InactivityMode } from '../../components/storage';
 import { minutesToMs, msToMinutes } from '../../components/time';
+import { generateUUID } from '../../components/uuid';
 
 type Tab = 'settings' | 'about';
 
@@ -438,18 +439,24 @@ const SettingsTab = memo(
           const text = await file.text();
           const importedIntentions: RawIntention[] = JSON.parse(text);
 
-          setIntentions(importedIntentions);
-          await storage.set({ intentions: importedIntentions });
+          // Regenerate all GUIDs on import to ensure uniqueness
+          const processedIntentions = importedIntentions.map(intention => ({
+            ...intention,
+            id: generateUUID(),
+          }));
+
+          setIntentions(processedIntentions);
+          await storage.set({ intentions: processedIntentions });
 
           // Mark all imported intentions as loaded so they show proper validation highlighting
           const importedIds = new Set(
-            importedIntentions.map(intention => intention.id)
+            processedIntentions.map(intention => intention.id)
           );
           updateLoadedIntentionIds(importedIds);
 
           setToast({
             show: true,
-            message: `Imported ${importedIntentions.length} intention(s)`,
+            message: `Imported ${processedIntentions.length} intention(s)`,
             type: 'success',
           });
           setTimeout(() => setToast(prev => ({ ...prev, show: false })), 3000);
@@ -611,6 +618,7 @@ const SettingsTab = memo(
           <div className='more-options' ref={moreOptionsRef}>
             <button
               className='more-options-btn'
+              data-testid='more-options-btn'
               onClick={() => setShowMoreOptions(!showMoreOptions)}
               title='More options'
             >
@@ -620,11 +628,20 @@ const SettingsTab = memo(
               className={`more-options-dropdown ${
                 showMoreOptions ? 'show' : ''
               }`}
+              data-testid='more-options-dropdown'
             >
-              <button className='dropdown-item' onClick={exportIntentions}>
+              <button
+                className='dropdown-item'
+                data-testid='export-intentions-btn'
+                onClick={exportIntentions}
+              >
                 Export Intentions
               </button>
-              <button className='dropdown-item' onClick={importIntentions}>
+              <button
+                className='dropdown-item'
+                data-testid='import-intentions-btn'
+                onClick={importIntentions}
+              >
                 Import Intentions
               </button>
             </div>

@@ -1,0 +1,17 @@
+[
+  {
+    "id": "9fd9cc7d-2af2-4162-8a0e-c8bbf47b728d",
+    "phrase": "First intention with duplicate ID",
+    "url": "example1.com"
+  },
+  {
+    "id": "9fd9cc7d-2af2-4162-8a0e-c8bbf47b728d",
+    "phrase": "Second intention with same duplicate ID",
+    "url": "example2.com"
+  },
+  {
+    "id": "9fd9cc7d-2af2-4162-8a0e-c8bbf47b728d",
+    "phrase": "Third intention with same duplicate ID",
+    "url": "example3.com"
+  }
+]

@@ -2,7 +2,7 @@
   "name": "intender",
   "description": "manifest.json description",
   "private": true,
-  "version": "0.3.1",
+  "version": "0.3.2",
   "type": "module",
   "scripts": {
     "dev": "wxt",
@@ -50,6 +50,7 @@
     "ts-brand": "^0.2.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
+    "winston": "^3.10.0",
     "wxt": "^0.20.7"
   },
   "lint-staged": {
