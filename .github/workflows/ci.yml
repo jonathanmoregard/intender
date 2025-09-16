@@ -42,6 +42,15 @@ jobs:
       - name: Build extension
         run: pnpm build
 
+      # Setup Playwright (installs browsers and configures xvfb for headed runs)
+      - name: Setup Playwright
+        uses: microsoft/playwright-github-action@v1
+        with:
+          version: 1.54.2
+
+      - name: Run E2E tests (Chromium)
+        run: pnpm test:e2e
+
       - name: Upload coverage reports
         uses: codecov/codecov-action@v4
         with:
