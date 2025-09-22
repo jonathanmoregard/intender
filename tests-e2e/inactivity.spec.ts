@@ -1132,8 +1132,7 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
     await settingsPage.bringToFront();
     await SettingsPage.addIntention(settingsPage, {
       url: AudioTestPage.domain,
-      phrase:
-        'test-25: add intention after opening tab, then focus after timeout shows intention page',
+      phrase: testPhrase,
     });
 
     // Open second tab (non-scoped)
