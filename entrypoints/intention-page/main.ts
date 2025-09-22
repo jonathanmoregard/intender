@@ -129,102 +129,119 @@ const helperTextEl = document.getElementById('helper-text') as HTMLElement;
 
 let expectedPhrase = '';
 
-storage.get().then(({ intentions, fuzzyMatching = true }) => {
-  // Use intention ID for precise lookup
-  const match = intentions.find(r => r.id === intentionId);
-  if (match) {
-    expectedPhrase = match.phrase;
-    phraseDisplayEl.textContent = expectedPhrase;
+storage
+  .get()
+  .then(
+    ({ intentions, fuzzyMatching = true, canCopyIntentionText = false }) => {
+      // Use intention ID for precise lookup
+      const match = intentions.find(r => r.id === intentionId);
+      if (match) {
+        expectedPhrase = match.phrase;
+        phraseDisplayEl.textContent = expectedPhrase;
 
-    // Unified fuzzy matching configuration
-    const maxDistance = 2;
-
-    // Function to check if input is an acceptable partial prompt
-    const acceptablePartialPrompt = (input: string): boolean => {
-      if (!fuzzyMatching) {
-        return expectedPhrase.startsWith(input);
-      } else {
-        return fuzzyPartialMatch(input, expectedPhrase, maxDistance);
-      }
-    };
-
-    // Function to check if input is an acceptable complete prompt
-    const acceptableCompletePrompt = (input: string): boolean => {
-      if (!fuzzyMatching) {
-        return input === expectedPhrase;
-      } else {
-        return fuzzyMatch(input, expectedPhrase, maxDistance);
-      }
-    };
-
-    // Set up input event listener for real-time validation
-    inputEl.addEventListener('input', e => {
-      // Prevent processing if this is from an Enter key press
-      if (e instanceof InputEvent && e.inputType === 'insertLineBreak') {
-        return;
-      }
-
-      const currentValue = inputEl.value;
-
-      if (currentValue === '') {
-        // Empty input - grey state
-        phraseDisplayEl.className = 'phrase-display grey';
-        inputEl.className = 'phrase-input grey';
-        buttonEl.disabled = true;
-        helperTextEl.classList.remove('visible');
-      } else if (acceptablePartialPrompt(currentValue)) {
-        // Partial match - green state (on the right track)
-        phraseDisplayEl.className = 'phrase-display green';
-        inputEl.className = 'phrase-input green';
-        helperTextEl.classList.remove('visible');
-        if (acceptableCompletePrompt(currentValue)) {
-          buttonEl.disabled = false;
-        } else {
-          buttonEl.disabled = true;
+        if (!canCopyIntentionText) {
+          phraseDisplayEl.classList.add('no-copy');
+          phraseDisplayEl.addEventListener('copy', e => e.preventDefault());
+          phraseDisplayEl.addEventListener('contextmenu', e =>
+            e.preventDefault()
+          );
+          phraseDisplayEl.addEventListener('selectstart', e =>
+            e.preventDefault()
+          );
         }
+
+        // Unified fuzzy matching configuration
+        const maxDistance = 2;
+
+        // Function to check if input is an acceptable partial prompt
+        const acceptablePartialPrompt = (input: string): boolean => {
+          if (!fuzzyMatching) {
+            return expectedPhrase.startsWith(input);
+          } else {
+            return fuzzyPartialMatch(input, expectedPhrase, maxDistance);
+          }
+        };
+
+        // Function to check if input is an acceptable complete prompt
+        const acceptableCompletePrompt = (input: string): boolean => {
+          if (!fuzzyMatching) {
+            return input === expectedPhrase;
+          } else {
+            return fuzzyMatch(input, expectedPhrase, maxDistance);
+          }
+        };
+
+        // Set up input event listener for real-time validation
+        inputEl.addEventListener('input', e => {
+          // Prevent processing if this is from an Enter key press
+          if (e instanceof InputEvent && e.inputType === 'insertLineBreak') {
+            return;
+          }
+
+          const currentValue = inputEl.value;
+
+          if (currentValue === '') {
+            // Empty input - grey state
+            phraseDisplayEl.className = 'phrase-display grey';
+            inputEl.className = 'phrase-input grey';
+            buttonEl.disabled = true;
+            helperTextEl.classList.remove('visible');
+          } else if (acceptablePartialPrompt(currentValue)) {
+            // Partial match - green state (on the right track)
+            phraseDisplayEl.className = 'phrase-display green';
+            inputEl.className = 'phrase-input green';
+            helperTextEl.classList.remove('visible');
+            if (acceptableCompletePrompt(currentValue)) {
+              buttonEl.disabled = false;
+            } else {
+              buttonEl.disabled = true;
+            }
+          } else {
+            // Incorrect phrase - show red state immediately
+            phraseDisplayEl.className = 'phrase-display red';
+            inputEl.className = 'phrase-input red';
+            buttonEl.disabled = true;
+            helperTextEl.classList.add('visible');
+          }
+        });
+
+        // Set up keydown event listener for Enter key
+        inputEl.addEventListener('keydown', e => {
+          if (e.key === 'Enter') {
+            e.preventDefault(); // Prevent newline from being added
+            if (acceptableCompletePrompt(inputEl.value)) {
+              const targetUrl = new URL(target!);
+              targetUrl.searchParams.set('intention_completed', 'true');
+              window.location.href = targetUrl.toString();
+            }
+          }
+        });
+
+        // Set up button click handler
+        buttonEl.onclick = () => {
+          if (!buttonEl.disabled && acceptableCompletePrompt(inputEl.value)) {
+            // Add click animation
+            const container = document.querySelector(
+              '.container'
+            ) as HTMLElement;
+            container.classList.add('clicking');
+
+            // Navigate after animation
+            setTimeout(() => {
+              const targetUrl = new URL(target!);
+              targetUrl.searchParams.set('intention_completed', 'true');
+              window.location.href = targetUrl.toString();
+            }, 200);
+          }
+        };
+
+        // Focus the input field
+        inputEl.focus();
       } else {
-        // Incorrect phrase - show red state immediately
+        phraseDisplayEl.textContent = 'No phrase found for this URL';
         phraseDisplayEl.className = 'phrase-display red';
-        inputEl.className = 'phrase-input red';
+        inputEl.disabled = true;
         buttonEl.disabled = true;
-        helperTextEl.classList.add('visible');
       }
-    });
-
-    // Set up keydown event listener for Enter key
-    inputEl.addEventListener('keydown', e => {
-      if (e.key === 'Enter') {
-        e.preventDefault(); // Prevent newline from being added
-        if (acceptableCompletePrompt(inputEl.value)) {
-          const targetUrl = new URL(target!);
-          targetUrl.searchParams.set('intention_completed', 'true');
-          window.location.href = targetUrl.toString();
-        }
-      }
-    });
-
-    // Set up button click handler
-    buttonEl.onclick = () => {
-      if (!buttonEl.disabled && acceptableCompletePrompt(inputEl.value)) {
-        // Add click animation
-        const container = document.querySelector('.container') as HTMLElement;
-        container.classList.add('clicking');
-
-        // Navigate after animation
-        setTimeout(() => {
-          const targetUrl = new URL(target!);
-          targetUrl.searchParams.set('intention_completed', 'true');
-          window.location.href = targetUrl.toString();
-        }, 200);
-      }
-    };
-
-    // Focus the input field
-    inputEl.focus();
-  } else {
-    phraseDisplayEl.textContent = 'No phrase found for this URL';
-    phraseDisplayEl.className = 'phrase-display red';
-    inputEl.disabled = true;
-    buttonEl.disabled = true;
-  }
-});
+    }
+  );

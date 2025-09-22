@@ -20,6 +20,7 @@ export const storage = {
     inactivityMode?: InactivityMode;
     inactivityTimeoutMs?: TimeoutMs;
     showAdvancedSettings?: boolean;
+    canCopyIntentionText?: boolean;
   }> {
     const result = await backend.get({
       intentions: [],
@@ -27,6 +28,7 @@ export const storage = {
       inactivityMode: 'off',
       inactivityTimeoutMs: (30 * 60 * 1000) as TimeoutMs,
       showAdvancedSettings: false,
+      canCopyIntentionText: false,
     });
     return result as {
       intentions: RawIntention[];
@@ -34,6 +36,7 @@ export const storage = {
       inactivityMode?: InactivityMode;
       inactivityTimeoutMs?: TimeoutMs;
       showAdvancedSettings?: boolean;
+      canCopyIntentionText?: boolean;
     };
   },
   async set(
@@ -43,6 +46,7 @@ export const storage = {
       | { inactivityMode: InactivityMode }
       | { inactivityTimeoutMs: TimeoutMs }
       | { showAdvancedSettings: boolean }
+      | { canCopyIntentionText: boolean }
   ) {
     await backend.set(data);
   },
