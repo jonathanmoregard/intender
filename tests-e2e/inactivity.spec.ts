@@ -1,12 +1,11 @@
 import type { Page } from '@playwright/test';
+import { AudioTestPage } from './fixtures/page/audio-test';
+import { IntentionPage } from './fixtures/page/intention';
+import { SettingsPage } from './fixtures/page/settings';
 
 import { execSync } from 'node:child_process';
 import { expect, test } from './test-setup';
-import {
-  launchExtension,
-  openSettingsPage,
-  waitForSyncStorageChange,
-} from './utils/extension';
+import { launchExtension } from './utils/extension';
 
 // Helper to get current test name with run number
 function getTestNameWithRun(): string {
@@ -15,15 +14,6 @@ function getTestNameWithRun(): string {
   const runNumber = testInfo.repeatEachIndex + 1;
   return `${testName} (run ${runNumber})`;
 }
-
-// Global constants for test URLs and patterns
-const AUDIO_TEST_URL =
-  'https://jonathanmoregard.github.io/intender/test/assets/';
-const AUDIO_TEST_DOMAIN = 'jonathanmoregard.github.io';
-const AUDIO_TEST_REGEX =
-  /https:\/\/jonathanmoregard\.github\.io\/intender\/test\/assets\//;
-const INTENTION_PAGE_REGEX =
-  /chrome-extension:\/\/.+\/intention-page\.html\?target=/;
 
 test.describe.configure({ mode: 'parallel' });
 
@@ -52,7 +42,7 @@ async function gotoRobust(page: Page, url: string): Promise<void> {
     const escaped = url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const targetRegex = new RegExp(escaped);
     await Promise.race([
-      page.waitForURL(INTENTION_PAGE_REGEX, { timeout: 15000 }),
+      page.waitForURL(IntentionPage.regex, { timeout: 15000 }),
       page.waitForURL(targetRegex, { timeout: 15000 }),
       page.waitForFunction(
         () => location.href !== '' && location.href !== 'about:blank',
@@ -70,31 +60,6 @@ async function bringToFrontAndWait(page: Page): Promise<void> {
   await page.waitForTimeout(200);
 }
 
-async function startAudioPlayback(page: Page): Promise<void> {
-  // Ensure we're on the target page (should already be there from openAndCompleteIntention)
-  const currentUrl = page.url();
-  if (!currentUrl.includes('jonathanmoregard.github.io/intender/test/assets')) {
-    throw new Error(
-      'startAudioPlayback expects to be called on a page already at the target URL'
-    );
-  }
-
-  // Click the play button
-  const playButton = page.getByTestId('fixture-play');
-  await playButton.waitFor({ state: 'visible' });
-  await playButton.click();
-
-  // Wait for audio to actually start playing
-  await page.waitForFunction(
-    () => {
-      // @ts-ignore
-      const audio = document.querySelector('audio');
-      return !!audio && !audio.paused && audio.currentTime > 0;
-    },
-    { timeout: 5000 }
-  );
-}
-
 async function setupInactivityAndIntention(opts: {
   context: any;
   timeoutMs: number;
@@ -102,7 +67,7 @@ async function setupInactivityAndIntention(opts: {
   url: string;
   phrase: string;
 }) {
-  const { settingsPage } = await openSettingsPage(opts.context, {
+  const settingsPage = await SettingsPage.openSettingsPage(opts.context, {
     e2eInactivityTimeoutMs: opts.timeoutMs,
   });
 
@@ -115,35 +80,12 @@ async function setupInactivityAndIntention(opts: {
     .getByTestId(`inactivity-mode-${opts.inactivityMode}`)
     .click();
 
-  const urlInput = settingsPage.locator('input.url-input').first();
-  const phraseInput = settingsPage.locator('textarea.phrase-input').first();
-  await urlInput.fill(opts.url);
-  await phraseInput.fill(opts.phrase);
-
-  await waitForSyncStorageChange(settingsPage, ['intentions']);
-  await settingsPage.getByRole('button', { name: 'Save changes' }).click();
-  await settingsPage.waitForTimeout(300);
+  await SettingsPage.addIntention(settingsPage, {
+    url: opts.url,
+    phrase: opts.phrase,
+  });
 
   return { settingsPage };
-}
-
-async function completeIntention(opts: { page: Page; phrase: string }) {
-  await expect(opts.page).toHaveURL(INTENTION_PAGE_REGEX);
-
-  // Extract target URL from intention page URL
-  const currentUrl = opts.page.url();
-  const targetUrl = new URL(currentUrl).searchParams.get('target');
-  if (!targetUrl) {
-    throw new Error('No target URL found in intention page');
-  }
-
-  await opts.page.locator('#phrase').fill(opts.phrase);
-  await opts.page.locator('#phrase').press('Enter');
-
-  await opts.page.waitForURL(
-    new RegExp(targetUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-  );
-  return opts.page;
 }
 
 async function createNewWindowFromTab(
@@ -185,13 +127,13 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       context,
       timeoutMs: 1000,
       inactivityMode: 'all',
-      url: AUDIO_TEST_DOMAIN,
+      url: AudioTestPage.domain,
       phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
     const tab = await context.newPage();
-    await gotoRobust(tab, AUDIO_TEST_URL);
-    await completeIntention({ page: tab, phrase: testPhrase });
+    await gotoRobust(tab, AudioTestPage.url);
+    await IntentionPage.complete(tab, testPhrase);
 
     const otherTab = await context.newPage();
     await otherTab.goto('about:blank');
@@ -199,7 +141,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await settingsPage.waitForTimeout(1500);
 
     await bringToFrontAndWait(tab);
-    await expect(tab).toHaveURL(INTENTION_PAGE_REGEX);
+    await expect(tab).toHaveURL(IntentionPage.regex);
 
     await context.close();
   });
@@ -211,20 +153,21 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       context,
       timeoutMs: 1000,
       inactivityMode: 'all-except-audio',
-      url: AUDIO_TEST_DOMAIN,
+      url: AudioTestPage.domain,
       phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
 
     const tab = await context.newPage();
-    await gotoRobust(tab, AUDIO_TEST_URL);
-    await completeIntention({ page: tab, phrase: testPhrase });
+    await gotoRobust(tab, AudioTestPage.url);
+    await IntentionPage.complete(tab, testPhrase);
 
     // Open another tab with the same fixture (same scope) with audio and start playback
     const audioTab = await context.newPage();
-    await gotoRobust(audioTab, AUDIO_TEST_URL);
-    await completeIntention({ page: audioTab, phrase: testPhrase });
-    await startAudioPlayback(audioTab);
+    await gotoRobust(audioTab, AudioTestPage.url);
+    await IntentionPage.complete(audioTab, testPhrase);
+
+    await AudioTestPage.play(audioTab);
 
     // Wait beyond inactivity
     await settingsPage.waitForTimeout(1500);
@@ -234,7 +177,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     // Bring tab tab to front, should NOT redirect due to audible exemption in same scope
     await tab.bringToFront();
-    await expect(tab).toHaveURL(AUDIO_TEST_REGEX);
+    await expect(tab).toHaveURL(AudioTestPage.regex);
 
     await context.close();
   });
@@ -246,16 +189,16 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       context,
       timeoutMs: 1000,
       inactivityMode: 'all-except-audio',
-      url: AUDIO_TEST_DOMAIN,
+      url: AudioTestPage.domain,
       phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
 
     // Open an audio tab and start playback
     const audioTab = await context.newPage();
-    await gotoRobust(audioTab, AUDIO_TEST_URL);
-    await completeIntention({ page: audioTab, phrase: testPhrase });
-    await startAudioPlayback(audioTab);
+    await gotoRobust(audioTab, AudioTestPage.url);
+    await IntentionPage.complete(audioTab, testPhrase);
+    await AudioTestPage.play(audioTab);
 
     // Stay on audio tab and wait beyond inactivity
     await audioTab.waitForTimeout(1500);
@@ -275,13 +218,13 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       context,
       timeoutMs: 1000,
       inactivityMode: 'all',
-      url: AUDIO_TEST_DOMAIN,
+      url: AudioTestPage.domain,
       phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
     const tab = await context.newPage();
-    await gotoRobust(tab, AUDIO_TEST_URL);
-    await completeIntention({ page: tab, phrase: testPhrase });
+    await gotoRobust(tab, AudioTestPage.url);
+    await IntentionPage.complete(tab, testPhrase);
 
     // Open another tab (any)
     const other = await context.newPage();
@@ -293,7 +236,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     // Switch back to scoped tab - should show intention page
     await bringToFrontAndWait(tab);
-    await expect(tab).toHaveURL(INTENTION_PAGE_REGEX);
+    await expect(tab).toHaveURL(IntentionPage.regex);
 
     await context.close();
   });
@@ -306,13 +249,13 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       context,
       timeoutMs: 1000,
       inactivityMode: 'all-except-audio',
-      url: AUDIO_TEST_DOMAIN,
+      url: AudioTestPage.domain,
       phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
     const tab = await context.newPage();
-    await gotoRobust(tab, AUDIO_TEST_URL);
-    await completeIntention({ page: tab, phrase: testPhrase });
+    await gotoRobust(tab, AudioTestPage.url);
+    await IntentionPage.complete(tab, testPhrase);
 
     // Open another tab (any)
     const other = await context.newPage();
@@ -323,7 +266,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     // Switch back to scoped tab - should show intention page
     await tab.bringToFront();
-    await expect(tab).toHaveURL(INTENTION_PAGE_REGEX);
+    await expect(tab).toHaveURL(IntentionPage.regex);
 
     await context.close();
   });
@@ -336,21 +279,21 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       context,
       timeoutMs: 1000,
       inactivityMode: 'all-except-audio',
-      url: AUDIO_TEST_DOMAIN,
+      url: AudioTestPage.domain,
       phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
     const tab = await context.newPage();
-    await gotoRobust(tab, AUDIO_TEST_URL);
-    await completeIntention({ page: tab, phrase: testPhrase });
+    await gotoRobust(tab, AudioTestPage.url);
+    await IntentionPage.complete(tab, testPhrase);
 
     // Start audio
-    await startAudioPlayback(tab);
+    await AudioTestPage.play(tab);
 
     // Duplicate the tab - it will need to complete intention too
     const duplicate = await context.newPage();
-    await gotoRobust(duplicate, AUDIO_TEST_URL);
-    await completeIntention({ page: duplicate, phrase: testPhrase });
+    await gotoRobust(duplicate, AudioTestPage.url);
+    await IntentionPage.complete(duplicate, testPhrase);
 
     // Wait beyond timeout
     await settingsPage.waitForTimeout(1500);
@@ -360,11 +303,11 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     // Focus original - should remain on audio page (audio exemption)
     await tab.bringToFront();
-    await expect(tab).toHaveURL(AUDIO_TEST_REGEX);
+    await expect(tab).toHaveURL(AudioTestPage.regex);
 
     // Focus duplicate - should also remain on audio page (audio exemption)
     await duplicate.bringToFront();
-    await expect(duplicate).toHaveURL(AUDIO_TEST_REGEX);
+    await expect(duplicate).toHaveURL(AudioTestPage.regex);
 
     await context.close();
   });
@@ -377,21 +320,21 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       context,
       timeoutMs: 1000,
       inactivityMode: 'all-except-audio',
-      url: AUDIO_TEST_DOMAIN,
+      url: AudioTestPage.domain,
       phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
     const tab = await context.newPage();
-    await gotoRobust(tab, AUDIO_TEST_URL);
-    await completeIntention({ page: tab, phrase: testPhrase });
+    await gotoRobust(tab, AudioTestPage.url);
+    await IntentionPage.complete(tab, testPhrase);
 
     // Start audio
-    await startAudioPlayback(tab);
+    await AudioTestPage.play(tab);
 
     // Duplicate the tab - it will need to complete intention too
     const duplicate = await context.newPage();
-    await gotoRobust(duplicate, AUDIO_TEST_URL);
-    await completeIntention({ page: duplicate, phrase: testPhrase });
+    await gotoRobust(duplicate, AudioTestPage.url);
+    await IntentionPage.complete(duplicate, testPhrase);
 
     // Open a new non-scope tab
     const nonScopeTab = await context.newPage();
@@ -405,11 +348,11 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     // Focus duplicate - should stay on audio page
     await duplicate.bringToFront();
-    await expect(duplicate).toHaveURL(AUDIO_TEST_REGEX);
+    await expect(duplicate).toHaveURL(AudioTestPage.regex);
 
     // Focus original - should stay on audio page
     await tab.bringToFront();
-    await expect(tab).toHaveURL(AUDIO_TEST_REGEX);
+    await expect(tab).toHaveURL(AudioTestPage.regex);
 
     await context.close();
   });
@@ -422,25 +365,25 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       context,
       timeoutMs: 1000,
       inactivityMode: 'all-except-audio',
-      url: AUDIO_TEST_DOMAIN,
+      url: AudioTestPage.domain,
       phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
     const tab = await context.newPage();
-    await gotoRobust(tab, AUDIO_TEST_URL);
-    await completeIntention({ page: tab, phrase: testPhrase });
+    await gotoRobust(tab, AudioTestPage.url);
+    await IntentionPage.complete(tab, testPhrase);
 
     // Start audio
-    await startAudioPlayback(tab);
+    await AudioTestPage.play(tab);
 
     // Create duplicate in a *new window* (same context) via window.open
-    const newWindow = await createNewWindowFromTab(tab, AUDIO_TEST_URL);
+    const newWindow = await createNewWindowFromTab(tab, AudioTestPage.url);
 
     // Complete intention in the new window
-    await completeIntention({ page: newWindow, phrase: testPhrase });
+    await IntentionPage.complete(newWindow, testPhrase);
 
     // Start audio in the new window
-    await startAudioPlayback(newWindow);
+    await AudioTestPage.play(newWindow);
 
     // Open a new non-scope tab
     const nonScopeTab = await context.newPage();
@@ -454,11 +397,11 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     // Focus duplicate in new window - should stay on audio page (audio exemption)
     await newWindow.bringToFront();
-    await expect(newWindow).toHaveURL(AUDIO_TEST_REGEX);
+    await expect(newWindow).toHaveURL(AudioTestPage.regex);
 
     // Focus original - should stay on audio page (audio exemption)
     await tab.bringToFront();
-    await expect(tab).toHaveURL(AUDIO_TEST_REGEX);
+    await expect(tab).toHaveURL(AudioTestPage.regex);
 
     await context.close();
   });
@@ -471,13 +414,13 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       context,
       timeoutMs: 1000,
       inactivityMode: 'all',
-      url: AUDIO_TEST_DOMAIN,
+      url: AudioTestPage.domain,
       phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
     const tab = await context.newPage();
-    await gotoRobust(tab, AUDIO_TEST_URL);
-    await completeIntention({ page: tab, phrase: testPhrase });
+    await gotoRobust(tab, AudioTestPage.url);
+    await IntentionPage.complete(tab, testPhrase);
 
     // Navigate away to a non-scoped page
     await gotoRobust(tab, 'https://google.com');
@@ -497,7 +440,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       tab,
       'https://jonathanmoregard.github.io/intender/test/assets/'
     );
-    await expect(tab).toHaveURL(INTENTION_PAGE_REGEX);
+    await expect(tab).toHaveURL(IntentionPage.regex);
 
     await context.close();
   });
@@ -510,15 +453,15 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       context,
       timeoutMs: 2000,
       inactivityMode: 'all',
-      url: AUDIO_TEST_DOMAIN,
+      url: AudioTestPage.domain,
       phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
 
     // Open and pass intention check for first tab
     const tabA = await context.newPage();
-    await gotoRobust(tabA, AUDIO_TEST_URL);
-    await completeIntention({ page: tabA, phrase: testPhrase });
+    await gotoRobust(tabA, AudioTestPage.url);
+    await IntentionPage.complete(tabA, testPhrase);
 
     // Open second tab in same scope
     const tabB = await context.newPage();
@@ -526,8 +469,8 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       tabB,
       'https://jonathanmoregard.github.io/intender/test/assets/'
     );
-    await expect(tabB).toHaveURL(INTENTION_PAGE_REGEX);
-    await completeIntention({ page: tabB, phrase: testPhrase });
+    await expect(tabB).toHaveURL(IntentionPage.regex);
+    await IntentionPage.complete(tabB, testPhrase);
 
     // Work on tab A longer than timeout (stay active)
     await bringToFrontAndWait(tabA);
@@ -535,7 +478,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     // Switch to tab B - should NOT show intention page (same-scope switch is safe)
     await bringToFrontAndWait(tabB);
-    await expect(tabB).toHaveURL(AUDIO_TEST_REGEX);
+    await expect(tabB).toHaveURL(AudioTestPage.regex);
     await tabB.waitForTimeout(100); // Settle time to prevent double-fires
 
     await context.close();
@@ -549,16 +492,16 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       context,
       timeoutMs: 1000,
       inactivityMode: 'all-except-audio',
-      url: AUDIO_TEST_DOMAIN,
+      url: AudioTestPage.domain,
       phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
     const tab = await context.newPage();
-    await gotoRobust(tab, AUDIO_TEST_URL);
-    await completeIntention({ page: tab, phrase: testPhrase });
+    await gotoRobust(tab, AudioTestPage.url);
+    await IntentionPage.complete(tab, testPhrase);
 
     // Start audio
-    await startAudioPlayback(tab);
+    await AudioTestPage.play(tab);
 
     // Wait ~2s
     await tab.waitForTimeout(2000);
@@ -576,7 +519,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await tab.waitForTimeout(2500);
 
     // Should NOT immediately show intention page (activity was refreshed)
-    await expect(tab).toHaveURL(AUDIO_TEST_REGEX);
+    await expect(tab).toHaveURL(AudioTestPage.regex);
 
     await context.close();
   });
@@ -589,20 +532,20 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       context,
       timeoutMs: 1000,
       inactivityMode: 'all',
-      url: AUDIO_TEST_DOMAIN,
+      url: AudioTestPage.domain,
       phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
 
     // Open and pass intention check for 2 tabs in same scope
     const tab1 = await context.newPage();
-    await gotoRobust(tab1, AUDIO_TEST_URL);
-    await completeIntention({ page: tab1, phrase: testPhrase });
+    await gotoRobust(tab1, AudioTestPage.url);
+    await IntentionPage.complete(tab1, testPhrase);
 
     const tab2 = await context.newPage();
-    await gotoRobust(tab2, AUDIO_TEST_URL);
-    await expect(tab2).toHaveURL(INTENTION_PAGE_REGEX);
-    await completeIntention({ page: tab2, phrase: testPhrase });
+    await gotoRobust(tab2, AudioTestPage.url);
+    await expect(tab2).toHaveURL(IntentionPage.regex);
+    await IntentionPage.complete(tab2, testPhrase);
 
     // Work on tab1 for over inactivity time
     await tab1.bringToFront();
@@ -610,7 +553,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     // Switch to intention-scope tab2 - should be tab2 (not intention screen)
     await tab2.bringToFront();
-    await expect(tab2).toHaveURL(AUDIO_TEST_REGEX);
+    await expect(tab2).toHaveURL(AudioTestPage.regex);
 
     await context.close();
   });
@@ -623,27 +566,27 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       context,
       timeoutMs: 2000,
       inactivityMode: 'all-except-audio',
-      url: AUDIO_TEST_DOMAIN,
+      url: AudioTestPage.domain,
       phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
 
     // Open audio1, don't play
     const audio1 = await context.newPage();
-    await gotoRobust(audio1, AUDIO_TEST_URL);
-    await completeIntention({ page: audio1, phrase: testPhrase });
+    await gotoRobust(audio1, AudioTestPage.url);
+    await IntentionPage.complete(audio1, testPhrase);
 
     // Open audio2, play
     const audio2 = await context.newPage();
-    await gotoRobust(audio2, AUDIO_TEST_URL);
-    await completeIntention({ page: audio2, phrase: testPhrase });
-    await startAudioPlayback(audio2);
+    await gotoRobust(audio2, AudioTestPage.url);
+    await IntentionPage.complete(audio2, testPhrase);
+    await AudioTestPage.play(audio2);
 
     // Open audio3, play
     const audio3 = await context.newPage();
-    await gotoRobust(audio3, AUDIO_TEST_URL);
-    await completeIntention({ page: audio3, phrase: testPhrase });
-    await startAudioPlayback(audio3);
+    await gotoRobust(audio3, AudioTestPage.url);
+    await IntentionPage.complete(audio3, testPhrase);
+    await AudioTestPage.play(audio3);
 
     // Open new tab
     const newTab = await context.newPage();
@@ -654,11 +597,11 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     // Go to audio1, verify no intention
     await audio1.bringToFront();
-    await audio1.waitForURL(AUDIO_TEST_REGEX);
+    await audio1.waitForURL(AudioTestPage.regex);
 
     // Go to audio3, verify no intention
     await audio3.bringToFront();
-    await audio3.waitForURL(AUDIO_TEST_REGEX);
+    await audio3.waitForURL(AudioTestPage.regex);
 
     // Close audio3
     await audio3.close();
@@ -671,11 +614,11 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     // Go to audio1, verify no intention (exemption still holds due to audio2)
     await audio1.bringToFront();
-    await audio1.waitForURL(AUDIO_TEST_REGEX);
+    await audio1.waitForURL(AudioTestPage.regex);
 
     // Go to audio2, verify no intention
     await audio2.bringToFront();
-    await audio2.waitForURL(AUDIO_TEST_REGEX);
+    await audio2.waitForURL(AudioTestPage.regex);
 
     // Close audio2
     await audio2.close();
@@ -688,7 +631,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     // Go to audio1, verify intention (exemption removed)
     await audio1.bringToFront();
-    await audio1.waitForURL(INTENTION_PAGE_REGEX);
+    await audio1.waitForURL(IntentionPage.regex);
 
     await context.close();
   });
@@ -701,16 +644,16 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       context,
       timeoutMs: 1000,
       inactivityMode: 'all-except-audio',
-      url: AUDIO_TEST_DOMAIN,
+      url: AudioTestPage.domain,
       phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
     const tab = await context.newPage();
-    await gotoRobust(tab, AUDIO_TEST_URL);
-    await completeIntention({ page: tab, phrase: testPhrase });
+    await gotoRobust(tab, AudioTestPage.url);
+    await IntentionPage.complete(tab, testPhrase);
 
     // Start audio and immediately mute it
-    await startAudioPlayback(tab);
+    await AudioTestPage.play(tab);
 
     // Mute the tab at the browser level (not just DOM audio element)
     await settingsPage.evaluate(async () => {
@@ -732,7 +675,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     // Focus tab - should show intention page (muted doesn't count as audible)
     await tab.bringToFront();
-    await expect(tab).toHaveURL(INTENTION_PAGE_REGEX);
+    await expect(tab).toHaveURL(IntentionPage.regex);
 
     await context.close();
   });
@@ -745,23 +688,23 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       context,
       timeoutMs: 2000,
       inactivityMode: 'all',
-      url: AUDIO_TEST_DOMAIN,
+      url: AudioTestPage.domain,
       phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
 
     // Navigate to site and pass intention check
     const mainTab = await context.newPage();
-    await gotoRobust(mainTab, AUDIO_TEST_URL);
-    await completeIntention({ page: mainTab, phrase: testPhrase });
+    await gotoRobust(mainTab, AudioTestPage.url);
+    await IntentionPage.complete(mainTab, testPhrase);
 
     // Open 3 other tabs within same site
     const sameSiteTabs = [];
     for (let i = 0; i < 3; i++) {
       const tab = await context.newPage();
-      await gotoRobust(tab, AUDIO_TEST_URL);
-      await tab.waitForURL(INTENTION_PAGE_REGEX, { timeout: 30000 });
-      await completeIntention({ page: tab, phrase: testPhrase });
+      await gotoRobust(tab, AudioTestPage.url);
+      await tab.waitForURL(IntentionPage.regex, { timeout: 30000 });
+      await IntentionPage.complete(tab, testPhrase);
       sameSiteTabs.push(tab);
     }
 
@@ -773,15 +716,15 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await settingsPage.waitForTimeout(1500);
 
     await mainTab.bringToFront();
-    await expect(mainTab).toHaveURL(INTENTION_PAGE_REGEX);
+    await expect(mainTab).toHaveURL(IntentionPage.regex);
 
     // Pass intention check again
-    await completeIntention({ page: mainTab, phrase: testPhrase });
+    await IntentionPage.complete(mainTab, testPhrase);
 
     // Focus other same-site tabs - should NOT show intention page
     for (const tab of sameSiteTabs) {
       await tab.bringToFront();
-      await expect(tab).toHaveURL(AUDIO_TEST_REGEX, { timeout: 30000 });
+      await expect(tab).toHaveURL(AudioTestPage.regex, { timeout: 30000 });
     }
 
     await context.close();
@@ -795,23 +738,23 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       context,
       timeoutMs: 2000,
       inactivityMode: 'all-except-audio',
-      url: AUDIO_TEST_DOMAIN,
+      url: AudioTestPage.domain,
       phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
 
     // Navigate to site and pass intention check
     const mainTab = await context.newPage();
-    await gotoRobust(mainTab, AUDIO_TEST_URL);
-    await completeIntention({ page: mainTab, phrase: testPhrase });
+    await gotoRobust(mainTab, AudioTestPage.url);
+    await IntentionPage.complete(mainTab, testPhrase);
 
     // Open 3 other tabs within same site
     const sameSiteTabs = [];
     for (let i = 0; i < 3; i++) {
       const tab = await context.newPage();
-      await gotoRobust(tab, AUDIO_TEST_URL);
-      await tab.waitForURL(INTENTION_PAGE_REGEX, { timeout: 30000 });
-      await completeIntention({ page: tab, phrase: testPhrase });
+      await gotoRobust(tab, AudioTestPage.url);
+      await tab.waitForURL(IntentionPage.regex, { timeout: 30000 });
+      await IntentionPage.complete(tab, testPhrase);
       sameSiteTabs.push(tab);
     }
 
@@ -823,15 +766,15 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await settingsPage.waitForTimeout(1500);
 
     await mainTab.bringToFront();
-    await expect(mainTab).toHaveURL(INTENTION_PAGE_REGEX);
+    await expect(mainTab).toHaveURL(IntentionPage.regex);
 
     // Pass intention check again
-    await completeIntention({ page: mainTab, phrase: testPhrase });
+    await IntentionPage.complete(mainTab, testPhrase);
 
     // Focus other same-site tabs - should NOT show intention page
     for (const tab of sameSiteTabs) {
       await tab.bringToFront();
-      await expect(tab).toHaveURL(AUDIO_TEST_REGEX, { timeout: 30000 });
+      await expect(tab).toHaveURL(AudioTestPage.regex, { timeout: 30000 });
     }
 
     await context.close();
@@ -841,7 +784,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
   test('test-17: intention page URL should not be treated as a scope', async () => {
     const testPhrase = getTestNameWithRun();
     const { context } = await launchExtension();
-    const { settingsPage } = await openSettingsPage(context, {
+    const settingsPage = await SettingsPage.openSettingsPage(context, {
       e2eInactivityTimeoutMs: 3000,
     });
     await toggleOsIdleEnabled(settingsPage, false);
@@ -853,28 +796,23 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await settingsPage.getByTestId('inactivity-mode-all').click();
 
     // Create intention for intention page URL (should error)
-    const urlInput1 = settingsPage.locator('input.url-input').first();
-    const phraseInput1 = settingsPage.locator('textarea.phrase-input').first();
-    await urlInput1.fill('chrome-extension://');
-    await phraseInput1.fill('This should error');
+    await SettingsPage.addIntention(settingsPage, {
+      url: 'chrome-extension://',
+      phrase: 'This should error',
+    });
 
-    // Add another intention for google
+    // Add another intention for google using helper at index 1
     await settingsPage.getByRole('button', { name: 'Add website' }).click();
-    const urlInput2 = settingsPage.locator('input.url-input').nth(1);
-    const phraseInput2 = settingsPage.locator('textarea.phrase-input').nth(1);
-    await urlInput2.fill('google.com');
-    await phraseInput2.fill('Google intention');
-
-    await waitForSyncStorageChange(settingsPage, ['intentions']);
-    await settingsPage.getByRole('button', { name: 'Save changes' }).click();
-    await settingsPage.waitForTimeout(300);
+    await SettingsPage.addIntentionAt(settingsPage, 1, {
+      url: 'google.com',
+      phrase: 'Google intention',
+    });
 
     // Go to test domain, verify intention page has the correct intention text
     const testTab = await context.newPage();
     await gotoRobust(testTab, 'https://google.com');
-    await expect(testTab).toHaveURL(INTENTION_PAGE_REGEX);
-    // Check if intention page loaded correctly (basic functionality test)
-    await expect(testTab.locator('#phrase')).toBeVisible();
+    await expect(testTab).toHaveURL(IntentionPage.regex);
+    await IntentionPage.expectLoaded(testTab);
     // Note: placeholder issue may be related to intention loading - needs investigation
 
     // Go to settings and verify intention page intention has errored URL box
@@ -893,13 +831,13 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       context,
       timeoutMs: 1000,
       inactivityMode: 'all',
-      url: AUDIO_TEST_DOMAIN,
+      url: AudioTestPage.domain,
       phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
     const tab = await context.newPage();
-    await gotoRobust(tab, AUDIO_TEST_URL);
-    await completeIntention({ page: tab, phrase: testPhrase });
+    await gotoRobust(tab, AudioTestPage.url);
+    await IntentionPage.complete(tab, testPhrase);
 
     // Open another tab
     const otherTab = await context.newPage();
@@ -912,11 +850,11 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await Promise.all([forceInactivityCheck(settingsPage), tab.bringToFront()]);
 
     // Should show intention page (but only one redirect should happen)
-    await expect(tab).toHaveURL(INTENTION_PAGE_REGEX);
+    await expect(tab).toHaveURL(IntentionPage.regex);
 
     // Wait a bit to ensure no second redirect occurs
     await tab.waitForTimeout(1000);
-    await expect(tab).toHaveURL(INTENTION_PAGE_REGEX);
+    await expect(tab).toHaveURL(IntentionPage.regex);
 
     await context.close();
   });
@@ -929,13 +867,13 @@ test.describe('Inactivity revalidation - parallel safe', () => {
       context,
       timeoutMs: 1000,
       inactivityMode: 'all',
-      url: AUDIO_TEST_DOMAIN,
+      url: AudioTestPage.domain,
       phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
     const tab = await context.newPage();
-    await gotoRobust(tab, AUDIO_TEST_URL);
-    await completeIntention({ page: tab, phrase: testPhrase });
+    await gotoRobust(tab, AudioTestPage.url);
+    await IntentionPage.complete(tab, testPhrase);
 
     // Simulate DevTools focus by creating a situation where window focus changes
     // but no valid active tab is available (what DevTools focus would cause)
@@ -950,7 +888,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     // The system should handle this gracefully with no errors and no redirects
     // Focus back to original tab - should remain on the target page (NO intention page)
     await tab.bringToFront();
-    await expect(tab).toHaveURL(AUDIO_TEST_REGEX);
+    await expect(tab).toHaveURL(AudioTestPage.regex);
 
     // Verify no errors occurred (tab should still be functional)
     await expect(tab.locator('body')).toBeVisible();
@@ -969,7 +907,7 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
       context,
       timeoutMs: 1000,
       inactivityMode: 'all',
-      url: AUDIO_TEST_DOMAIN,
+      url: AudioTestPage.domain,
       phrase: testPhrase,
     });
 
@@ -977,8 +915,8 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
 
     // Open and pass intention check for tab in Window A
     const tabA = await context.newPage();
-    await gotoRobust(tabA, AUDIO_TEST_URL);
-    await completeIntention({ page: tabA, phrase: testPhrase });
+    await gotoRobust(tabA, AudioTestPage.url);
+    await IntentionPage.complete(tabA, testPhrase);
 
     // Get Window A's ID for later focus control - use getCurrent() for deterministic selection
     const windowAId = await settingsPage.evaluate(async () => {
@@ -1010,10 +948,10 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
     ]);
 
     // Now navigate to the target URL to trigger extension interception
-    await gotoRobust(tabB, AUDIO_TEST_URL);
+    await gotoRobust(tabB, AudioTestPage.url);
 
-    await expect(tabB).toHaveURL(INTENTION_PAGE_REGEX);
-    await completeIntention({ page: tabB, phrase: testPhrase });
+    await expect(tabB).toHaveURL(IntentionPage.regex);
+    await IntentionPage.complete(tabB, testPhrase);
 
     // Focus Window A and work beyond timeout
     await settingsPage.evaluate(async windowId => {
@@ -1030,7 +968,7 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
     // Wait for focus change to take effect
     await tabB.waitForTimeout(200);
 
-    await expect(tabB).toHaveURL(AUDIO_TEST_REGEX);
+    await expect(tabB).toHaveURL(AudioTestPage.regex);
 
     await context.close();
   });
@@ -1041,19 +979,19 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
       context,
       timeoutMs: 1000,
       inactivityMode: 'all',
-      url: AUDIO_TEST_DOMAIN,
+      url: AudioTestPage.domain,
       phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
 
     // Window A with scoped tab
     const tabA = await context.newPage();
-    await gotoRobust(tabA, AUDIO_TEST_URL);
-    await completeIntention({ page: tabA, phrase: testPhrase });
+    await gotoRobust(tabA, AudioTestPage.url);
+    await IntentionPage.complete(tabA, testPhrase);
 
     // Window B with scoped tab (same scope) - create as separate window
-    const tabB = await createNewWindowFromTab(tabA, AUDIO_TEST_URL);
-    await completeIntention({ page: tabB, phrase: testPhrase });
+    const tabB = await createNewWindowFromTab(tabA, AudioTestPage.url);
+    await IntentionPage.complete(tabB, testPhrase);
 
     // Focus A, go idle
     await tabA.bringToFront();
@@ -1061,11 +999,11 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
 
     // Ensure A's window is focused before sending force-idle from extension context
     await forceInactivityCheck(settingsPage);
-    await tabA.waitForURL(INTENTION_PAGE_REGEX);
+    await tabA.waitForURL(IntentionPage.regex);
 
     // Focus B window - should show intention page (stale)
     await tabB.bringToFront();
-    await expect(tabB).toHaveURL(INTENTION_PAGE_REGEX);
+    await expect(tabB).toHaveURL(IntentionPage.regex);
 
     await context.close();
   });
@@ -1077,19 +1015,19 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
       context,
       timeoutMs: 1000,
       inactivityMode: 'all',
-      url: AUDIO_TEST_DOMAIN,
+      url: AudioTestPage.domain,
       phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
 
     // Window A with scoped tab
     const tabA = await context.newPage();
-    await gotoRobust(tabA, AUDIO_TEST_URL);
-    await completeIntention({ page: tabA, phrase: testPhrase });
+    await gotoRobust(tabA, AudioTestPage.url);
+    await IntentionPage.complete(tabA, testPhrase);
 
     // Window B with scoped tab (same scope) - create as separate window
-    const tabB = await createNewWindowFromTab(tabA, AUDIO_TEST_URL);
-    await completeIntention({ page: tabB, phrase: testPhrase });
+    const tabB = await createNewWindowFromTab(tabA, AudioTestPage.url);
+    await IntentionPage.complete(tabB, testPhrase);
 
     // Keep active for over timeout duration in A
     await tabA.bringToFront();
@@ -1097,7 +1035,7 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
 
     // Focus B - should NOT show intention page
     await tabB.bringToFront();
-    await expect(tabB).toHaveURL(AUDIO_TEST_REGEX);
+    await expect(tabB).toHaveURL(AudioTestPage.regex);
 
     await context.close();
   });
@@ -1109,21 +1047,21 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
       context,
       timeoutMs: 2000,
       inactivityMode: 'all',
-      url: AUDIO_TEST_DOMAIN,
+      url: AudioTestPage.domain,
       phrase: testPhrase,
     });
     await toggleOsIdleEnabled(settingsPage, false);
 
     // Window A with tabs a (scoped) and a' (non-scoped)
     const tabA = await context.newPage();
-    await gotoRobust(tabA, AUDIO_TEST_URL);
-    await completeIntention({ page: tabA, phrase: testPhrase });
+    await gotoRobust(tabA, AudioTestPage.url);
+    await IntentionPage.complete(tabA, testPhrase);
     const tabAPrime = await context.newPage();
     await gotoRobust(tabAPrime, 'https://google.com');
 
     // Window B with tab b (scoped, same scope as a) - create as separate window
-    const tabB = await createNewWindowFromTab(tabA, AUDIO_TEST_URL);
-    await completeIntention({ page: tabB, phrase: testPhrase });
+    const tabB = await createNewWindowFromTab(tabA, AudioTestPage.url);
+    await IntentionPage.complete(tabB, testPhrase);
 
     // Focus on b, then close window B
     await tabB.bringToFront();
@@ -1143,7 +1081,7 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
 
     // Switch to a - should show intention page
     await tabA.bringToFront();
-    await expect(tabA).toHaveURL(INTENTION_PAGE_REGEX);
+    await expect(tabA).toHaveURL(IntentionPage.regex);
 
     await context.close();
   });
@@ -1155,22 +1093,19 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
       context,
       timeoutMs: 15000,
       inactivityMode: 'all',
-      url: AUDIO_TEST_DOMAIN,
+      url: AudioTestPage.domain,
       phrase: testPhrase,
     });
     const tab = await context.newPage();
-    await gotoRobust(tab, AUDIO_TEST_URL);
-    await completeIntention({
-      page: tab,
-      phrase: testPhrase,
-    });
+    await gotoRobust(tab, AudioTestPage.url);
+    await IntentionPage.complete(tab, testPhrase);
 
     // Ensure system is truly idle by jiggling mouse slightly
     execSync('xdotool mousemove_relative 1 0'); // small jiggle
 
     await tab.waitForTimeout(16000);
 
-    await expect(tab).toHaveURL(INTENTION_PAGE_REGEX);
+    await expect(tab).toHaveURL(IntentionPage.regex);
 
     await context.close();
   });
@@ -1180,7 +1115,7 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
     const { context } = await launchExtension();
 
     // Configure inactivity first (no intention yet)
-    const { settingsPage } = await openSettingsPage(context, {
+    const settingsPage = await SettingsPage.openSettingsPage(context, {
       e2eInactivityTimeoutMs: 2000,
     });
     const advancedToggle = settingsPage.getByTestId('advanced-settings-toggle');
@@ -1191,19 +1126,14 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
 
     // Open first tab (non-scoped initially)
     const tab1 = await context.newPage();
-    await gotoRobust(tab1, AUDIO_TEST_URL);
+    await gotoRobust(tab1, AudioTestPage.url);
 
     // Now add intention in settings to make it scoped
     await settingsPage.bringToFront();
-    const urlInput = settingsPage.locator('input.url-input').first();
-    const phraseInput = settingsPage.locator('textarea.phrase-input').first();
-    await urlInput.fill(AUDIO_TEST_DOMAIN);
-    await phraseInput.fill(
-      'test-25: add intention after opening tab, then focus after timeout shows intention page'
-    );
-    await waitForSyncStorageChange(settingsPage, ['intentions']);
-    await settingsPage.getByRole('button', { name: 'Save changes' }).click();
-    await settingsPage.waitForTimeout(300);
+    await SettingsPage.addIntention(settingsPage, {
+      url: AudioTestPage.domain,
+      phrase: testPhrase,
+    });
 
     // Open second tab (non-scoped)
     const tab2 = await context.newPage();
@@ -1217,7 +1147,7 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
 
     // Go to first tab - should show intention page
     await tab1.bringToFront();
-    await expect(tab1).toHaveURL(INTENTION_PAGE_REGEX);
+    await expect(tab1).toHaveURL(IntentionPage.regex);
 
     await context.close();
   });

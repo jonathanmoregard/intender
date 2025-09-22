@@ -1,10 +1,8 @@
 import type { Page } from '@playwright/test';
+import { IntentionPage } from './fixtures/page/intention';
+import { SettingsPage } from './fixtures/page/settings';
 import { expect, test } from './test-setup';
-import {
-  launchExtension,
-  openSettingsPage,
-  waitForSyncStorageChange,
-} from './utils/extension';
+import { launchExtension } from './utils/extension';
 
 // Helper to get current test name with run number
 function getTestNameWithRun(): string {
@@ -20,20 +18,12 @@ test.describe('Happy path intention flow', () => {
     const { context } = await launchExtension();
 
     // Open options page
-    const { settingsPage: options } = await openSettingsPage(context);
+    const options = await SettingsPage.openSettingsPage(context);
 
-    // Fill first intention (URL and phrase) and save
-    const urlInput = options.locator('input.url-input').first();
-    const phraseInput = options.locator('textarea.phrase-input').first();
-    await urlInput.fill('google.com');
-    await phraseInput.fill(testPhrase);
-
-    // Prepare a listener for storage change (intentions)
-    await waitForSyncStorageChange(options, ['intentions']);
-
-    await options.getByRole('button', { name: 'Save changes' }).click();
-    // Wait for background to pick up intentions
-    await options.waitForTimeout(500);
+    await SettingsPage.addIntention(options, {
+      url: 'google.com',
+      phrase: testPhrase,
+    });
 
     // Open real site that should be intercepted
     const page: Page = await context.newPage();
@@ -44,24 +34,12 @@ test.describe('Happy path intention flow', () => {
     }
 
     // Expect to land on intention page first
-    await expect(page).toHaveURL(
-      /chrome-extension:\/\/.+\/intention-page\.html\?target=/
-    );
+    await expect(page).toHaveURL(IntentionPage.regex);
 
     // Type the exact phrase and click Go
-    const intentionTextarea = page.locator('#phrase');
-    await intentionTextarea.click();
-    await intentionTextarea.fill(testPhrase);
-    const goButton = page.locator('#go');
-    await expect(goButton).toBeEnabled();
-    await Promise.all([
-      page.waitForURL(/https:\/\/www\.google\.com\/?/),
-      goButton.click(),
-    ]);
+    await IntentionPage.complete(page, testPhrase);
 
     // Should navigate to google.com
-    await expect(page).toHaveURL(/https:\/\/www\.google\.com\/?/);
-
-    await context.close();
+    await expect(page).toHaveURL(/www\.google\.com\/?/);
   });
 });

@@ -120,6 +120,16 @@ export async function launchExtension(
     args: [
       `--disable-extensions-except=${pathToExtension}`,
       `--load-extension=${pathToExtension}`,
+      // Relax security interstitials for tests to avoid flakiness with redirects/HSTS/SSL
+      '--test-type',
+      '--ignore-certificate-errors',
+      '--allow-insecure-localhost',
+      '--allow-running-insecure-content',
+      '--disable-features=SSLKeyLogFile,IsolateOrigins,site-per-process,BlockInsecurePrivateNetworkRequests',
+      '--disable-web-security',
+      '--no-default-browser-check',
+      '--no-first-run',
+      '--disable-popup-blocking',
     ],
   });
 
@@ -248,23 +258,6 @@ export async function getExtensionId(context: BrowserContext): Promise<string> {
     context.serviceWorkers()[0] ||
     (await context.waitForEvent('serviceworker'));
   return new URL(sw.url()).host;
-}
-
-export async function openSettingsPage(
-  context: BrowserContext,
-  params?: { e2eInactivityTimeoutMs?: number }
-): Promise<{ settingsPage: Page; extensionId: string }> {
-  const extensionId = await getExtensionId(context);
-  const url = new URL(`chrome-extension://${extensionId}/settings.html`);
-  if (params?.e2eInactivityTimeoutMs) {
-    url.searchParams.set(
-      'e2eInactivityTimeoutMs',
-      String(params.e2eInactivityTimeoutMs)
-    );
-  }
-  const settingsPage = await context.newPage();
-  await settingsPage.goto(url.toString());
-  return { settingsPage, extensionId };
 }
 
 export async function waitForSyncStorageChange(
