@@ -2,14 +2,14 @@ import type { Page } from '@playwright/test';
 import { IntentionPage } from './fixtures/page/intention';
 import { SettingsPage } from './fixtures/page/settings';
 import { expect, test } from './test-setup';
-import { launchExtension, openSettingsPage } from './utils/extension';
+import { launchExtension } from './utils/extension';
 
 test.describe('URL Matching', () => {
   test('facebook.se intention should capture facebook.com', async () => {
     const { context } = await launchExtension();
 
     // Open settings page
-    const { settingsPage } = await openSettingsPage(context);
+    const settingsPage = await SettingsPage.openSettingsPage(context);
 
     // Wait for page to load
     await settingsPage.waitForLoadState('networkidle');
@@ -43,7 +43,7 @@ test.describe('URL Matching', () => {
     const { context } = await launchExtension();
 
     // Open settings page
-    const { settingsPage } = await openSettingsPage(context);
+    const settingsPage = await SettingsPage.openSettingsPage(context);
 
     await settingsPage.waitForLoadState('networkidle');
 
@@ -74,7 +74,7 @@ test.describe('URL Matching', () => {
     const { context } = await launchExtension();
 
     // Open settings page
-    const { settingsPage } = await openSettingsPage(context);
+    const settingsPage = await SettingsPage.openSettingsPage(context);
 
     // Wait for page to load
     await settingsPage.waitForLoadState('networkidle');

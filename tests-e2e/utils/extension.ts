@@ -260,23 +260,6 @@ export async function getExtensionId(context: BrowserContext): Promise<string> {
   return new URL(sw.url()).host;
 }
 
-export async function openSettingsPage(
-  context: BrowserContext,
-  params?: { e2eInactivityTimeoutMs?: number }
-): Promise<{ settingsPage: Page; extensionId: string }> {
-  const extensionId = await getExtensionId(context);
-  const url = new URL(`chrome-extension://${extensionId}/settings.html`);
-  if (params?.e2eInactivityTimeoutMs) {
-    url.searchParams.set(
-      'e2eInactivityTimeoutMs',
-      String(params.e2eInactivityTimeoutMs)
-    );
-  }
-  const settingsPage = await context.newPage();
-  await settingsPage.goto(url.toString());
-  return { settingsPage, extensionId };
-}
-
 export async function waitForSyncStorageChange(
   page: Page,
   keys: string[]

@@ -2,7 +2,7 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { SettingsPage } from './fixtures/page/settings';
 import { expect, test } from './test-setup';
-import { launchExtension, openSettingsPage } from './utils/extension';
+import { launchExtension } from './utils/extension';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -10,7 +10,7 @@ const __dirname = dirname(__filename);
 test.describe('Import/Export', () => {
   test('should import intentions with backwards compatibility', async () => {
     const { context } = await launchExtension();
-    const { settingsPage } = await openSettingsPage(context);
+    const settingsPage = await SettingsPage.openSettingsPage(context);
     await settingsPage.waitForLoadState('networkidle');
 
     // Open the more options dropdown
@@ -54,7 +54,7 @@ test.describe('Import/Export', () => {
 
   test('should export intentions correctly', async () => {
     const { context } = await launchExtension();
-    const { settingsPage } = await openSettingsPage(context);
+    const settingsPage = await SettingsPage.openSettingsPage(context);
     await settingsPage.waitForLoadState('networkidle');
 
     // Add a test intention
@@ -86,7 +86,7 @@ test.describe('Import/Export', () => {
 
   test('should handle malformed import data gracefully', async () => {
     const { context } = await launchExtension();
-    const { settingsPage } = await openSettingsPage(context);
+    const settingsPage = await SettingsPage.openSettingsPage(context);
     await settingsPage.waitForLoadState('networkidle');
 
     // Open the more options dropdown
@@ -110,7 +110,7 @@ test.describe('Import/Export', () => {
 
   test('should regenerate GUIDs for duplicate IDs on import', async () => {
     const { context } = await launchExtension();
-    const { settingsPage } = await openSettingsPage(context);
+    const settingsPage = await SettingsPage.openSettingsPage(context);
     await settingsPage.waitForLoadState('networkidle');
 
     // Open the more options dropdown

@@ -7,16 +7,19 @@ export const SettingsPage = {
   regex: /settings\.html$/,
 
   async openSettingsPage(
-    context: BrowserContext
-  ): Promise<{ settingsPage: Page }> {
-    const pages = context.pages();
-    const extensionPage = pages.find(p => p.url().includes('settings.html'));
-    if (extensionPage) {
-      return { settingsPage: extensionPage };
+    context: BrowserContext,
+    params?: { e2eInactivityTimeoutMs?: number }
+  ): Promise<Page> {
+    const url = new URL(this.url);
+    if (params?.e2eInactivityTimeoutMs) {
+      url.searchParams.set(
+        'e2eInactivityTimeoutMs',
+        String(params.e2eInactivityTimeoutMs)
+      );
     }
-    const page = await context.newPage();
-    await page.goto(this.url);
-    return { settingsPage: page };
+    const settingsPage = await context.newPage();
+    await settingsPage.goto(url.toString());
+    return settingsPage;
   },
 
   async openMoreOptions(page: Page): Promise<void> {

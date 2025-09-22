@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test';
 import { IntentionPage } from './fixtures/page/intention';
 import { SettingsPage } from './fixtures/page/settings';
 import { expect, test } from './test-setup';
-import { launchExtension, openSettingsPage } from './utils/extension';
+import { launchExtension } from './utils/extension';
 
 // Helper to get current test name with run number
 function getTestNameWithRun(): string {
@@ -18,7 +18,7 @@ test.describe('Happy path intention flow', () => {
     const { context } = await launchExtension();
 
     // Open options page
-    const { settingsPage: options } = await openSettingsPage(context);
+    const options = await SettingsPage.openSettingsPage(context);
 
     await SettingsPage.addIntention(options, {
       url: 'google.com',

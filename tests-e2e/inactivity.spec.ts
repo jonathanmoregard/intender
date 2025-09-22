@@ -5,7 +5,7 @@ import { SettingsPage } from './fixtures/page/settings';
 
 import { execSync } from 'node:child_process';
 import { expect, test } from './test-setup';
-import { launchExtension, openSettingsPage } from './utils/extension';
+import { launchExtension } from './utils/extension';
 
 // Helper to get current test name with run number
 function getTestNameWithRun(): string {
@@ -67,7 +67,7 @@ async function setupInactivityAndIntention(opts: {
   url: string;
   phrase: string;
 }) {
-  const { settingsPage } = await openSettingsPage(opts.context, {
+  const settingsPage = await SettingsPage.openSettingsPage(opts.context, {
     e2eInactivityTimeoutMs: opts.timeoutMs,
   });
 
@@ -784,7 +784,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
   test('test-17: intention page URL should not be treated as a scope', async () => {
     const testPhrase = getTestNameWithRun();
     const { context } = await launchExtension();
-    const { settingsPage } = await openSettingsPage(context, {
+    const settingsPage = await SettingsPage.openSettingsPage(context, {
       e2eInactivityTimeoutMs: 3000,
     });
     await toggleOsIdleEnabled(settingsPage, false);
@@ -1115,7 +1115,7 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
     const { context } = await launchExtension();
 
     // Configure inactivity first (no intention yet)
-    const { settingsPage } = await openSettingsPage(context, {
+    const settingsPage = await SettingsPage.openSettingsPage(context, {
       e2eInactivityTimeoutMs: 2000,
     });
     const advancedToggle = settingsPage.getByTestId('advanced-settings-toggle');
