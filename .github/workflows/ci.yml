@@ -45,6 +45,9 @@ jobs:
       - name: Install Playwright Chromium and system deps
         run: npx playwright install --with-deps chromium
 
+      - name: Install xdotool
+        run: sudo apt-get update && sudo apt-get install -y xdotool
+
       - name: Run E2E tests (Chromium via Xvfb)
         run: xvfb-run -a pnpm test:e2e
 
