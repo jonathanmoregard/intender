@@ -1,8 +1,10 @@
-import { waitForSyncStorageChange } from '@/tests-e2e/utils/extension';
+import {
+  getExtensionId,
+  waitForSyncStorageChange,
+} from '@/tests-e2e/utils/extension';
 import { BrowserContext, expect, Page } from '@playwright/test';
 
 export const SettingsPage = {
-  url: 'chrome-extension://__EXTENSION_ID__/settings.html',
   domain: 'chrome-extension',
   regex: /settings\.html$/,
 
@@ -10,7 +12,8 @@ export const SettingsPage = {
     context: BrowserContext,
     params?: { e2eInactivityTimeoutMs?: number }
   ): Promise<Page> {
-    const url = new URL(this.url);
+    const extensionId = await getExtensionId(context);
+    const url = new URL(`chrome-extension://${extensionId}/settings.html`);
     if (params?.e2eInactivityTimeoutMs) {
       url.searchParams.set(
         'e2eInactivityTimeoutMs',
