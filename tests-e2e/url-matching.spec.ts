@@ -1,4 +1,6 @@
 import type { Page } from '@playwright/test';
+import { IntentionPage } from './fixtures/page/intention';
+import { SettingsPage } from './fixtures/page/settings';
 import { expect, test } from './test-setup';
 import { launchExtension, openSettingsPage } from './utils/extension';
 
@@ -13,24 +15,10 @@ test.describe('URL Matching', () => {
     await settingsPage.waitForLoadState('networkidle');
 
     // Add facebook.se intention
-    const urlInput = settingsPage.locator('input.url-input').first();
-    const phraseInput = settingsPage.locator('textarea.phrase-input').first();
-
-    // Fill the inputs
-    await urlInput.fill('facebook.se');
-    await phraseInput.fill('I want to check social media');
-
-    // Wait a bit for validation
-    await settingsPage.waitForTimeout(1000);
-
-    // Click save without waiting for storage change
-    await settingsPage.getByRole('button', { name: 'Save changes' }).click();
-
-    // Wait for background to pick up intentions
-    await settingsPage.waitForTimeout(2000);
-
-    // Verify intention was added by checking the URL input value
-    await expect(urlInput).toHaveValue('facebook.se');
+    await SettingsPage.addIntention(settingsPage, {
+      url: 'facebook.se',
+      phrase: 'I want to check social media',
+    });
 
     // Navigate to facebook.com to test matching
     const page: Page = await context.newPage();
@@ -43,9 +31,7 @@ test.describe('URL Matching', () => {
     }
 
     // Should show intention page (pause page)
-    await expect(page).toHaveURL(
-      /chrome-extension:\/\/.+\/intention-page\.html\?target=/
-    );
+    await expect(page).toHaveURL(IntentionPage.regex);
     await expect(
       page.locator('text=I want to check social media')
     ).toBeVisible();
@@ -62,12 +48,10 @@ test.describe('URL Matching', () => {
     await settingsPage.waitForLoadState('networkidle');
 
     // Add intention for facebook.com (target of redirect)
-    const urlInput = settingsPage.locator('input.url-input').first();
-    const phraseInput = settingsPage.locator('textarea.phrase-input').first();
-    await urlInput.fill('facebook.com');
-    await phraseInput.fill('I want to test redirect behavior');
-    await settingsPage.getByRole('button', { name: 'Save changes' }).click();
-    await settingsPage.waitForTimeout(1000);
+    await SettingsPage.addIntention(settingsPage, {
+      url: 'facebook.com',
+      phrase: 'I want to test redirect behavior',
+    });
 
     // Navigate to faceboo.com (outside intention scope)
     // that redirects to facebook.com (inside intention scope)
@@ -79,9 +63,7 @@ test.describe('URL Matching', () => {
     }
 
     // Should land on intention page (even though original was a redirect)
-    await expect(page).toHaveURL(
-      /chrome-extension:\/\/.+\/intention-page\.html\?target=/
-    );
+    await expect(page).toHaveURL(IntentionPage.regex);
     await expect(
       page.locator('text=I want to test redirect behavior')
     ).toBeVisible();
@@ -98,22 +80,10 @@ test.describe('URL Matching', () => {
     await settingsPage.waitForLoadState('networkidle');
 
     // Add facebook.com intention
-    const urlInput = settingsPage.locator('input.url-input').first();
-    const phraseInput = settingsPage.locator('textarea.phrase-input').first();
-    await urlInput.fill('facebook.com');
-    await phraseInput.fill('I want to check social media');
-
-    // Wait a bit for validation
-    await settingsPage.waitForTimeout(1000);
-
-    // Click save without waiting for storage change
-    await settingsPage.getByRole('button', { name: 'Save changes' }).click();
-
-    // Wait for background to pick up intentions
-    await settingsPage.waitForTimeout(2000);
-
-    // Verify intention was added by checking the URL input value
-    await expect(urlInput).toHaveValue('facebook.com');
+    await SettingsPage.addIntention(settingsPage, {
+      url: 'facebook.com',
+      phrase: 'I want to check social media',
+    });
 
     // Navigate to facebook.se to test matching
     const page: Page = await context.newPage();
@@ -124,9 +94,7 @@ test.describe('URL Matching', () => {
     }
 
     // Should show intention page (pause page)
-    await expect(page).toHaveURL(
-      /chrome-extension:\/\/.+\/intention-page\.html\?target=/
-    );
+    await expect(page).toHaveURL(IntentionPage.regex);
     await expect(
       page.locator('text=I want to check social media')
     ).toBeVisible();

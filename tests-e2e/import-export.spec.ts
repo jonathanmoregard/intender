@@ -1,22 +1,11 @@
-import { readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import { SettingsPage } from './fixtures/page/settings';
 import { expect, test } from './test-setup';
 import { launchExtension, openSettingsPage } from './utils/extension';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-
-const testIntentions = JSON.parse(
-  readFileSync(join(__dirname, 'fixtures/test-intentions.json'), 'utf-8')
-);
-
-const duplicateGuidIntentions = JSON.parse(
-  readFileSync(
-    join(__dirname, 'fixtures/duplicate-guids-intentions.json'),
-    'utf-8'
-  )
-);
 
 test.describe('Import/Export', () => {
   test('should import intentions with backwards compatibility', async () => {
@@ -24,28 +13,10 @@ test.describe('Import/Export', () => {
     const { settingsPage } = await openSettingsPage(context);
     await settingsPage.waitForLoadState('networkidle');
 
-    // Use test data from fixture file
-    const testData = testIntentions;
-
     // Open the more options dropdown
-    const moreOptionsButton = settingsPage.getByTestId('more-options-btn');
-    await moreOptionsButton.click();
-
-    // Wait for dropdown to appear
-    await settingsPage
-      .getByTestId('more-options-dropdown')
-      .waitFor({ state: 'visible' });
-
-    // Set up file upload handler
-    const fileChooserPromise = settingsPage.waitForEvent('filechooser');
-
-    // Click import button to trigger file dialog
-    const importButton = settingsPage.getByTestId('import-intentions-btn');
-    await importButton.click();
-
-    // Handle file selection
-    const fileChooser = await fileChooserPromise;
-    await fileChooser.setFiles(
+    await SettingsPage.openMoreOptions(settingsPage);
+    await SettingsPage.importFromFile(
+      settingsPage,
       join(__dirname, 'fixtures/test-intentions.json')
     );
 
@@ -87,46 +58,16 @@ test.describe('Import/Export', () => {
     await settingsPage.waitForLoadState('networkidle');
 
     // Add a test intention
-    const urlInput = settingsPage.locator('input.url-input').first();
-    const phraseInput = settingsPage.locator('textarea.phrase-input').first();
-
-    await urlInput.fill('example.com');
-    await phraseInput.fill('Test export functionality');
-    await settingsPage.getByRole('button', { name: 'Save changes' }).click();
-    await settingsPage.waitForTimeout(1000);
-
-    // Mock the download functionality
-    let downloadedData: string | null = null;
-    await settingsPage.exposeFunction('mockDownload', (data: string) => {
-      downloadedData = data;
-    });
-
-    // Override the download behavior
-    await settingsPage.evaluate(() => {
-      const originalCreateObjectURL = URL.createObjectURL;
-      URL.createObjectURL = function (blob: Blob) {
-        const reader = new FileReader();
-        reader.onload = function () {
-          (window as any).mockDownload(reader.result as string);
-        };
-        reader.readAsText(blob);
-        return 'mock-url';
-      };
+    await SettingsPage.addIntention(settingsPage, {
+      url: 'example.com',
+      phrase: 'Test export functionality',
     });
 
     // Open the more options dropdown
-    const moreOptionsButton = settingsPage.getByTestId('more-options-btn');
-    await moreOptionsButton.click();
+    await SettingsPage.openMoreOptions(settingsPage);
 
-    // Wait for dropdown to appear
-    await settingsPage
-      .getByTestId('more-options-dropdown')
-      .waitFor({ state: 'visible' });
-
-    // Click export button
-    const exportButton = settingsPage.getByTestId('export-intentions-btn');
-    await exportButton.click();
-    await settingsPage.waitForTimeout(1000);
+    // Export to memory using page model helper
+    const downloadedData = await SettingsPage.exportToMemory(settingsPage);
 
     // Verify export data
     expect(downloadedData).toBeTruthy();
@@ -149,22 +90,11 @@ test.describe('Import/Export', () => {
     await settingsPage.waitForLoadState('networkidle');
 
     // Open the more options dropdown
-    const moreOptionsButton = settingsPage.locator('.more-options-btn');
-    await moreOptionsButton.click();
+    await SettingsPage.openMoreOptions(settingsPage);
 
-    // Wait for dropdown to appear
-    await settingsPage.waitForSelector('.more-options-dropdown.show');
-
-    // Set up file upload handler
-    const fileChooserPromise = settingsPage.waitForEvent('filechooser');
-
-    // Click import button to trigger file dialog
-    const importButton = settingsPage.getByTestId('import-intentions-btn');
-    await importButton.click();
-
-    // Handle file selection with malformed JSON
-    const fileChooser = await fileChooserPromise;
-    await fileChooser.setFiles(
+    // Import malformed JSON via page model
+    await SettingsPage.importFromFile(
+      settingsPage,
       join(__dirname, 'fixtures/malformed-intentions.json')
     );
 
@@ -184,24 +114,11 @@ test.describe('Import/Export', () => {
     await settingsPage.waitForLoadState('networkidle');
 
     // Open the more options dropdown
-    const moreOptionsButton = settingsPage.getByTestId('more-options-btn');
-    await moreOptionsButton.click();
+    await SettingsPage.openMoreOptions(settingsPage);
 
-    // Wait for dropdown to appear
-    await settingsPage
-      .getByTestId('more-options-dropdown')
-      .waitFor({ state: 'visible' });
-
-    // Set up file upload handler
-    const fileChooserPromise = settingsPage.waitForEvent('filechooser');
-
-    // Click import button to trigger file dialog
-    const importButton = settingsPage.getByTestId('import-intentions-btn');
-    await importButton.click();
-
-    // Handle file selection with duplicate GUIDs
-    const fileChooser = await fileChooserPromise;
-    await fileChooser.setFiles(
+    // Import duplicate GUIDs via page model
+    await SettingsPage.importFromFile(
+      settingsPage,
       join(__dirname, 'fixtures/duplicate-guids-intentions.json')
     );
 
@@ -230,55 +147,11 @@ test.describe('Import/Export', () => {
       'Third intention with same duplicate ID'
     );
 
-    // Now export to verify GUIDs were regenerated
-    let exportedData: string | null = null;
-    await settingsPage.exposeFunction('mockDownload', (data: string) => {
-      exportedData = data;
-    });
-
-    // Override the download behavior
-    await settingsPage.evaluate(() => {
-      const originalCreateObjectURL = URL.createObjectURL;
-      URL.createObjectURL = function (blob: Blob) {
-        const reader = new FileReader();
-        reader.onload = function () {
-          (window as any).mockDownload(reader.result as string);
-        };
-        reader.readAsText(blob);
-        return 'mock-url';
-      };
-    });
-
-    // Open dropdown again for export
-    await settingsPage.evaluate(() =>
-      window.scrollTo(0, document.body.scrollHeight)
-    );
-    await settingsPage.waitForTimeout(500);
-
-    const dropdown = settingsPage.getByTestId('more-options-dropdown');
-    const openBtn = settingsPage.getByTestId('more-options-btn');
-
-    await openBtn.scrollIntoViewIfNeeded();
-    await openBtn.click();
-
-    // Retry once if not visible yet (React re-render or layout shift)
-    try {
-      await dropdown.waitFor({ state: 'visible', timeout: 1000 });
-    } catch {
-      await openBtn.click();
-      await dropdown.waitFor({ state: 'visible', timeout: 4000 });
-    }
-
-    // Click export button
-    const exportButton = settingsPage.getByTestId('export-intentions-btn');
-    await exportButton.waitFor({ state: 'visible', timeout: 5000 });
-    await exportButton.scrollIntoViewIfNeeded();
-    await exportButton.click();
-    await settingsPage.waitForTimeout(2000);
+    const exportedData = await SettingsPage.exportToMemory(settingsPage);
 
     // Verify export data has unique GUIDs
     expect(exportedData).toBeTruthy();
-    const exportedIntentions = JSON.parse(exportedData!);
+    const exportedIntentions = JSON.parse(exportedData);
 
     expect(exportedIntentions).toHaveLength(3);
 
