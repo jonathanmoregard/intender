@@ -41,6 +41,7 @@ const SettingsTab = memo(
     const [inactivityMode, setInactivityMode] = useState<InactivityMode>('off');
     const [inactivityTimeoutMinutes, setInactivityTimeoutMinutes] =
       useState(30);
+    const [canCopyIntentionText, setCanCopyIntentionText] = useState(false);
 
     const [blurredUrlIds, setBlurredUrlIds] = useState<Set<string>>(new Set());
     const [blurredPhraseIds, setBlurredPhraseIds] = useState<Set<string>>(
@@ -149,6 +150,10 @@ const SettingsTab = memo(
       await storage.set({ showAdvancedSettings: expanded });
     }, []);
 
+    const saveCanCopyIntentionText = useCallback(async (enabled: boolean) => {
+      await storage.set({ canCopyIntentionText: enabled });
+    }, []);
+
     // Debounced save function
     const debouncedSave = useCallback(
       debounce(async (intentionsToSave: RawIntention[]) => {
@@ -175,6 +180,7 @@ const SettingsTab = memo(
             : 30
         );
         setShowAdvancedSettings(data.showAdvancedSettings ?? false);
+        setCanCopyIntentionText(data.canCopyIntentionText ?? false);
 
         // E2E testing hook: allow overriding inactivity timeout via query param
         try {
@@ -820,6 +826,21 @@ const SettingsTab = memo(
                 <span className='setting-text'>
                   Allow small typos when typing your intention
                 </span>
+              </label>
+            </div>
+
+            <div className='setting-group'>
+              <label className='setting-label clickable-setting-item'>
+                <input
+                  type='checkbox'
+                  checked={canCopyIntentionText}
+                  onChange={e => {
+                    const enabled = e.target.checked;
+                    setCanCopyIntentionText(enabled);
+                    saveCanCopyIntentionText(enabled);
+                  }}
+                />
+                <span className='setting-text'>Can copy intention text</span>
               </label>
             </div>
           </div>
