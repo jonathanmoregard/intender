@@ -13,10 +13,10 @@
   --success-rgb: var(--primary-rgb);
   --success: var(--primary);
 
-  --primary-rgb: 137, 142, 33; /* #898e21 - olive gold, 10% greener */
+  --primary-rgb: 137, 142, 33; /* #898e21 - olive-gold */
   --primary: rgb(var(--primary-rgb));
 
-  --primary-dark-rgb: 84, 87, 20; /* #545714 - dark olive gold, 10% greener */
+  --primary-dark-rgb: 84, 87, 20; /* #545714 - dark olive-gold */
   --primary-dark: rgb(var(--primary-dark-rgb));
 
   /* Secondary */
