@@ -12,6 +12,7 @@ import {
 import { storage, type InactivityMode } from '../../components/storage';
 import { minutesToMs, msToMinutes } from '../../components/time';
 import { generateUUID } from '../../components/uuid';
+import packageJson from '../../package.json';
 
 type Tab = 'settings' | 'about';
 
@@ -932,7 +933,7 @@ const AboutTab = memo(() => {
 
         <div className='version-info'>
           <p>
-            <strong>Version:</strong> 1.0.0
+            <strong>Version:</strong> {packageJson.version}
           </p>
           <p>
             <strong>Made with:</strong> React, TypeScript, WXT
