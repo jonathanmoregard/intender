@@ -1,6 +1,8 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <link rel="stylesheet" href="/styles/theme.css" />
+
     <link rel="preload" as="image" href="/assets/misty-1920.avif" />
     <style>
       @keyframes breathe {
@@ -89,7 +91,11 @@
         height: 100vh;
         margin: 0;
         background-image:
-          linear-gradient(rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0.28)), var(--bg);
+          linear-gradient(
+            rgba(var(--shadow-weak-rgb), 0.28),
+            rgba(var(--shadow-weak-rgb), 0.28)
+          ),
+          var(--bg);
         background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
@@ -132,8 +138,8 @@
         bottom: 0;
         background: linear-gradient(
           135deg,
-          rgba(254, 227, 164, 0.15),
-          rgba(254, 248, 234, 0.1)
+          rgba(var(--gold-rgb), 0.15),
+          rgba(var(--off-white-rgb), 0.1)
         );
         pointer-events: none;
         z-index: 1;
@@ -150,32 +156,32 @@
         background-image:
           radial-gradient(
             1px 1px at 15% 25%,
-            rgba(255, 255, 255, 0.08) 50%,
+            rgba(var(--white-rgb), 0.08) 50%,
             transparent 50%
           ),
           radial-gradient(
             1px 1px at 85% 75%,
-            rgba(255, 255, 255, 0.06) 50%,
+            rgba(var(--white-rgb), 0.06) 50%,
             transparent 50%
           ),
           radial-gradient(
             1px 1px at 35% 85%,
-            rgba(255, 255, 255, 0.07) 50%,
+            rgba(var(--white-rgb), 0.07) 50%,
             transparent 50%
           ),
           radial-gradient(
             1px 1px at 65% 15%,
-            rgba(255, 255, 255, 0.05) 50%,
+            rgba(var(--white-rgb), 0.05) 50%,
             transparent 50%
           ),
           radial-gradient(
             1px 1px at 45% 55%,
-            rgba(255, 255, 255, 0.04) 50%,
+            rgba(var(--white-rgb), 0.04) 50%,
             transparent 50%
           ),
           radial-gradient(
             1px 1px at 75% 45%,
-            rgba(255, 255, 255, 0.06) 50%,
+            rgba(var(--white-rgb), 0.06) 50%,
             transparent 50%
           );
         animation: float 12s ease-in-out infinite;
@@ -185,12 +191,12 @@
 
       .container {
         text-align: center;
-        background: rgba(254, 248, 234, 0.92);
+        background: rgba(var(--off-white-rgb), 0.92);
         padding: 4rem 2.5rem;
         border-radius: 12px;
-        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.08);
+        box-shadow: 0 6px 24px rgba(var(--shadow-weak-rgb), 0.08);
         backdrop-filter: blur(8px);
-        border: 1px solid rgba(255, 255, 255, 0.6);
+        border: 1px solid rgba(var(--white-rgb), 0.6);
         max-width: 420px;
         position: relative;
         z-index: 10;
@@ -221,8 +227,8 @@
         bottom: -20px;
         background: radial-gradient(
           ellipse at center,
-          rgba(0, 0, 0, 0.15) 0%,
-          rgba(0, 0, 0, 0.05) 40%,
+          rgba(var(--shadow-weak-rgb), 0.15) 0%,
+          rgba(var(--shadow-weak-rgb), 0.05) 40%,
           transparent 70%
         );
         border-radius: 16px;
@@ -232,7 +238,7 @@
 
       .instruction {
         font-size: 1.6rem;
-        color: rgba(48, 51, 46, 0.7);
+        color: var(--text-tertiary);
         margin-bottom: 2rem;
         font-weight: 500;
         letter-spacing: 0.2px;
@@ -244,11 +250,11 @@
         margin: 1rem 0 2.5rem;
         font-weight: 400;
         transition: all 0.6s ease;
-        color: rgba(48, 51, 46, 0.8);
+        color: var(--text-secondary);
         line-height: 1.6;
         font-style: italic;
         font-family: 'Merriweather', 'Georgia', serif;
-        background: rgba(254, 227, 164, 0.5);
+        background: rgba(var(--gold-rgb), 0.5);
         padding: 2.5rem 0.5rem;
         border-radius: 8px;
         word-wrap: break-word;
@@ -259,7 +265,7 @@
         min-height: 4rem;
         overflow: hidden;
         position: relative;
-        border-left: 2px solid rgba(158, 142, 51, 0.3);
+        border-left: 2px solid var(--border-color);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -273,17 +279,17 @@
       }
 
       .phrase-display.grey {
-        color: rgba(48, 51, 46, 0.8);
+        color: var(--text-secondary);
       }
 
       .phrase-display.green {
-        color: rgba(48, 51, 46, 0.8);
+        color: var(--text-secondary);
       }
 
       .phrase-display.red {
-        color: rgba(254, 98, 29, 0.8);
-        border-left: 2px solid rgba(254, 98, 29, 0.6);
-        background: rgba(254, 98, 29, 0.1);
+        color: var(--error);
+        border-left: 2px solid rgba(var(--error-rgb), 0.6);
+        background: var(--bg-error);
       }
 
       .form-container {
@@ -304,17 +310,17 @@
         width: 100%;
         padding: 24px 20px;
         font-size: 1.1rem;
-        border: 1px solid rgba(48, 51, 46, 0.15);
+        border: 1px solid var(--border-color);
         border-radius: 8px;
         outline: none;
         transition: all 0.4s ease;
-        background: rgba(255, 255, 255, 0.95);
+        background: rgba(var(--white-rgb), 0.95);
         font-family: 'Inter', sans-serif;
         font-weight: 400;
         text-align: left;
-        color: rgba(48, 51, 46, 0.8);
+        color: var(--text-secondary);
         backdrop-filter: blur(10px);
-        caret-color: rgba(48, 51, 46, 0.8);
+        caret-color: var(--text-secondary);
         resize: none;
         min-height: 4em;
         overflow-y: hidden;
@@ -336,41 +342,40 @@
       }
 
       .phrase-input::placeholder {
-        color: rgba(48, 51, 46, 0.85);
+        color: var(--text-quaternary);
       }
 
       .phrase-input:focus {
         transform: scale(1.01);
-        border-color: rgba(158, 142, 51, 0.6);
-        background: rgba(255, 255, 255, 0.98);
-        box-shadow: 0 0 0 3px rgba(158, 142, 51, 0.1);
+        border-color: var(--success);
+        background: rgba(var(--white-rgb), 0.98);
+        box-shadow: 0 0 0 3px rgba(var(--success-rgb), 0.1);
       }
 
       .phrase-input.grey {
-        border-color: rgba(48, 51, 46, 0.2);
-        background-color: rgba(255, 255, 255, 0.95);
+        border-color: var(--disabled-border);
+        background-color: rgba(var(--white-rgb), 0.95);
       }
 
       .phrase-input.green {
-        border-color: rgba(158, 142, 51, 0.6);
-        background-color: rgba(158, 142, 51, 0.08);
+        border-color: var(--success);
+        background-color: rgba(var(--success-rgb), 0.08);
       }
 
       .phrase-input.red {
-        border-color: rgba(254, 98, 29, 0.4);
-        border-width: 2px;
-        background-color: rgba(254, 98, 29, 0.05);
-        color: rgba(254, 98, 29, 0.8);
+        border-color: rgba(var(--error-rgb), 0.4);
+        background-color: var(--bg-error);
+        color: var(--error);
       }
 
       .enter-btn {
         background: linear-gradient(
           135deg,
-          rgba(158, 142, 51, 0.8) 0%,
-          rgba(158, 142, 51, 0.6) 100%
+          rgba(var(--success-rgb), 0.8) 0%,
+          rgba(var(--success-rgb), 0.6) 100%
         );
-        color: rgba(255, 255, 255, 0.9);
-        border: 1px solid rgba(158, 142, 51, 0.4);
+        color: var(--text-white);
+        border: 1px solid rgba(var(--success-rgb), 0.4);
         padding: 16px 32px;
         font-size: 1rem;
         border-radius: 12px;
@@ -381,7 +386,7 @@
         font-family: 'Inter', sans-serif;
         font-weight: 500;
         letter-spacing: 0.5px;
-        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+        box-shadow: 0 2px 6px rgba(var(--shadow-weak-rgb), 0.3);
         opacity: 0.3;
         backdrop-filter: blur(10px);
         position: relative;
@@ -395,24 +400,24 @@
       .enter-btn:disabled {
         background: linear-gradient(
           135deg,
-          rgba(128, 128, 128, 0.6) 0%,
-          rgba(128, 128, 128, 0.4) 100%
+          rgba(var(--disabled-rgb), 0.6) 0%,
+          rgba(var(--disabled-rgb), 0.4) 100%
         );
-        color: rgba(255, 255, 255, 0.9);
-        border: 1px solid rgba(128, 128, 128, 0.4);
+        color: var(--text-white);
+        border: 1px solid rgba(var(--disabled-rgb), 0.4);
         cursor: not-allowed;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        box-shadow: 0 2px 8px rgba(var(--shadow-weak-rgb), 0.05);
       }
 
       .enter-btn:hover {
         background: linear-gradient(
           135deg,
-          rgba(158, 142, 51, 0.85) 0%,
-          rgba(158, 142, 51, 0.65) 100%
+          rgba(var(--success-rgb), 0.85) 0%,
+          rgba(var(--success-rgb), 0.65) 100%
         );
         transform: scale(1.02);
         transition: all 0.15s ease;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        box-shadow: 0 4px 12px rgba(var(--shadow-weak-rgb), 0.4);
       }
 
       .enter-btn:active {
@@ -422,7 +427,7 @@
 
       .helper-text {
         font-size: 0.8rem;
-        color: rgba(254, 98, 29, 0.5);
+        color: rgba(var(--error-rgb), 0.5);
         margin-top: 0.5rem;
         font-family: 'Inter', sans-serif;
         font-weight: 400;
@@ -440,7 +445,7 @@
         bottom: 20px;
         left: 20px;
         font-size: 0.8rem;
-        color: rgba(255, 255, 255, 0.2);
+        color: rgba(var(--white-rgb), 0.2);
         font-family: 'Inter', sans-serif;
         font-weight: 300;
         letter-spacing: 0.5px;

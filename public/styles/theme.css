@@ -1,0 +1,45 @@
+/* Global theme variables */
+:root {
+  /* Primary Colors */
+  --error-rgb: 254, 98, 29;
+  --error: rgb(var(--error-rgb));
+  --success-rgb: 158, 142, 51;
+  --success: rgb(var(--success-rgb));
+  --gold: #fee3a4;
+  --gold-rgb: 254, 227, 164;
+  --off-white-rgb: 254, 248, 234;
+  --off-white: rgb(var(--off-white-rgb));
+  --white-rgb: 255, 255, 255;
+
+  /* Text Colors */
+  --text-base-rgb: 48, 51, 46;
+  --text-primary: rgb(var(--text-base-rgb));
+  --text-secondary: rgba(var(--text-base-rgb), 0.8);
+  --text-tertiary: rgba(var(--text-base-rgb), 0.7);
+  --text-quaternary: rgba(var(--text-base-rgb), 0.85);
+  --text-quinary: rgba(var(--text-base-rgb), 0.85);
+  --text-white: rgba(var(--white-rgb), 0.9);
+  --text-error: var(--error);
+  --text-success: var(--success);
+
+  /* Background Colors */
+  --bg-error: rgba(var(--error-rgb), 0.05);
+  --bg-success: rgba(var(--success-rgb), 0.05);
+
+  /* Disabled palette */
+  --disabled-rgb: 128, 128, 128;
+  --disabled-border: rgba(var(--text-base-rgb), 0.2);
+  --disabled-text: rgba(var(--text-base-rgb), 0.5);
+
+  /* Border tokens */
+  --border-color: rgba(158, 142, 51, 0.3);
+
+  /* Inputs */
+  --input-background-color: rgba(var(--white-rgb), 0.9);
+  --input-background-color-error: rgba(255, 247, 244, 1);
+
+  /* Shadows */
+  --shadow-weak-rgb: 0, 0, 0; /* use with alpha */
+  /* Semantic surfaces */
+  --surface-muted-rgb: 255, 255, 255; /* typical blurred white cards */
+}
