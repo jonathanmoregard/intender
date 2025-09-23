@@ -2,7 +2,11 @@
 :root {
   /* Primary Colors */
   /* Error */
-  --error-rgb: 255, 78, 0; /* #FF4E00 */
+  --error-vivider-rgb: 255, 100, 20; /* #FF6414 - bright red-orange */
+  --error-vivider: rgb(var(--error-vivider-rgb));
+  --error-vivid-rgb: 245, 95, 20; /* #F55F14 - vivid red */
+  --error-vivid: rgb(var(--error-vivid-rgb));
+  --error-rgb: 220, 80, 20; /* #DC5014 - vivid red */
   --error: rgb(var(--error-rgb));
 
   /* Success */
