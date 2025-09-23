@@ -138,8 +138,8 @@
         bottom: 0;
         background: linear-gradient(
           135deg,
-          rgba(var(--gold-rgb), 0.15),
-          rgba(var(--off-white-rgb), 0.1)
+          rgba(254, 227, 164, 0.15),
+          rgba(var(--cream-rgb), 0.1)
         );
         pointer-events: none;
         z-index: 1;
@@ -191,7 +191,7 @@
 
       .container {
         text-align: center;
-        background: rgba(var(--off-white-rgb), 0.92);
+        background: rgba(var(--cream-rgb), 0.92);
         padding: 4rem 2.5rem;
         border-radius: 12px;
         box-shadow: 0 6px 24px rgba(var(--shadow-weak-rgb), 0.08);
@@ -254,7 +254,7 @@
         line-height: 1.6;
         font-style: italic;
         font-family: 'Merriweather', 'Georgia', serif;
-        background: rgba(var(--gold-rgb), 0.5);
+        background: var(--secondary-light);
         padding: 2.5rem 0.5rem;
         border-radius: 8px;
         word-wrap: break-word;
@@ -265,7 +265,7 @@
         min-height: 4rem;
         overflow: hidden;
         position: relative;
-        border-left: 2px solid var(--border-color);
+        border-left: 2px solid var(--secondary-dark);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -314,7 +314,7 @@
         border-radius: 8px;
         outline: none;
         transition: all 0.4s ease;
-        background: rgba(var(--white-rgb), 0.95);
+        background: var(--white);
         font-family: 'Inter', sans-serif;
         font-weight: 400;
         text-align: left;
@@ -348,8 +348,8 @@
       .phrase-input:focus {
         transform: scale(1.01);
         border-color: var(--success);
-        background: rgba(var(--white-rgb), 0.98);
-        box-shadow: 0 0 0 3px rgba(var(--success-rgb), 0.1);
+        background: var(--white);
+        box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.1);
       }
 
       .phrase-input.grey {
@@ -371,11 +371,11 @@
       .enter-btn {
         background: linear-gradient(
           135deg,
-          rgba(var(--success-rgb), 0.8) 0%,
-          rgba(var(--success-rgb), 0.6) 100%
+          rgba(var(--primary-rgb), 0.8) 0%,
+          rgba(var(--primary-rgb), 0.6) 100%
         );
         color: var(--text-white);
-        border: 1px solid rgba(var(--success-rgb), 0.4);
+        border: 1px solid var(--tertiary);
         padding: 16px 32px;
         font-size: 1rem;
         border-radius: 12px;
@@ -412,8 +412,8 @@
       .enter-btn:hover {
         background: linear-gradient(
           135deg,
-          rgba(var(--success-rgb), 0.85) 0%,
-          rgba(var(--success-rgb), 0.65) 100%
+          rgba(var(--primary-rgb), 0.85) 0%,
+          rgba(var(--primary-rgb), 0.65) 100%
         );
         transform: scale(1.02);
         transition: all 0.15s ease;

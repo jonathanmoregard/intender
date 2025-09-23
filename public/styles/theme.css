@@ -1,15 +1,41 @@
 /* Global theme variables */
 :root {
   /* Primary Colors */
-  --error-rgb: 254, 98, 29;
+  /* Error */
+  --error-rgb: 255, 78, 0; /* #FF4E00 */
   --error: rgb(var(--error-rgb));
-  --success-rgb: 158, 142, 51;
-  --success: rgb(var(--success-rgb));
-  --gold: #fee3a4;
-  --gold-rgb: 254, 227, 164;
-  --off-white-rgb: 254, 248, 234;
+
+  /* Success */
+  --success-rgb: var(--primary-rgb);
+  --success: var(--primary);
+
+  /* Primary  */
+  --primary-rgb: 137, 129, 33; /* #898121 */
+  --primary: rgb(var(--primary-rgb));
+
+  /* Secondary */
+  --secondary-rgb: 231, 177, 10; /* #E7B10A */
+  --secondary: rgb(var(--secondary-rgb));
+
+  --secondary-dark-rgb: 187, 143, 8; /* #bb8f08 */
+  --secondary-dark: rgb(var(--secondary-dark-rgb));
+
+  --secondary-light-rgb: 251, 227, 154; /* #fbe39a */
+  --secondary-light: rgb(var(--secondary-light-rgb));
+
+  /* Tertiary */
+  --tertiary-rgb: 76, 75, 22; /* #4C4B16 */
+  --tertiary: rgb(var(--tertiary-rgb));
+
+  /* Whites */
+  --cream-rgb: 247, 241, 229; /* #F7F1E5 */
+  --cream: rgb(var(--cream-rgb));
+
+  --off-white-rgb: 255, 252, 247; /* #fffcf7 */
   --off-white: rgb(var(--off-white-rgb));
-  --white-rgb: 255, 255, 255;
+
+  --white-rgb: 255, 255, 255; /* #FFFFFF */
+  --white: rgb(var(--white-rgb));
 
   /* Text Colors */
   --text-base-rgb: 48, 51, 46;
@@ -32,7 +58,8 @@
   --disabled-text: rgba(var(--text-base-rgb), 0.5);
 
   /* Border tokens */
-  --border-color: rgba(158, 142, 51, 0.3);
+  --border-rgb: 76, 75, 22; /* #4C4B16 */
+  --border-color: #ece6d1;
 
   /* Inputs */
   --input-background-color: rgba(var(--white-rgb), 0.9);

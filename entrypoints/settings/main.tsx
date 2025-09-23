@@ -685,7 +685,7 @@ const SettingsTab = memo(
         {/* 3. Advanced Settings */}
         <div className='advanced-settings'>
           <div
-            className='advanced-settings-header'
+            className={`advanced-settings-header ${showAdvancedSettings ? 'expanded' : ''}`}
             data-testid='advanced-settings-toggle'
             onClick={() => {
               const newState = !showAdvancedSettings;
