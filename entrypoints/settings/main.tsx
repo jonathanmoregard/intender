@@ -12,6 +12,8 @@ import {
 import { storage, type InactivityMode } from '../../components/storage';
 import { minutesToMs, msToMinutes } from '../../components/time';
 import { generateUUID } from '../../components/uuid';
+import packageJson from '../../package.json';
+import '../../public/styles/theme.css';
 
 type Tab = 'settings' | 'about';
 
@@ -616,10 +618,10 @@ const SettingsTab = memo(
             onClick={addIntention}
             title='Add another intention'
           >
-            Add website
+            Add Intention
           </button>
           <button className='save-btn' onClick={update}>
-            Save changes
+            Save Changes
           </button>
           <div className='more-options' ref={moreOptionsRef}>
             <button
@@ -685,7 +687,7 @@ const SettingsTab = memo(
         {/* 3. Advanced Settings */}
         <div className='advanced-settings'>
           <div
-            className='advanced-settings-header'
+            className={`advanced-settings-header ${showAdvancedSettings ? 'expanded' : ''}`}
             data-testid='advanced-settings-toggle'
             onClick={() => {
               const newState = !showAdvancedSettings;
@@ -887,8 +889,9 @@ const SettingsTab = memo(
               fontSize: '14px',
               fontWeight: '500',
               zIndex: 2000,
-              backgroundColor: toast.type === 'success' ? '#9E8E33' : '#FE621D',
-              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+              backgroundColor:
+                toast.type === 'success' ? 'var(--success)' : 'var(--error)',
+              boxShadow: '0 4px 12px rgba(var(--shadow-weak-rgb), 0.15)',
               animation: 'slideIn 0.3s ease-out',
             }}
           >
@@ -931,7 +934,7 @@ const AboutTab = memo(() => {
 
         <div className='version-info'>
           <p>
-            <strong>Version:</strong> 1.0.0
+            <strong>Version:</strong> {packageJson.version}
           </p>
           <p>
             <strong>Made with:</strong> React, TypeScript, WXT

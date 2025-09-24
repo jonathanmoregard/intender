@@ -16,27 +16,29 @@ Intender embraces a **mindful, non-coercive approach** to digital wellness. Rath
 
 ### Primary Colors
 
-- **Error**: `#FE621D` - Orange-red for error states and incorrect input
-- **Success**: `#9E8E33` - Sage green for success states, active buttons, and correct input
-- **Gold**: `#FEE3A4` - Warm gold for particles, phrase background, and accents
-- **Off White**: `#FEF8EA` - Warm off-white for dialog backgrounds and containers
+- Centralized in `public/styles/theme.css` via CSS variables. Use variables instead of hardcoded hex.
+- Primary variables:
+  - `--color-accent` (`--color-accent-rgb`) – error/accent
+  - `--color-primary` (`--color-primary-rgb`) – success/brand gold
+  - `--color-bg` – default background
+  - `--color-text` – primary text
+  - `--color-white` (`--color-white-rgb`)
+  - `--color-muted-rgb` – for text alpha variants
+  - `--shadow-weak-rgb` – for shadow alphas
+  - `--color-warm1-rgb`, `--color-warm2-rgb` – warm overlays
 
 ### Text Colors
 
-- **Primary Text**: `#30332E` - Main text, headings, labels
-- **Secondary Text**: `rgba(48, 51, 46, 0.8)` - Descriptions, helper text
-- **Tertiary Text**: `rgba(48, 51, 46, 0.7)` - Subtle text, placeholders
-- **Quaternary Text**: `rgba(48, 51, 46, 0.85)` - Very subtle text, disabled states
-- **Quinary Text**: `rgba(48, 51, 46, 0.85)` - Muted text, inactive elements
-- **White Text**: `rgba(255, 255, 255, 0.9)` - Text on colored backgrounds
-- **Error Text**: `#FE621D` - Error messages and validation text
-- **Success Text**: `#9E8E33` - Success messages and validation text
+- Use `var(--text-primary)` for primary text.
+- For alpha variants use ontology tokens: `var(--text-secondary)`, `var(--text-tertiary)`, etc.
+- White text on color: `var(--text-white)`.
+- Error text: `var(--text-error)`; Success text: `var(--text-success)`.
 
 ### Background Colors
 
-- **Error Background**: `rgba(254, 98, 29, 0.05)` - Subtle red tint overlay
-- **Success Background**: `rgba(158, 142, 51, 0.05)` - Subtle green tint overlay
-- **Error Label Background**: `rgba(255, 247, 244, 1)` - Pre-mixed warm tint for labels
+- Error bg: `var(--bg-error)`
+- Success bg: `var(--bg-success)`
+- Error label bg: keep as-is or align with token if added later
 
 ## Typography
 
