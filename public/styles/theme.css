@@ -20,14 +20,16 @@
   --primary-dark: rgb(var(--primary-dark-rgb));
 
   /* Secondary */
+  --secondary-lighter-rgb: 248, 238, 199; /* #F8EEC7 */
+  --secondary-lighter: rgb(var(--secondary-lighter-rgb));
   --secondary-light-rgb: 235, 208, 98; /* #EBD062 - medium warm gold */
   --secondary-light: rgb(var(--secondary-light-rgb));
   --secondary-rgb: 223, 178, 0; /* #DFB200 - warm gold */
   --secondary: rgb(var(--secondary-rgb));
-  --secondary-dark-rgb: 120, 96, 0; /* #786000 */
+  --secondary-dark-rgb: 178, 142, 0; /* #B28E00 - white contrast threshold */
   --secondary-dark: rgb(var(--secondary-dark-rgb));
-  --secondary-lighter-rgb: 248, 238, 199; /* #F8EEC7 */
-  --secondary-lighter: rgb(var(--secondary-lighter-rgb));
+  --secondary-darker-rgb: 120, 96, 0; /* #786000 */
+  --secondary-darker: rgb(var(--secondary-darker-rgb));
 
   /* Tertiary */
   --tertiary-rgb: 76, 75, 22; /* #4C4B16 */
