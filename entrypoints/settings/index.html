@@ -157,43 +157,6 @@
         font-weight: 500;
       }
 
-      .match-settings {
-        margin-top: 2rem;
-      }
-
-      .settings-card {
-        padding: 1.5rem;
-        background: var(--white);
-        border-radius: 12px;
-        border: 1px solid var(--border-color);
-        backdrop-filter: blur(10px);
-      }
-
-      .settings-card h3 {
-        margin: 0 0 1rem 0;
-        font-size: 1.2rem;
-        color: var(--text-primary);
-        font-weight: 600;
-        font-family: 'Inter', sans-serif;
-      }
-
-      .general-settings {
-        margin-top: 2rem;
-        padding: 1.5rem;
-        background: var(--white);
-        border-radius: 12px;
-        border: 1px solid var(--border-color);
-        backdrop-filter: blur(10px);
-      }
-
-      .general-settings h3 {
-        margin: 0 0 1rem 0;
-        font-size: 1.2rem;
-        color: var(--text-primary);
-        font-weight: 600;
-        font-family: 'Inter', sans-serif;
-      }
-
       .setting-item {
         padding: 1rem;
         background: var(--white);
@@ -233,10 +196,6 @@
       }
 
       /* Remove hover affordance from intention items */
-
-      .intention-header {
-        display: none;
-      }
 
       .logo {
         width: 36px;
@@ -279,14 +238,6 @@
         background: var(--input-background-color);
         padding: 0 0.25rem;
         font-weight: 400;
-      }
-
-      .input-label.floating {
-        top: -0.5rem;
-        left: 0.5rem;
-        font-size: 0.75rem;
-        color: var(--primary);
-        font-weight: 500;
       }
 
       .url-input {
@@ -882,107 +833,6 @@
         box-shadow: 0 0 0 2px rgba(var(--success-rgb), 0.2);
       }
 
-      /* Warning Dialog for Unparseable Intentions */
-      .warning-dialog-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background-color: rgba(var(--shadow-weak-rgb), 0.5);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 1000;
-        backdrop-filter: blur(4px);
-      }
-
-      .warning-dialog {
-        background: var(--white);
-        padding: 2rem;
-        border-radius: 12px;
-        box-shadow: 0 10px 25px rgba(var(--shadow-weak-rgb), 0.15);
-        max-width: 500px;
-        width: 90%;
-        border: 1px solid rgba(var(--error-rgb), 0.2);
-        backdrop-filter: blur(10px);
-      }
-
-      .warning-dialog h3 {
-        margin: 0 0 1rem 0;
-        font-size: 1.2rem;
-        font-weight: 600;
-        color: var(--text-primary);
-        font-family: 'Inter', sans-serif;
-      }
-
-      .warning-dialog p {
-        margin: 0 0 1.5rem 0;
-        color: var(--text-secondary);
-        line-height: 1.5;
-        font-family: 'Inter', sans-serif;
-      }
-
-      .unparseable-list {
-        margin: 0 0 1.5rem 0;
-        padding: 0;
-        list-style: none;
-        max-height: 200px;
-        overflow-y: auto;
-      }
-
-      .unparseable-item {
-        padding: 0.75rem;
-        margin: 0.5rem 0;
-        background: var(--bg-error);
-        border: 1px solid rgba(var(--error-rgb), 0.2);
-        border-radius: 8px;
-        font-family: 'Inter', sans-serif;
-      }
-
-      .unparseable-url {
-        font-weight: 600;
-        color: var(--error);
-        margin-bottom: 0.25rem;
-        font-size: 0.9rem;
-      }
-
-      .unparseable-phrase {
-        color: var(--text-tertiary);
-        font-size: 0.85rem;
-        line-height: 1.4;
-      }
-
-      .warning-dialog-actions {
-        display: flex;
-        justify-content: flex-end;
-      }
-
-      .warning-dialog-btn {
-        padding: 0.75rem 1.5rem;
-        border: none;
-        background: var(--error);
-        color: var(--text-white);
-        border-radius: 8px;
-        cursor: pointer;
-        font-family: 'Inter', sans-serif;
-        font-weight: 500;
-        transition: all 0.3s ease;
-      }
-
-      .warning-dialog-btn:hover {
-        background: #e55a1a;
-        transform: translateY(-1px);
-      }
-
-      /* Inactivity Settings */
-      .inactivity-mode-setting {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 1rem;
-      }
-
       .setting-help {
         display: inline-flex;
         align-items: center;
@@ -1056,25 +906,6 @@
         opacity: 1;
       }
 
-      .inactivity-mode-select {
-        padding: 0.5rem;
-        border: 1px solid var(--border-color);
-        border-radius: 6px;
-        background: var(--input-background-color);
-        font-family: 'Inter', sans-serif;
-        font-size: 0.9rem;
-        color: var(--text-primary);
-        cursor: pointer;
-        transition: all 0.3s ease;
-        min-width: 200px;
-      }
-
-      .inactivity-mode-select:focus {
-        outline: none;
-        border-color: var(--success);
-        box-shadow: 0 0 0 2px rgba(var(--success-rgb), 0.1);
-      }
-
       .timeout-setting {
         display: flex;
         align-items: center;
@@ -1104,14 +935,6 @@
       .timeout-input::-webkit-inner-spin-button,
       .timeout-input::-webkit-outer-spin-button {
         opacity: 1;
-      }
-
-      /* Radio Button Styles */
-      .radio-group {
-        display: flex;
-        flex-direction: column;
-        gap: 0.75rem;
-        margin-top: 0.5rem;
       }
 
       .radio-option {
@@ -1242,33 +1065,11 @@
         overflow: visible; /* allow tooltips to render outside */
       }
 
-      .advanced-settings h4 {
-        margin: 0 0 0.5rem 0;
-        font-size: 1.1rem;
-        color: var(--text-primary);
-        font-weight: 600;
-        font-family: 'Inter', sans-serif;
-      }
-
       /* Improved Advanced Settings Layout */
       .setting-group {
         display: flex;
         flex-direction: column;
         gap: 1rem;
-      }
-
-      .setting-divider {
-        height: 1px;
-        background: var(--bg-success);
-        margin: 1.5rem 0;
-      }
-
-      .setting-description {
-        color: var(--text-tertiary);
-        margin-bottom: 1rem;
-        line-height: 1.5;
-        font-size: 0.95rem;
-        font-family: 'Inter', sans-serif;
       }
 
       .setting-header {
