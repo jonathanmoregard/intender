@@ -11,6 +11,7 @@ export default defineConfig({
   }),
   manifest: {
     name: 'Intender',
+    description: packageJson.description,
     version: packageJson.version,
     manifest_version: 3,
     permissions: ['storage', 'webNavigation', 'tabs', 'idle'],
