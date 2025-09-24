@@ -13,6 +13,7 @@ import { storage, type InactivityMode } from '../../components/storage';
 import { minutesToMs, msToMinutes } from '../../components/time';
 import { generateUUID } from '../../components/uuid';
 import packageJson from '../../package.json';
+import '../../public/styles/theme.css';
 
 type Tab = 'settings' | 'about';
 
@@ -979,18 +980,6 @@ const Sidebar = memo(
 
 const Options = () => {
   const [activeTab, setActiveTab] = useState<Tab>('settings');
-
-  // Ensure theme stylesheet is present in both dev and prod
-  useEffect(() => {
-    const id = 'intender-theme-css';
-    if (!document.getElementById(id)) {
-      const link = document.createElement('link');
-      link.id = id;
-      link.rel = 'stylesheet';
-      link.href = '/styles/theme.css';
-      document.head.appendChild(link);
-    }
-  }, []);
 
   const handleTabChange = (newTab: Tab, setActiveTab: (tab: Tab) => void) => {
     // For now, just allow the tab change

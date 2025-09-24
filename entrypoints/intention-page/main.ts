@@ -1,17 +1,6 @@
 import { fuzzyMatch, fuzzyPartialMatch } from '../../components/fuzzy-matching';
 import { storage } from '../../components/storage';
-
-// Ensure theme stylesheet is present in both dev and prod
-(() => {
-  const id = 'intender-theme-css';
-  if (!document.getElementById(id)) {
-    const link = document.createElement('link');
-    link.id = id;
-    link.rel = 'stylesheet';
-    link.href = '/styles/theme.css';
-    document.head.appendChild(link);
-  }
-})();
+import '../../public/styles/theme.css';
 
 // Particles animation setup
 const canvas = document.getElementById('particles-canvas') as HTMLCanvasElement;
