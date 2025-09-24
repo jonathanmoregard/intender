@@ -438,11 +438,7 @@
         transition: all 0.15s ease;
         font-family: 'Inter', sans-serif;
         letter-spacing: 0.5px;
-        background: linear-gradient(
-          135deg,
-          rgba(var(--secondary-rgb), 0.8),
-          rgba(var(--secondary-rgb), 0.6)
-        );
+        background: var(--secondary);
         color: var(--text-white);
         text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
         border: 1px solid rgba(var(--secondary-dark-rgb), 0.4);
@@ -450,11 +446,7 @@
       }
 
       .add-btn:hover {
-        background: linear-gradient(
-          135deg,
-          rgba(var(--secondary-rgb), 0.9),
-          rgba(var(--secondary-rgb), 0.7)
-        );
+        background: var(--secondary);
         transform: translateY(-1px) scale(1.02);
         box-shadow: 0 4px 12px rgba(var(--shadow-weak-rgb), 0.4);
       }
@@ -469,11 +461,7 @@
         transition: all 0.15s ease;
         font-family: 'Inter', sans-serif;
         letter-spacing: 0.5px;
-        background: linear-gradient(
-          135deg,
-          rgba(var(--primary-rgb), 0.8),
-          rgba(var(--primary-rgb), 0.6)
-        );
+        background: var(--primary);
         color: var(--text-white);
         text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
         border: 1px solid rgba(var(--primary-dark-rgb), 0.4);
@@ -481,11 +469,7 @@
       }
 
       .save-btn:hover {
-        background: linear-gradient(
-          135deg,
-          rgba(var(--primary-rgb), 0.9),
-          rgba(var(--primary-rgb), 0.7)
-        );
+        background: var(--primary);
         transform: translateY(-1px) scale(1.02);
         box-shadow: 0 4px 12px rgba(var(--shadow-weak-rgb), 0.4);
       }
@@ -627,11 +611,7 @@
       }
 
       .quick-add-btn {
-        background: linear-gradient(
-          135deg,
-          rgba(var(--secondary-rgb), 0.8),
-          rgba(var(--secondary-rgb), 0.6)
-        );
+        background: var(--secondary);
         color: var(--text-white);
         text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
         border: none;
@@ -649,11 +629,7 @@
       }
 
       .quick-add-btn:hover {
-        background: linear-gradient(
-          135deg,
-          rgba(var(--secondary-rgb), 0.9),
-          rgba(var(--secondary-rgb), 0.7)
-        );
+        background: var(--secondary);
         transform: scale(1.1);
         box-shadow: 0 4px 12px rgba(var(--shadow-weak-rgb), 0.4);
       }
@@ -872,7 +848,7 @@
       }
 
       .confirm-btn:hover {
-        background: #e55a1a;
+        background: var(--error);
         transform: translateY(-1px);
       }
 
