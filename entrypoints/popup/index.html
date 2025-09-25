@@ -1,6 +1,255 @@
 <!doctype html>
 <html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Intender</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family:
+          'Inter',
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          'Roboto',
+          'Helvetica Neue',
+          Arial,
+          'Noto Sans',
+          sans-serif;
+        background: var(--cream);
+        color: var(--text-primary);
+        width: 280px;
+        min-height: 120px;
+        padding: 0;
+        margin: 0;
+      }
+
+      /* Import theme variables */
+      :root {
+        /* Primary Colors */
+        --error-vivider-rgb: 255, 100, 20; /* #FF6414 - bright red-orange */
+        --error-vivider: rgb(var(--error-vivider-rgb));
+        --error-vivid-rgb: 245, 95, 20; /* #F55F14 - vivid red */
+        --error-vivid: rgb(var(--error-vivid-rgb));
+        --error-rgb: 220, 80, 20; /* #DC5014 - vivid red */
+        --error: rgb(var(--error-rgb));
+
+        /* Success */
+        --success-rgb: var(--primary-rgb);
+        --success: var(--primary);
+
+        --primary-rgb: 137, 142, 33; /* #898e21 - olive-gold */
+        --primary: rgb(var(--primary-rgb));
+        --primary-light-rgb: 197, 208, 93; /* #c5d05d - light olive gold */
+        --primary-light: rgb(var(--primary-light-rgb));
+
+        --primary-dark-rgb: 84, 87, 20; /* #545714 - dark olive-gold */
+        --primary-dark: rgb(var(--primary-dark-rgb));
+
+        /* Secondary */
+        --secondary-lighter-rgb: 248, 238, 199; /* #F8EEC7 */
+        --secondary-lighter: rgb(var(--secondary-lighter-rgb));
+        --secondary-light-rgb: 235, 208, 98; /* #EBD062 - medium warm gold */
+        --secondary-light: rgb(var(--secondary-light-rgb));
+        --secondary-rgb: 223, 178, 0; /* #DFB200 - warm gold */
+        --secondary: rgb(var(--secondary-rgb));
+        --secondary-dark-rgb:
+          178, 142, 0; /* #B28E00 - white contrast threshold */
+        --secondary-dark: rgb(var(--secondary-dark-rgb));
+        --secondary-darker-rgb: 120, 96, 0; /* #786000 */
+        --secondary-darker: rgb(var(--secondary-darker-rgb));
+
+        /* Neutrals */
+        --white-rgb: 255, 255, 255;
+        --white: rgb(var(--white-rgb));
+        --off-white-rgb: 255, 252, 247; /* #fffcf7 */
+        --off-white: rgb(var(--off-white-rgb));
+        --cream-rgb: 254, 249, 235; /* #fef9eb */
+        --cream: rgb(var(--cream-rgb));
+
+        /* Text Colors */
+        --text-primary: #30332e;
+        --text-secondary: #5a5d56;
+        --text-tertiary: #8a8d85;
+        --text-quaternary: #b8bbb3;
+        --text-white: #ffffff;
+
+        /* Borders */
+        --border-color: #ece6d1;
+        --border-rgb: 236, 230, 209; /* #ece6d1 */
+
+        /* Shadows */
+        --shadow-weak-rgb: 0, 0, 0;
+        --shadow-weak: rgba(var(--shadow-weak-rgb), 0.1);
+
+        /* Backgrounds */
+        --bg-success: rgba(var(--primary-rgb), 0.1);
+        --bg-error: rgba(var(--error-rgb), 0.1);
+      }
+
+      .popup-container {
+        background: var(--white);
+        border-radius: 12px;
+        border: 1px solid var(--border-color);
+        box-shadow: 0 4px 16px rgba(var(--shadow-weak-rgb), 0.15);
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        min-height: 100px;
+      }
+
+      .popup-header {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+      }
+
+      .popup-logo {
+        width: 24px;
+        height: 24px;
+        background-image: url('./icon/intender-48.png');
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        border-radius: 4px;
+      }
+
+      .popup-title {
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin: 0;
+      }
+
+      .popup-buttons {
+        display: flex;
+        gap: 0.75rem;
+        align-items: center;
+      }
+
+      .popup-btn {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        padding: 0.75rem 1rem;
+        border: none;
+        border-radius: 8px;
+        font-family: 'Inter', sans-serif;
+        font-size: 0.9rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        text-decoration: none;
+        min-height: 44px;
+      }
+
+      .popup-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(var(--shadow-weak-rgb), 0.2);
+      }
+
+      .popup-btn:active {
+        transform: translateY(0);
+      }
+
+      .quick-add-btn {
+        background: var(--secondary-dark);
+        color: var(--text-white);
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+        border: 1px solid rgba(var(--secondary-darker-rgb), 0.4);
+      }
+
+      .quick-add-btn:hover {
+        background: var(--secondary-dark);
+      }
+
+      .settings-btn {
+        background: var(--primary);
+        color: var(--text-white);
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+        border: 1px solid rgba(var(--primary-dark-rgb), 0.4);
+      }
+
+      .settings-btn:hover {
+        background: var(--primary);
+      }
+
+      .popup-icon {
+        font-size: 1.1rem;
+        line-height: 1;
+      }
+
+      .popup-text {
+        font-size: 0.85rem;
+        font-weight: 600;
+        letter-spacing: 0.25px;
+      }
+
+      .popup-status {
+        text-align: center;
+        font-size: 0.8rem;
+        color: var(--text-tertiary);
+        margin-top: 0.5rem;
+        min-height: 1rem;
+      }
+
+      .popup-status.success {
+        color: var(--primary);
+        font-weight: 500;
+      }
+
+      .popup-status.error {
+        color: var(--error);
+        font-weight: 500;
+      }
+    </style>
+  </head>
   <body>
+    <div class="popup-container">
+      <div class="popup-header">
+        <div class="popup-logo"></div>
+        <h1 class="popup-title">Intender</h1>
+      </div>
+
+      <div class="popup-buttons">
+        <button
+          class="popup-btn quick-add-btn"
+          id="quick-add-btn"
+          title="Quick add current page"
+        >
+          <span class="popup-icon">+</span>
+          <span class="popup-text">Quick Add</span>
+        </button>
+
+        <button
+          class="popup-btn settings-btn"
+          id="settings-btn"
+          title="Open settings"
+        >
+          <span class="popup-icon">⚙</span>
+          <span class="popup-text">Settings</span>
+        </button>
+      </div>
+
+      <div class="popup-status" id="status"></div>
+    </div>
+
     <script type="module" src="./main.ts"></script>
   </body>
 </html>
