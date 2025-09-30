@@ -30,225 +30,371 @@
           sans-serif;
         background: var(--cream);
         color: var(--text-primary);
-        width: 280px;
-        min-height: 120px;
-        padding: 0;
+        width: 320px;
+        min-height: 320px;
+        padding: 1.25rem;
         margin: 0;
+        position: relative;
       }
 
-      /* Import theme variables */
       :root {
-        /* Primary Colors */
-        --error-vivider-rgb: 255, 100, 20; /* #FF6414 - bright red-orange */
+        --error-vivider-rgb: 255, 100, 20;
         --error-vivider: rgb(var(--error-vivider-rgb));
-        --error-vivid-rgb: 245, 95, 20; /* #F55F14 - vivid red */
+        --error-vivid-rgb: 245, 95, 20;
         --error-vivid: rgb(var(--error-vivid-rgb));
-        --error-rgb: 220, 80, 20; /* #DC5014 - vivid red */
+        --error-rgb: 220, 80, 20;
         --error: rgb(var(--error-rgb));
 
-        /* Success */
         --success-rgb: var(--primary-rgb);
         --success: var(--primary);
 
-        --primary-rgb: 137, 142, 33; /* #898e21 - olive-gold */
+        --primary-rgb: 137, 142, 33;
         --primary: rgb(var(--primary-rgb));
-        --primary-light-rgb: 197, 208, 93; /* #c5d05d - light olive gold */
+        --primary-light-rgb: 197, 208, 93;
         --primary-light: rgb(var(--primary-light-rgb));
-
-        --primary-dark-rgb: 84, 87, 20; /* #545714 - dark olive-gold */
+        --primary-dark-rgb: 84, 87, 20;
         --primary-dark: rgb(var(--primary-dark-rgb));
 
-        /* Secondary */
-        --secondary-lighter-rgb: 248, 238, 199; /* #F8EEC7 */
+        --secondary-lighter-rgb: 248, 238, 199;
         --secondary-lighter: rgb(var(--secondary-lighter-rgb));
-        --secondary-light-rgb: 235, 208, 98; /* #EBD062 - medium warm gold */
+        --secondary-light-rgb: 235, 208, 98;
         --secondary-light: rgb(var(--secondary-light-rgb));
-        --secondary-rgb: 223, 178, 0; /* #DFB200 - warm gold */
+        --secondary-rgb: 223, 178, 0;
         --secondary: rgb(var(--secondary-rgb));
-        --secondary-dark-rgb:
-          178, 142, 0; /* #B28E00 - white contrast threshold */
+        --secondary-dark-rgb: 178, 142, 0;
         --secondary-dark: rgb(var(--secondary-dark-rgb));
-        --secondary-darker-rgb: 120, 96, 0; /* #786000 */
+        --secondary-darker-rgb: 120, 96, 0;
         --secondary-darker: rgb(var(--secondary-darker-rgb));
 
-        /* Neutrals */
         --white-rgb: 255, 255, 255;
         --white: rgb(var(--white-rgb));
-        --off-white-rgb: 255, 252, 247; /* #fffcf7 */
+        --off-white-rgb: 255, 252, 247;
         --off-white: rgb(var(--off-white-rgb));
-        --cream-rgb: 254, 249, 235; /* #fef9eb */
+        --cream-rgb: 254, 249, 235;
         --cream: rgb(var(--cream-rgb));
 
-        /* Text Colors */
         --text-primary: #30332e;
         --text-secondary: #5a5d56;
         --text-tertiary: #8a8d85;
         --text-quaternary: #b8bbb3;
         --text-white: #ffffff;
 
-        /* Borders */
         --border-color: #ece6d1;
-        --border-rgb: 236, 230, 209; /* #ece6d1 */
-
-        /* Shadows */
+        --border-rgb: 236, 230, 209;
         --shadow-weak-rgb: 0, 0, 0;
-        --shadow-weak: rgba(var(--shadow-weak-rgb), 0.1);
-
-        /* Backgrounds */
-        --bg-success: rgba(var(--primary-rgb), 0.1);
-        --bg-error: rgba(var(--error-rgb), 0.1);
       }
 
-      .popup-container {
+      .options-card {
         background: var(--white);
-        border-radius: 12px;
+        border-radius: 16px;
         border: 1px solid var(--border-color);
-        box-shadow: 0 4px 16px rgba(var(--shadow-weak-rgb), 0.15);
-        padding: 1rem;
+        box-shadow: 0 16px 32px rgba(var(--shadow-weak-rgb), 0.15);
+        padding: 1.5rem;
         display: flex;
         flex-direction: column;
-        gap: 0.75rem;
-        min-height: 100px;
+        gap: 1.25rem;
       }
 
-      .popup-header {
+      .options-header {
         display: flex;
         align-items: center;
-        gap: 0.5rem;
-        margin-bottom: 0.5rem;
+        gap: 0.75rem;
       }
 
-      .popup-logo {
-        width: 24px;
-        height: 24px;
+      .logo-badge {
+        width: 32px;
+        height: 32px;
         background-image: url('./icon/intender-48.png');
         background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
-        border-radius: 4px;
+        border-radius: 8px;
+        box-shadow: inset 0 0 0 1px rgba(var(--border-rgb), 0.25);
       }
 
-      .popup-title {
-        font-size: 1rem;
+      .options-title {
+        font-size: 1.15rem;
         font-weight: 600;
+        letter-spacing: 0.25px;
         color: var(--text-primary);
-        margin: 0;
       }
 
-      .popup-buttons {
+      .option-buttons {
         display: flex;
+        flex-direction: column;
         gap: 0.75rem;
-        align-items: center;
       }
 
-      .popup-btn {
-        flex: 1;
+      .option-btn {
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 0.5rem;
-        padding: 0.75rem 1rem;
+        gap: 0.55rem;
+        padding: 0.85rem 1.1rem;
+        border-radius: 12px;
         border: none;
-        border-radius: 8px;
-        font-family: 'Inter', sans-serif;
-        font-size: 0.9rem;
         font-weight: 600;
+        font-size: 0.95rem;
         cursor: pointer;
-        transition: all 0.15s ease;
-        text-decoration: none;
-        min-height: 44px;
+        letter-spacing: 0.2px;
+        transition:
+          transform 0.15s ease,
+          box-shadow 0.15s ease;
       }
 
-      .popup-btn:hover {
+      .option-btn.primary {
+        background: var(--secondary-dark);
+        color: var(--text-white);
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+        box-shadow: 0 8px 18px rgba(var(--shadow-weak-rgb), 0.18);
+      }
+
+      .option-btn.secondary {
+        background: var(--white);
+        color: var(--text-primary);
+        border: 1px solid rgba(var(--primary-dark-rgb), 0.2);
+        box-shadow: inset 0 1px 2px rgba(var(--shadow-weak-rgb), 0.05);
+      }
+
+      .option-btn:hover {
         transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(var(--shadow-weak-rgb), 0.2);
+        box-shadow: 0 10px 20px rgba(var(--shadow-weak-rgb), 0.16);
       }
 
-      .popup-btn:active {
-        transform: translateY(0);
-      }
-
-      .quick-add-btn {
-        background: var(--secondary-dark);
-        color: var(--text-white);
-        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-        border: 1px solid rgba(var(--secondary-darker-rgb), 0.4);
-      }
-
-      .quick-add-btn:hover {
-        background: var(--secondary-dark);
-      }
-
-      .settings-btn {
-        background: var(--primary);
-        color: var(--text-white);
-        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-        border: 1px solid rgba(var(--primary-dark-rgb), 0.4);
-      }
-
-      .settings-btn:hover {
-        background: var(--primary);
-      }
-
-      .popup-icon {
+      .option-icon {
         font-size: 1.1rem;
         line-height: 1;
       }
 
-      .popup-text {
-        font-size: 0.85rem;
+      .modal-overlay {
+        position: fixed;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 1.25rem;
+        background: rgba(var(--shadow-weak-rgb), 0.4);
+        backdrop-filter: blur(8px);
+      }
+
+      .modal-overlay.visible {
+        display: flex;
+      }
+
+      .quick-add-card {
+        width: 100%;
+        max-width: 320px;
+        background: var(--white);
+        border-radius: 16px;
+        border: 1px solid var(--border-color);
+        box-shadow: 0 18px 32px rgba(var(--shadow-weak-rgb), 0.22);
+        padding: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1.25rem;
+      }
+
+      .quick-add-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .quick-add-title {
+        font-size: 1.15rem;
         font-weight: 600;
         letter-spacing: 0.25px;
+        color: var(--text-primary);
       }
 
-      .popup-status {
-        text-align: center;
-        font-size: 0.8rem;
+      .close-btn {
+        background: none;
+        border: none;
+        font-size: 1.35rem;
         color: var(--text-tertiary);
-        margin-top: 0.5rem;
-        min-height: 1rem;
+        cursor: pointer;
+        padding: 0.2rem 0.4rem;
+        border-radius: 8px;
+        transition:
+          background 0.15s ease,
+          color 0.15s ease;
       }
 
-      .popup-status.success {
+      .close-btn:hover {
+        background: rgba(var(--primary-rgb), 0.12);
         color: var(--primary);
-        font-weight: 500;
       }
 
-      .popup-status.error {
-        color: var(--error);
+      .form-section {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+      }
+
+      .input-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+
+      .input-label {
+        font-size: 0.8rem;
+        font-weight: 600;
+        letter-spacing: 0.25px;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+      }
+
+      .input-field,
+      .textarea-field {
+        width: 100%;
+        padding: 0.85rem;
+        border-radius: 10px;
+        border: 1px solid var(--border-color);
+        background: var(--white);
+        font-family: 'Inter', sans-serif;
+        font-size: 0.95rem;
+        color: var(--text-primary);
+        transition:
+          border-color 0.15s ease,
+          box-shadow 0.15s ease;
+        box-shadow: inset 0 1px 2px rgba(var(--shadow-weak-rgb), 0.05);
+      }
+
+      .textarea-field {
+        min-height: 4.5rem;
+        resize: vertical;
+        line-height: 1.5;
+      }
+
+      .input-field:focus,
+      .textarea-field:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow:
+          inset 0 0 0 1px rgba(var(--primary-rgb), 0.4),
+          0 0 0 3px rgba(var(--primary-rgb), 0.15);
+      }
+
+      .form-actions {
+        display: flex;
+        justify-content: flex-end;
+      }
+
+      .save-btn {
+        padding: 0.8rem 1.5rem;
+        border-radius: 10px;
+        border: none;
+        background: var(--secondary-dark);
+        color: var(--text-white);
+        font-weight: 600;
+        font-size: 0.95rem;
+        cursor: pointer;
+        letter-spacing: 0.25px;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+        border: 1px solid rgba(var(--secondary-darker-rgb), 0.4);
+        transition:
+          transform 0.15s ease,
+          box-shadow 0.15s ease;
+      }
+
+      .save-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 16px rgba(var(--shadow-weak-rgb), 0.18);
+      }
+
+      .save-btn:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+      }
+
+      .status-message {
+        position: fixed;
+        left: 50%;
+        bottom: 1.1rem;
+        transform: translateX(-50%);
+        background: rgba(var(--shadow-weak-rgb), 0.85);
+        color: var(--text-white);
+        padding: 0.55rem 1.1rem;
+        border-radius: 999px;
+        font-size: 0.85rem;
         font-weight: 500;
+        letter-spacing: 0.2px;
+        box-shadow: 0 8px 18px rgba(var(--shadow-weak-rgb), 0.25);
+        display: none;
+        z-index: 20;
+      }
+
+      .status-message.visible {
+        display: inline-block;
+      }
+
+      .status-message.success {
+        background: rgba(var(--primary-rgb), 0.9);
+      }
+
+      .status-message.error {
+        background: rgba(var(--error-rgb), 0.9);
       }
     </style>
   </head>
   <body>
-    <div class="popup-container">
-      <div class="popup-header">
-        <div class="popup-logo"></div>
-        <h1 class="popup-title">Intender</h1>
+    <div class="options-card" id="options-card">
+      <div class="options-header">
+        <div class="logo-badge"></div>
+        <h1 class="options-title">Intender</h1>
       </div>
-
-      <div class="popup-buttons">
-        <button
-          class="popup-btn quick-add-btn"
-          id="quick-add-btn"
-          title="Quick add current page"
-        >
-          <span class="popup-icon">+</span>
-          <span class="popup-text">Quick Add</span>
+      <div class="option-buttons">
+        <button class="option-btn primary" id="quick-add-btn">
+          <span class="option-icon">+</span>
+          Quick Add Intention
         </button>
-
-        <button
-          class="popup-btn settings-btn"
-          id="settings-btn"
-          title="Open settings"
-        >
-          <span class="popup-icon">⚙</span>
-          <span class="popup-text">Settings</span>
+        <button class="option-btn secondary" id="settings-btn">
+          <span class="option-icon">⚙</span>
+          Open Settings
         </button>
       </div>
-
-      <div class="popup-status" id="status"></div>
     </div>
+
+    <div class="modal-overlay" id="quick-add-overlay">
+      <div class="quick-add-card">
+        <div class="quick-add-header">
+          <h2 class="quick-add-title">Quick Add Intention</h2>
+          <button class="close-btn" id="quick-add-close" title="Close">
+            ×
+          </button>
+        </div>
+        <div class="form-section">
+          <div class="input-group">
+            <label class="input-label" for="quick-add-url">Website</label>
+            <input
+              class="input-field"
+              id="quick-add-url"
+              type="text"
+              placeholder="example.com"
+              autocomplete="off"
+            />
+          </div>
+          <div class="input-group">
+            <label class="input-label" for="quick-add-phrase">Intention</label>
+            <textarea
+              class="textarea-field"
+              id="quick-add-phrase"
+              placeholder="Write your intention"
+              maxlength="150"
+              rows="3"
+            ></textarea>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="save-btn" id="quick-add-save">Add Intention</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="status-message" id="status"></div>
 
     <script type="module" src="./main.ts"></script>
   </body>

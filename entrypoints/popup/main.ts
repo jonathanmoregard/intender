@@ -1,12 +1,17 @@
 import browser from 'webextension-polyfill';
-import { storage } from '../../components/storage';
 import { makeRawIntention } from '../../components/intention';
-import { generateUUID } from '../../components/uuid';
+import { storage } from '../../components/storage';
 
 interface PopupElements {
+  optionsCard: HTMLDivElement;
+  quickAddOverlay: HTMLDivElement;
   quickAddBtn: HTMLButtonElement;
   settingsBtn: HTMLButtonElement;
-  status: HTMLDivElement;
+  quickAddClose: HTMLButtonElement;
+  quickAddSave: HTMLButtonElement;
+  urlInput: HTMLInputElement;
+  phraseInput: HTMLTextAreaElement;
+  statusMessage: HTMLDivElement;
 }
 
 class PopupController {
@@ -15,11 +20,25 @@ class PopupController {
 
   constructor() {
     this.elements = {
+      optionsCard: document.getElementById('options-card') as HTMLDivElement,
+      quickAddOverlay: document.getElementById(
+        'quick-add-overlay'
+      ) as HTMLDivElement,
       quickAddBtn: document.getElementById(
         'quick-add-btn'
       ) as HTMLButtonElement,
       settingsBtn: document.getElementById('settings-btn') as HTMLButtonElement,
-      status: document.getElementById('status') as HTMLDivElement,
+      quickAddClose: document.getElementById(
+        'quick-add-close'
+      ) as HTMLButtonElement,
+      quickAddSave: document.getElementById(
+        'quick-add-save'
+      ) as HTMLButtonElement,
+      urlInput: document.getElementById('quick-add-url') as HTMLInputElement,
+      phraseInput: document.getElementById(
+        'quick-add-phrase'
+      ) as HTMLTextAreaElement,
+      statusMessage: document.getElementById('status') as HTMLDivElement,
     };
 
     this.init();
@@ -31,7 +50,7 @@ class PopupController {
       this.setupEventListeners();
       this.updateUI();
     } catch (error) {
-      console.error('Failed to initialize popup:', error);
+      console.error('Failed to initialise popup:', error);
       this.showStatus('Failed to load popup', 'error');
     }
   }
@@ -56,6 +75,27 @@ class PopupController {
     this.elements.settingsBtn.addEventListener('click', () =>
       this.handleSettings()
     );
+    this.elements.quickAddClose.addEventListener('click', () =>
+      this.closeQuickAdd()
+    );
+    this.elements.quickAddSave.addEventListener('click', () =>
+      this.handleSaveIntention()
+    );
+    this.elements.quickAddOverlay.addEventListener('click', event => {
+      if (event.target === this.elements.quickAddOverlay) {
+        this.closeQuickAdd();
+      }
+    });
+    this.elements.phraseInput.addEventListener('keydown', event => {
+      if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+        this.handleSaveIntention();
+      }
+    });
+    window.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && this.quickAddVisible()) {
+        this.closeQuickAdd();
+      }
+    });
   }
 
   private updateUI(): void {
@@ -65,7 +105,6 @@ class PopupController {
       return;
     }
 
-    // Enable quick add if we have a valid tab
     this.elements.quickAddBtn.disabled = false;
     this.elements.quickAddBtn.title = `Quick add ${this.getDisplayUrl()}`;
   }
@@ -77,7 +116,7 @@ class PopupController {
       const url = new URL(this.currentTab.url);
       return url.hostname;
     } catch {
-      return 'current page';
+      return this.currentTab.url;
     }
   }
 
@@ -88,81 +127,122 @@ class PopupController {
     }
 
     try {
-      this.elements.quickAddBtn.disabled = true;
-      this.showStatus('Adding intention...', '');
-
-      // Get current intentions
       const data = await storage.get();
       const existingIntentions = data.intentions || [];
 
-      // Check if this URL already has an intention
-      const existingIntention = existingIntentions.find(
-        intention =>
-          intention.url &&
+      const existingIntention = existingIntentions.find(intention => {
+        if (!intention.url) return false;
+        return (
           this.normalizeUrl(intention.url) ===
-            this.normalizeUrl(this.currentTab!.url!)
-      );
+          this.normalizeUrl(this.currentTab!.url!)
+        );
+      });
 
       if (existingIntention) {
         this.showStatus('Intention already exists for this site', 'error');
-        this.elements.quickAddBtn.disabled = false;
         return;
       }
 
-      // Create new intention
-      const newIntention = makeRawIntention(this.currentTab.url, '');
-
-      // Add to existing intentions
-      const updatedIntentions = [...existingIntentions, newIntention];
-
-      // Save to storage
-      await storage.set({ intentions: updatedIntentions });
-
-      this.showStatus('Intention added!', 'success');
-
-      // Open settings after a brief delay to show success message
-      setTimeout(() => {
-        this.openSettings();
-      }, 1000);
+      this.openQuickAdd();
     } catch (error) {
-      console.error('Failed to add intention:', error);
-      this.showStatus('Failed to add intention', 'error');
-    } finally {
-      this.elements.quickAddBtn.disabled = false;
+      console.error('Failed to check existing intentions:', error);
+      this.showStatus('Could not prepare quick add', 'error');
     }
   }
 
   private handleSettings(): void {
-    this.openSettings();
+    browser.tabs.create({ url: browser.runtime.getURL('settings.html') });
+    window.close();
   }
 
-  private openSettings(): void {
-    browser.tabs.create({
-      url: browser.runtime.getURL('settings.html'),
-    });
-    window.close();
+  private openQuickAdd(): void {
+    if (!this.currentTab?.url) return;
+
+    this.elements.urlInput.value = this.getDisplayUrl();
+    this.elements.phraseInput.value = '';
+
+    this.elements.quickAddOverlay.classList.add('visible');
+    setTimeout(() => {
+      this.elements.urlInput.focus();
+      this.elements.urlInput.select();
+    }, 0);
+  }
+
+  private closeQuickAdd(): void {
+    this.elements.quickAddOverlay.classList.remove('visible');
+    this.elements.urlInput.value = '';
+    this.elements.phraseInput.value = '';
+  }
+
+  private quickAddVisible(): boolean {
+    return this.elements.quickAddOverlay.classList.contains('visible');
+  }
+
+  private async handleSaveIntention(): Promise<void> {
+    const url = this.elements.urlInput.value.trim();
+    const phrase = this.elements.phraseInput.value.trim();
+
+    if (!url) {
+      this.showStatus('Please enter a website', 'error');
+      return;
+    }
+
+    if (!phrase) {
+      this.showStatus('Please enter an intention', 'error');
+      return;
+    }
+
+    try {
+      this.elements.quickAddSave.disabled = true;
+      this.elements.quickAddSave.textContent = 'Adding...';
+
+      const data = await storage.get();
+      const existingIntentions = data.intentions || [];
+
+      const existingIntention = existingIntentions.find(intention => {
+        if (!intention.url) return false;
+        return this.normalizeUrl(intention.url) === this.normalizeUrl(url);
+      });
+
+      if (existingIntention) {
+        this.showStatus('Intention already exists for this site', 'error');
+        return;
+      }
+
+      const newIntention = makeRawIntention(url, phrase);
+      const updatedIntentions = [...existingIntentions, newIntention];
+
+      await storage.set({ intentions: updatedIntentions });
+
+      this.closeQuickAdd();
+      this.showStatus('Intention added!', 'success');
+    } catch (error) {
+      console.error('Failed to add intention:', error);
+      this.showStatus('Failed to add intention', 'error');
+    } finally {
+      this.elements.quickAddSave.disabled = false;
+      this.elements.quickAddSave.textContent = 'Add Intention';
+    }
   }
 
   private showStatus(
     message: string,
     type: 'success' | 'error' | '' = ''
   ): void {
-    this.elements.status.textContent = message;
-    this.elements.status.className = `popup-status ${type}`;
+    if (!message) return;
 
-    // Clear status after 3 seconds for success/error messages
-    if (type) {
-      setTimeout(() => {
-        this.elements.status.textContent = '';
-        this.elements.status.className = 'popup-status';
-      }, 3000);
-    }
+    this.elements.statusMessage.textContent = message;
+    this.elements.statusMessage.className = `status-message visible ${type}`;
+
+    setTimeout(() => {
+      this.elements.statusMessage.textContent = '';
+      this.elements.statusMessage.className = 'status-message';
+    }, 2500);
   }
 
   private normalizeUrl(url: string): string {
     try {
-      const urlObj = new URL(url);
-      // Normalize by removing www, trailing slashes, and converting to lowercase
+      const urlObj = new URL(url.startsWith('http') ? url : `https://${url}`);
       let normalized = urlObj.hostname.toLowerCase();
       if (normalized.startsWith('www.')) {
         normalized = normalized.substring(4);
@@ -174,7 +254,6 @@ class PopupController {
   }
 }
 
-// Initialize popup when DOM is ready
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => new PopupController());
 } else {
