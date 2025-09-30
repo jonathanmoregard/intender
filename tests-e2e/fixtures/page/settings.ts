@@ -1,8 +1,8 @@
+import { BrowserContext, expect, Page } from '@playwright/test';
 import {
   getExtensionId,
   waitForSyncStorageChange,
-} from '@/tests-e2e/utils/extension';
-import { BrowserContext, expect, Page } from '@playwright/test';
+} from '../../utils/extension';
 
 export const SettingsPage = {
   domain: 'chrome-extension',
