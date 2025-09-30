@@ -802,7 +802,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     });
 
     // Add another intention for google using helper at index 1
-    await settingsPage.getByRole('button', { name: 'Add website' }).click();
+    await settingsPage.getByRole('button', { name: 'Add Intention' }).click();
     await SettingsPage.addIntentionAt(settingsPage, 1, {
       url: 'google.com',
       phrase: 'Google intention',
