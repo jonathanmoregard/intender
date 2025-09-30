@@ -866,9 +866,9 @@
       .setting-help[data-tooltip]::after {
         content: attr(data-tooltip);
         position: absolute;
-        left: 0;
+        left: 50%;
         top: calc(100% + 10px);
-        transform: translateX(0);
+        transform: translateX(-50%);
         background: var(--white); /* fully opaque */
         color: var(--text-primary);
         border: 1px solid var(--border-color);
@@ -893,7 +893,8 @@
         content: '';
         position: absolute;
         top: calc(100% + 4px);
-        left: 6px;
+        left: 50%;
+        transform: translateX(-50%);
         border-width: 6px;
         border-style: solid;
         border-color: var(--border-color) transparent transparent transparent;
