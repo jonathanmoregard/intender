@@ -111,6 +111,13 @@ async function forceInactivityCheck(optionsPage: Page) {
   });
 }
 
+const suspendBackgroundWorker = async (optionsPage: Page): Promise<void> => {
+  await optionsPage.evaluate(() => {
+    // @ts-ignore
+    chrome.runtime.sendMessage({ type: 'e2e:forceServiceWorkerSleep' });
+  });
+};
+
 async function toggleOsIdleEnabled(optionsPage: Page, enabled: boolean) {
   await optionsPage.evaluate(enabledArg => {
     // @ts-ignore
@@ -138,6 +145,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     const otherTab = await context.newPage();
     await otherTab.goto('about:blank');
     await bringToFrontAndWait(otherTab);
+    await suspendBackgroundWorker(settingsPage);
     await settingsPage.waitForTimeout(1500);
 
     await bringToFrontAndWait(tab);
@@ -170,6 +178,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await AudioTestPage.play(audioTab);
 
     // Wait beyond inactivity
+    await suspendBackgroundWorker(settingsPage);
     await settingsPage.waitForTimeout(1500);
 
     // Force idle check since this is a sub-15s timeout test
@@ -201,6 +210,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await AudioTestPage.play(audioTab);
 
     // Stay on audio tab and wait beyond inactivity
+    await suspendBackgroundWorker(settingsPage);
     await audioTab.waitForTimeout(1500);
     // Force idle check since this is a sub-15s timeout test
     await forceInactivityCheck(settingsPage);
@@ -232,6 +242,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await bringToFrontAndWait(other);
 
     // Wait beyond timeout
+    await suspendBackgroundWorker(settingsPage);
     await settingsPage.waitForTimeout(1500);
 
     // Switch back to scoped tab - should show intention page
@@ -262,6 +273,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await other.goto('about:blank');
 
     // Wait beyond timeout
+    await suspendBackgroundWorker(settingsPage);
     await settingsPage.waitForTimeout(1500);
 
     // Switch back to scoped tab - should show intention page
@@ -296,6 +308,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await IntentionPage.complete(duplicate, testPhrase);
 
     // Wait beyond timeout
+    await suspendBackgroundWorker(settingsPage);
     await settingsPage.waitForTimeout(1500);
 
     // Force idle check since this is a sub-15s timeout test
@@ -341,6 +354,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await gotoRobust(nonScopeTab, 'https://google.com');
 
     // Wait beyond timeout
+    await suspendBackgroundWorker(settingsPage);
     await settingsPage.waitForTimeout(1500);
 
     // Force idle check since this is a sub-15s timeout test
@@ -390,6 +404,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await gotoRobust(nonScopeTab, 'https://google.com');
 
     // Wait beyond timeout
+    await suspendBackgroundWorker(settingsPage);
     await settingsPage.waitForTimeout(1500);
 
     // Force idle check since this is a sub-15s timeout test
@@ -426,6 +441,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await gotoRobust(tab, 'https://google.com');
 
     // Wait beyond timeout
+    await suspendBackgroundWorker(settingsPage);
     await settingsPage.waitForTimeout(1500);
 
     // Force idle - should not trigger intention page
@@ -474,6 +490,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     // Work on tab A longer than timeout (stay active)
     await bringToFrontAndWait(tabA);
+    await suspendBackgroundWorker(settingsPage);
     await tabA.waitForTimeout(1500);
 
     // Switch to tab B - should NOT show intention page (same-scope switch is safe)
@@ -504,6 +521,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await AudioTestPage.play(tab);
 
     // Wait ~2s
+    await suspendBackgroundWorker(settingsPage);
     await tab.waitForTimeout(2000);
 
     // Pause audio in the same tab
@@ -516,6 +534,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     });
 
     // Wait a bit more but still under original timeout since activity was refreshed
+    await suspendBackgroundWorker(settingsPage);
     await tab.waitForTimeout(2500);
 
     // Should NOT immediately show intention page (activity was refreshed)
@@ -549,6 +568,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     // Work on tab1 for over inactivity time
     await tab1.bringToFront();
+    await suspendBackgroundWorker(settingsPage);
     await tab1.waitForTimeout(2500);
 
     // Switch to intention-scope tab2 - should be tab2 (not intention screen)
@@ -593,6 +613,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await gotoRobust(newTab, 'https://google.com');
 
     // Wait over inactivity
+    await suspendBackgroundWorker(settingsPage);
     await settingsPage.waitForTimeout(2500);
 
     // Go to audio1, verify no intention
@@ -610,6 +631,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await newTab.bringToFront();
 
     // Wait over inactivity
+    await suspendBackgroundWorker(settingsPage);
     await settingsPage.waitForTimeout(2500);
 
     // Go to audio1, verify no intention (exemption still holds due to audio2)
@@ -627,6 +649,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await newTab.bringToFront();
 
     // Wait over inactivity
+    await suspendBackgroundWorker(settingsPage);
     await settingsPage.waitForTimeout(2500);
 
     // Go to audio1, verify intention (exemption removed)
@@ -671,6 +694,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await gotoRobust(newTab, 'https://google.com');
 
     // Wait over inactivity
+    await suspendBackgroundWorker(settingsPage);
     await settingsPage.waitForTimeout(2500);
 
     // Focus tab - should show intention page (muted doesn't count as audible)
@@ -713,6 +737,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await gotoRobust(newTab, 'https://google.com');
 
     // Wait over inactivity
+    await suspendBackgroundWorker(settingsPage);
     await settingsPage.waitForTimeout(1500);
 
     await mainTab.bringToFront();
@@ -763,6 +788,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await gotoRobust(newTab, 'https://google.com');
 
     // Wait over inactivity
+    await suspendBackgroundWorker(settingsPage);
     await settingsPage.waitForTimeout(1500);
 
     await mainTab.bringToFront();
@@ -844,6 +870,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     await otherTab.goto('about:blank');
 
     // Wait beyond timeout
+    await suspendBackgroundWorker(settingsPage);
     await settingsPage.waitForTimeout(1500);
 
     // Force idle and focus tab at the same time
@@ -879,6 +906,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     // but no valid active tab is available (what DevTools focus would cause)
 
     // Wait beyond timeout to ensure we're past the inactivity threshold
+    await suspendBackgroundWorker(settingsPage);
     await tab.waitForTimeout(1500);
 
     // Focus on settings page (simulates DevTools/popup focus scenario)
@@ -958,6 +986,7 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
       await chrome.windows.update(windowId, { focused: true });
     }, windowAId);
     await bringToFrontAndWait(tabA);
+    await suspendBackgroundWorker(settingsPage);
     await tabA.waitForTimeout(1500);
 
     // Focus Window B using chrome.windows.update - should NOT show intention page
@@ -995,6 +1024,7 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
 
     // Focus A, go idle
     await tabA.bringToFront();
+    await suspendBackgroundWorker(settingsPage);
     await tabA.waitForTimeout(2000);
 
     // Ensure A's window is focused before sending force-idle from extension context
@@ -1031,6 +1061,7 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
 
     // Keep active for over timeout duration in A
     await tabA.bringToFront();
+    await suspendBackgroundWorker(settingsPage);
     await tabA.waitForTimeout(1500);
 
     // Focus B - should NOT show intention page
@@ -1074,6 +1105,7 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
     await tabAPrime.bringToFront();
 
     // Wait 6s (total 2.2s > 2s timeout)
+    await suspendBackgroundWorker(settingsPage);
     await settingsPage.waitForTimeout(1200);
 
     // Force idle check since this is a sub-15s timeout test
@@ -1140,6 +1172,7 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
     await gotoRobust(tab2, 'https://example.com');
 
     // Wait past timeout (2.5s > 2s timeout)
+    await suspendBackgroundWorker(settingsPage);
     await settingsPage.waitForTimeout(2500);
 
     // Force inactivity check since this is a sub-15s timeout test

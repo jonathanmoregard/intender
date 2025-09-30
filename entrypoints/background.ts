@@ -809,6 +809,18 @@ export default defineBackground(async () => {
       e2eDisableOSIdle = true;
       toggleIdleDetection(inactivityMode);
       await inactivityChange('idle');
+    } else if (msg.type === 'e2e:forceServiceWorkerSleep') {
+      console.log('[Intender] E2E forcing background sleep');
+      queueMicrotask(() => {
+        try {
+          const swGlobal = globalThis as { close?: () => void };
+          if (typeof swGlobal.close === 'function') {
+            swGlobal.close();
+          }
+        } catch (error) {
+          console.log('[Intender] Failed to close service worker:', error);
+        }
+      });
     } else if (msg.type === 'e2e:setOsIdle') {
       const m = message as { type: 'e2e:setOsIdle'; enabled?: boolean };
       const enabled = m.enabled === true;
