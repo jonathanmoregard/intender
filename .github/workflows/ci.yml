@@ -49,7 +49,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y xdotool
 
       - name: Run E2E tests (Chromium via Xvfb)
-        run: xvfb-run -a pnpm test:e2e
+        run: xvfb-run -a pnpm test:e2e:ci
 
       - name: Upload coverage reports
         uses: codecov/codecov-action@v4
