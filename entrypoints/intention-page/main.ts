@@ -1,6 +1,6 @@
+import '@theme';
 import { fuzzyMatch, fuzzyPartialMatch } from '../../components/fuzzy-matching';
 import { storage } from '../../components/storage';
-import '../../public/styles/theme.css';
 
 // Particles animation setup
 const canvas = document.getElementById('particles-canvas') as HTMLCanvasElement;

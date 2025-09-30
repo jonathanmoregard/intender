@@ -1,4 +1,5 @@
 import { readFileSync } from 'fs';
+import { resolve } from 'path';
 import { defineConfig } from 'wxt';
 
 const packageJson = JSON.parse(readFileSync('./package.json', 'utf8'));
@@ -7,6 +8,11 @@ export default defineConfig({
   vite: ({ mode }) => ({
     define: {
       __IS_DEV__: mode === 'development',
+    },
+    resolve: {
+      alias: {
+        '@theme': resolve(__dirname, 'entrypoints/shared/theme.css'),
+      },
     },
   }),
   manifest: {
