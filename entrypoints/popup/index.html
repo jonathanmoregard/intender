@@ -30,10 +30,14 @@
           sans-serif;
         background: var(--cream);
         color: var(--text-primary);
+        margin: 0;
+        padding: 0;
+      }
+
+      .popup-container {
         width: 320px;
         min-height: 320px;
         padding: 1.25rem;
-        margin: 0;
         position: relative;
       }
 
@@ -341,60 +345,64 @@
     </style>
   </head>
   <body>
-    <div class="options-card" id="options-card">
-      <div class="options-header">
-        <div class="logo-badge"></div>
-        <h1 class="options-title">Intender</h1>
-      </div>
-      <div class="option-buttons">
-        <button class="option-btn primary" id="quick-add-btn">
-          <span class="option-icon">+</span>
-          Quick Add Intention
-        </button>
-        <button class="option-btn secondary" id="settings-btn">
-          <span class="option-icon">⚙</span>
-          Open Settings
-        </button>
-      </div>
-    </div>
-
-    <div class="modal-overlay" id="quick-add-overlay">
-      <div class="quick-add-card">
-        <div class="quick-add-header">
-          <h2 class="quick-add-title">Quick Add Intention</h2>
-          <button class="close-btn" id="quick-add-close" title="Close">
-            ×
+    <div class="popup-container">
+      <div class="options-card" id="options-card">
+        <div class="options-header">
+          <div class="logo-badge"></div>
+          <h1 class="options-title">Intender</h1>
+        </div>
+        <div class="option-buttons">
+          <button class="option-btn primary" id="quick-add-btn">
+            <span class="option-icon">+</span>
+            Quick Add Intention
+          </button>
+          <button class="option-btn secondary" id="settings-btn">
+            <span class="option-icon">⚙</span>
+            Open Settings
           </button>
         </div>
-        <div class="form-section">
-          <div class="input-group">
-            <label class="input-label" for="quick-add-url">Website</label>
-            <input
-              class="input-field"
-              id="quick-add-url"
-              type="text"
-              placeholder="example.com"
-              autocomplete="off"
-            />
+      </div>
+
+      <div class="modal-overlay" id="quick-add-overlay">
+        <div class="quick-add-card">
+          <div class="quick-add-header">
+            <h2 class="quick-add-title">Quick Add Intention</h2>
+            <button class="close-btn" id="quick-add-close" title="Close">
+              ×
+            </button>
           </div>
-          <div class="input-group">
-            <label class="input-label" for="quick-add-phrase">Intention</label>
-            <textarea
-              class="textarea-field"
-              id="quick-add-phrase"
-              placeholder="Write your intention"
-              maxlength="150"
-              rows="3"
-            ></textarea>
+          <div class="form-section">
+            <div class="input-group">
+              <label class="input-label" for="quick-add-url">Website</label>
+              <input
+                class="input-field"
+                id="quick-add-url"
+                type="text"
+                placeholder="example.com"
+                autocomplete="off"
+              />
+            </div>
+            <div class="input-group">
+              <label class="input-label" for="quick-add-phrase"
+                >Intention</label
+              >
+              <textarea
+                class="textarea-field"
+                id="quick-add-phrase"
+                placeholder="Write your intention"
+                maxlength="150"
+                rows="3"
+              ></textarea>
+            </div>
           </div>
-        </div>
-        <div class="form-actions">
-          <button class="save-btn" id="quick-add-save">Add Intention</button>
+          <div class="form-actions">
+            <button class="save-btn" id="quick-add-save">Add Intention</button>
+          </div>
         </div>
       </div>
-    </div>
 
-    <div class="status-message" id="status"></div>
+      <div class="status-message" id="status"></div>
+    </div>
 
     <script type="module" src="./main.ts"></script>
   </body>
