@@ -8,6 +8,11 @@ export default defineConfig({
     define: {
       __IS_DEV__: mode === 'development',
     },
+    resolve: {
+      alias: {
+        '@theme': '/home/jonathan/Repos/intender/entrypoints/shared/theme.css',
+      },
+    },
   }),
   manifest: {
     name: 'Intender',

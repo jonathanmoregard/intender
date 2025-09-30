@@ -1,3 +1,4 @@
+import '@theme';
 import { debounce } from 'lodash-es';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -13,7 +14,6 @@ import { storage, type InactivityMode } from '../../components/storage';
 import { minutesToMs, msToMinutes } from '../../components/time';
 import { generateUUID } from '../../components/uuid';
 import packageJson from '../../package.json';
-import '../../public/styles/theme.css';
 
 type Tab = 'settings' | 'about';
 
