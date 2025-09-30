@@ -1,4 +1,5 @@
 import { readFileSync } from 'fs';
+import { resolve } from 'path';
 import { defineConfig } from 'wxt';
 
 const packageJson = JSON.parse(readFileSync('./package.json', 'utf8'));
@@ -10,7 +11,7 @@ export default defineConfig({
     },
     resolve: {
       alias: {
-        '@theme': '/home/jonathan/Repos/intender/entrypoints/shared/theme.css',
+        '@theme': resolve(__dirname, 'entrypoints/shared/theme.css'),
       },
     },
   }),
