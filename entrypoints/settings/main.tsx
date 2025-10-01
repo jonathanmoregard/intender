@@ -17,6 +17,13 @@ import packageJson from '../../package.json';
 
 type Tab = 'settings' | 'about';
 
+// Build info fallbacks for environments where Vite define isn't injected
+declare const __VERSION__: string | undefined;
+declare const __GIT_HASH__: string | undefined;
+
+const BUILD_VERSION: string = __VERSION__ ?? packageJson.version;
+const BUILD_HASH: string = __GIT_HASH__ ?? 'dev';
+
 const SettingsTab = memo(
   ({ setActiveTab }: { setActiveTab: (tab: Tab) => void }) => {
     const [intentions, setIntentions] = useState<RawIntention[]>([]);
@@ -1000,6 +1007,16 @@ const Options = () => {
           <SettingsTab setActiveTab={setActiveTab} />
         )}
         {activeTab === 'about' && <AboutTab />}
+      </div>
+
+      <div
+        className='build-footer'
+        title={BUILD_HASH}
+        onClick={() => {
+          navigator.clipboard.writeText(`${BUILD_VERSION} - ${BUILD_HASH}`);
+        }}
+      >
+        v{BUILD_VERSION}
       </div>
     </div>
   );

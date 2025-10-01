@@ -1,13 +1,26 @@
+import { execSync } from 'child_process';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { defineConfig } from 'wxt';
 
 const packageJson = JSON.parse(readFileSync('./package.json', 'utf8'));
+let gitHash = 'dev';
+try {
+  gitHash = execSync('git rev-parse --short HEAD', {
+    stdio: ['ignore', 'pipe', 'ignore'],
+  })
+    .toString()
+    .trim();
+} catch {
+  // leave default
+}
 
 export default defineConfig({
   vite: ({ mode }) => ({
     define: {
       __IS_DEV__: mode === 'development',
+      __VERSION__: JSON.stringify(packageJson.version),
+      __GIT_HASH__: JSON.stringify(gitHash),
     },
     resolve: {
       alias: {

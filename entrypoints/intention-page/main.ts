@@ -1,4 +1,5 @@
 import '@theme';
+import packageJson from '../../package.json';
 import { fuzzyMatch, fuzzyPartialMatch } from '../../components/fuzzy-matching';
 import { storage } from '../../components/storage';
 
@@ -115,6 +116,24 @@ draw();
 // After first paint, upgrade background sources (MV3-safe; no inline script)
 requestAnimationFrame(() => {
   document.documentElement.classList.add('bg-ready');
+});
+
+// Build footer (version + git hash with clipboard copy)
+declare const __VERSION__: string | undefined;
+declare const __GIT_HASH__: string | undefined;
+
+const BUILD_VERSION: string = __VERSION__ ?? packageJson.version;
+const BUILD_HASH: string = __GIT_HASH__ ?? 'dev';
+
+requestAnimationFrame(() => {
+  const el = document.getElementById('build-footer');
+  if (el) {
+    el.textContent = `v${BUILD_VERSION}`;
+    el.setAttribute('title', BUILD_HASH);
+    el.addEventListener('click', () => {
+      navigator.clipboard.writeText(`${BUILD_VERSION} - ${BUILD_HASH}`);
+    });
+  }
 });
 
 const query = new URLSearchParams(window.location.search);
