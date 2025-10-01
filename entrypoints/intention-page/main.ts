@@ -1,7 +1,7 @@
 import '@theme';
-import packageJson from '../../package.json';
 import { fuzzyMatch, fuzzyPartialMatch } from '../../components/fuzzy-matching';
 import { storage } from '../../components/storage';
+import packageJson from '../../package.json';
 
 // Particles animation setup
 const canvas = document.getElementById('particles-canvas') as HTMLCanvasElement;
@@ -143,11 +143,28 @@ const intentionId = query.get('intentionScopeId');
 const phraseDisplayEl = document.getElementById(
   'phrase-display'
 ) as HTMLElement;
+const urlDisplayEl = document.getElementById('url-display') as HTMLElement;
 const inputEl = document.getElementById('phrase') as HTMLTextAreaElement;
 const buttonEl = document.getElementById('go') as HTMLButtonElement;
 const helperTextEl = document.getElementById('helper-text') as HTMLElement;
 
 let expectedPhrase = '';
+
+// Display the target URL
+if (urlDisplayEl && target) {
+  try {
+    const url = new URL(target);
+    let hostname = url.hostname.replace(/^www\./, '');
+    // Remove common suffixes
+    hostname = hostname.replace(
+      /\.(com|org|net|edu|gov|mil|co\.uk|co\.jp|de|fr|it|es|nl|be|se|no|dk|fi|pl|cz|hu|ro|bg|hr|sk|si|lt|lv|ee|lu|mt|cy|ie|pt|gr|at|ch|li)$/i,
+      ''
+    );
+    urlDisplayEl.textContent = hostname;
+  } catch {
+    urlDisplayEl.textContent = target;
+  }
+}
 
 storage
   .get()
