@@ -143,11 +143,24 @@ const intentionId = query.get('intentionScopeId');
 const phraseDisplayEl = document.getElementById(
   'phrase-display'
 ) as HTMLElement;
+const urlDisplayEl = document.getElementById('url-display') as HTMLElement;
 const inputEl = document.getElementById('phrase') as HTMLTextAreaElement;
 const buttonEl = document.getElementById('go') as HTMLButtonElement;
 const helperTextEl = document.getElementById('helper-text') as HTMLElement;
 
 let expectedPhrase = '';
+
+// Display the target URL
+if (urlDisplayEl && target) {
+  try {
+    const url = new URL(target);
+    const hostname = url.hostname.replace(/^www\./, '');
+    const path = url.pathname === '/' ? '' : url.pathname;
+    urlDisplayEl.textContent = hostname + path;
+  } catch {
+    urlDisplayEl.textContent = target;
+  }
+}
 
 storage
   .get()
