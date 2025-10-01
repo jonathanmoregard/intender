@@ -1,7 +1,7 @@
 import '@theme';
-import packageJson from '../../package.json';
 import { fuzzyMatch, fuzzyPartialMatch } from '../../components/fuzzy-matching';
 import { storage } from '../../components/storage';
+import packageJson from '../../package.json';
 
 // Particles animation setup
 const canvas = document.getElementById('particles-canvas') as HTMLCanvasElement;
@@ -154,9 +154,13 @@ let expectedPhrase = '';
 if (urlDisplayEl && target) {
   try {
     const url = new URL(target);
-    const hostname = url.hostname.replace(/^www\./, '');
-    const path = url.pathname === '/' ? '' : url.pathname;
-    urlDisplayEl.textContent = hostname + path;
+    let hostname = url.hostname.replace(/^www\./, '');
+    // Remove common suffixes
+    hostname = hostname.replace(
+      /\.(com|org|net|edu|gov|mil|co\.uk|co\.jp|de|fr|it|es|nl|be|se|no|dk|fi|pl|cz|hu|ro|bg|hr|sk|si|lt|lv|ee|lu|mt|cy|ie|pt|gr|at|ch|li)$/i,
+      ''
+    );
+    urlDisplayEl.textContent = hostname;
   } catch {
     urlDisplayEl.textContent = target;
   }
