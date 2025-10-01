@@ -9,3 +9,7 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+declare const __IS_DEV__: boolean;
+declare const __VERSION__: string;
+declare const __GIT_HASH__: string;

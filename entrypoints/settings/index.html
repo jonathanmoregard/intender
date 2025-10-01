@@ -11,6 +11,27 @@
       rel="stylesheet"
     />
     <style>
+      .build-footer {
+        position: fixed;
+        right: 12px;
+        bottom: 8px;
+        font-size: 12px;
+        color: rgba(var(--text-base-rgb), 0.5);
+        user-select: none;
+        cursor: pointer;
+        z-index: 2000;
+        transition: all 0.2s ease;
+      }
+
+      .build-footer:hover {
+        color: rgba(var(--text-base-rgb), 0.8);
+        transform: scale(1.05);
+      }
+
+      .build-footer:active {
+        transform: scale(0.95);
+        transition: transform 0.1s ease;
+      }
       * {
         margin: 0;
         padding: 0;
