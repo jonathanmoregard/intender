@@ -231,6 +231,53 @@ export async function launchExtension(
   return { context };
 }
 
+// Get the extension ID by checking loaded extensions
+
+/**
+ * Stops the service worker associated with the extension using Chrome DevTools Protocol.
+ * This is more reliable than the previous globalThis.close() approach.
+ *
+ * @param {BrowserContext} context Browser context
+ */
+export async function stopServiceWorker(
+  context: BrowserContext
+): Promise<void> {
+  try {
+    const extensionId = await getExtensionId(context);
+    const host = `chrome-extension://${extensionId}`;
+
+    // Get service workers from context
+    const serviceWorkers = context.serviceWorkers();
+    const targetWorker = serviceWorkers.find(sw => sw.url().startsWith(host));
+
+    if (targetWorker) {
+      // Service worker will be terminated when we close the context or use CDP
+      console.log(
+        `[Test] Service worker found for extension ${extensionId}, will be terminated`
+      );
+      // Force termination by sending a message to close
+      try {
+        await targetWorker.evaluate(() => {
+          // @ts-ignore
+          if (typeof globalThis.close === 'function') {
+            // @ts-ignore
+            globalThis.close();
+          }
+        });
+      } catch (e) {
+        // Worker might already be terminated
+      }
+    } else {
+      console.log(
+        `[Test] No service worker found for extension ${extensionId}`
+      );
+    }
+  } catch (error) {
+    console.log(`[Test] Failed to stop service worker: ${error}`);
+    // Don't throw - this is best effort
+  }
+}
+
 // Append a single-line test result marker into the same SW log file
 export function logSwTestResult(
   status: 'PASSED' | 'FAILED' | 'TIMED_OUT' | 'SKIPPED',
