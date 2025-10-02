@@ -955,6 +955,11 @@ export default defineBackground(async () => {
           console.log(
             '[Intender] Rule 2: Origin intention page with completion flag, allowing (initiated from intention page)'
           );
+          // Remove the query parameter after validation
+          targetUrlObj.searchParams.delete('intention_completed_53c5890');
+          await browser.tabs.update(details.tabId, {
+            url: targetUrlObj.toString(),
+          });
           return;
         } else {
           console.log(
