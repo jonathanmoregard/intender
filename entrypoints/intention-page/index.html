@@ -109,12 +109,7 @@
         align-items: center;
         height: 100vh;
         margin: 0;
-        background-image:
-          linear-gradient(
-            rgba(var(--shadow-weak-rgb), 0.28),
-            rgba(var(--shadow-weak-rgb), 0.28)
-          ),
-          var(--bg);
+        background-image: var(--bg);
         background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
@@ -145,23 +140,6 @@
             url('/assets/misty-1280.jpg') 1x
           );
         }
-      }
-
-      /* Warm overlay */
-      body::after {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: linear-gradient(
-          135deg,
-          rgba(254, 227, 164, 0.15),
-          rgba(var(--cream-rgb), 0.1)
-        );
-        pointer-events: none;
-        z-index: 1;
       }
 
       /* Ambient particles */
@@ -214,7 +192,6 @@
         padding: 4rem 2.5rem;
         border-radius: 12px;
         box-shadow: 0 6px 24px rgba(var(--shadow-weak-rgb), 0.08);
-        backdrop-filter: blur(8px);
         border: 1px solid rgba(var(--white-rgb), 0.6);
         max-width: 420px;
         position: relative;
@@ -234,25 +211,6 @@
         animation:
           fadeIn 0.6s ease-out,
           breathe 10s ease-in-out infinite;
-      }
-
-      /* Radial gradient behind card for better readability */
-      .container::before {
-        content: '';
-        position: absolute;
-        top: -20px;
-        left: -20px;
-        right: -20px;
-        bottom: -20px;
-        background: radial-gradient(
-          ellipse at center,
-          rgba(var(--shadow-weak-rgb), 0.15) 0%,
-          rgba(var(--shadow-weak-rgb), 0.05) 40%,
-          transparent 70%
-        );
-        border-radius: 16px;
-        z-index: 30;
-        pointer-events: none;
       }
 
       .headline {
@@ -421,7 +379,9 @@
         font-size: 1rem;
         border-radius: 12px;
         cursor: pointer;
-        transition: all 1.6s ease;
+        transition:
+          opacity 1.6s ease,
+          background 0.15s ease;
         width: auto;
         min-width: 160px;
         font-family: 'Inter', sans-serif;
@@ -446,11 +406,9 @@
         box-shadow: 0 2px 8px rgba(var(--shadow-weak-rgb), 0.05);
       }
 
-      .enter-btn:hover {
-        background: var(--primary);
-        transform: scale(1.02);
-        transition: all 0.15s ease;
-        box-shadow: 0 4px 12px rgba(var(--shadow-weak-rgb), 0.4);
+      .enter-btn:hover:not(:disabled) {
+        background: color-mix(in srgb, var(--primary) 90%, black);
+        transition: background 0.15s ease;
       }
 
       .enter-btn:active {

@@ -100,7 +100,7 @@
         font-size: 1rem;
         text-align: left;
         cursor: pointer;
-        transition: all 0.3s ease;
+        transition: all 0.15s ease;
         border-left: 3px solid transparent;
         font-family: 'Inter', sans-serif;
       }
@@ -155,13 +155,17 @@
         gap: 0.75rem;
         cursor: pointer;
         font-family: 'Inter', sans-serif;
-        transition: all 0.3s ease;
+        transition: all 0.15s ease;
         padding: 0.5rem;
         border-radius: 6px;
       }
 
+      .setting-label input[type='checkbox'] {
+        filter: drop-shadow(0 0 0 rgba(0, 0, 0, 0));
+        transition: filter 0.15s ease;
+      }
       .setting-label:hover input[type='checkbox'] {
-        transform: scale(1.1);
+        filter: drop-shadow(0 0 0.75px rgba(var(--primary-rgb), 0.9));
       }
 
       .setting-label input[type='checkbox'] {
@@ -190,7 +194,7 @@
         background: var(--white);
         border-radius: 8px;
         border: 1px solid var(--border-color);
-        transition: all 0.3s ease;
+        transition: all 0.15s ease;
         cursor: pointer;
       }
 
@@ -254,7 +258,7 @@
         font-family: 'Inter', sans-serif;
         font-size: 0.75rem;
         color: var(--text-quaternary);
-        transition: all 0.3s ease;
+        transition: all 0.15s ease;
         pointer-events: none;
         background: var(--input-background-color);
         padding: 0 0.25rem;
@@ -267,7 +271,7 @@
         border: 1px solid var(--border-color);
         border-radius: 8px;
         font-size: 0.9rem;
-        transition: all 0.3s ease;
+        transition: all 0.15s ease;
         background: var(--input-background-color);
         font-family: 'Inter', sans-serif;
       }
@@ -278,7 +282,7 @@
         border: 1px solid var(--border-color);
         border-radius: 8px;
         font-size: 0.9rem;
-        transition: all 0.3s ease;
+        transition: all 0.15s ease;
         background: var(--input-background-color);
         min-height: 3rem;
         resize: vertical;
@@ -308,7 +312,7 @@
         height: 32px;
         font-size: 1.2rem;
         cursor: pointer;
-        transition: all 0.15s ease;
+        transition: background 0.15s ease;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -321,8 +325,6 @@
 
       .remove-btn:hover {
         background: var(--error-vivid);
-        transform: scale(1.1);
-        box-shadow: 0 4px 12px rgba(var(--error-vivid-rgb), 0.4);
       }
 
       .remove-btn-wrapper {
@@ -338,20 +340,21 @@
         width: 36px;
         height: 36px;
         font-size: 1.4rem;
-        background: #ff6b3d;
-        box-shadow: 0 4px 12px rgba(var(--error-rgb), 0.5);
+        background: var(--error-vivid);
+      }
+
+      .remove-btn.shift-held:hover {
+        background: var(--error-vivider);
       }
 
       .remove-btn.disabled {
         background: rgba(var(--disabled-rgb), 0.6);
         color: var(--text-white);
         cursor: not-allowed;
-        box-shadow: 0 2px 6px rgba(var(--disabled-rgb), 0.2);
       }
 
       .remove-btn.disabled:hover {
-        transform: none;
-        box-shadow: 0 2px 6px rgba(var(--disabled-rgb), 0.2);
+        background: rgba(var(--disabled-rgb), 0.6);
       }
 
       .valid-checkmark {
@@ -402,47 +405,41 @@
       .add-btn {
         padding: 0.75rem 1.5rem;
         border: none;
-        border-radius: 12px;
+        border-radius: 8px;
         font-size: 0.9rem;
         font-weight: 700;
         cursor: pointer;
-        transition: all 0.15s ease;
+        transition: background 0.15s ease;
         font-family: 'Inter', sans-serif;
         letter-spacing: 0.5px;
         background: var(--secondary-dark);
         color: var(--text-white);
         text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
         border: 1px solid rgba(var(--secondary-darker-rgb), 0.4);
-        box-shadow: 0 2px 6px rgba(var(--shadow-weak-rgb), 0.3);
       }
 
       .add-btn:hover {
-        background: var(--secondary-dark);
-        transform: translateY(-1px) scale(1.02);
-        box-shadow: 0 4px 12px rgba(var(--shadow-weak-rgb), 0.4);
+        background: color-mix(in srgb, var(--secondary-dark) 90%, black);
       }
 
       .save-btn {
         padding: 0.75rem 1.5rem;
         border: none;
-        border-radius: 12px;
+        border-radius: 8px;
         font-size: 0.9rem;
         font-weight: 700;
         cursor: pointer;
-        transition: all 0.15s ease;
+        transition: background 0.15s ease;
         font-family: 'Inter', sans-serif;
         letter-spacing: 0.5px;
         background: var(--primary);
         color: var(--text-white);
         text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
         border: 1px solid rgba(var(--primary-dark-rgb), 0.4);
-        box-shadow: 0 2px 6px rgba(var(--shadow-weak-rgb), 0.3);
       }
 
       .save-btn:hover {
-        background: var(--primary);
-        transform: translateY(-1px) scale(1.02);
-        box-shadow: 0 4px 12px rgba(var(--shadow-weak-rgb), 0.4);
+        background: color-mix(in srgb, var(--primary) 90%, black);
       }
 
       /* More Options Dropdown */
@@ -457,7 +454,7 @@
         border-radius: 8px;
         padding: 0.75rem;
         cursor: pointer;
-        transition: all 0.3s ease;
+        transition: all 0.15s ease;
         font-family: 'Inter', sans-serif;
         color: var(--text-primary);
         font-size: 1.5rem;
@@ -496,7 +493,7 @@
       .dropdown-item {
         padding: 0.75rem 1rem;
         cursor: pointer;
-        transition: background 0.3s ease;
+        transition: background 0.15s ease;
         font-family: 'Inter', sans-serif;
         font-size: 0.9rem;
         color: var(--text-primary);
@@ -592,7 +589,7 @@
         font-size: 1.2rem;
         font-weight: 700;
         cursor: pointer;
-        transition: all 0.3s ease;
+        transition: background 0.15s ease;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -600,9 +597,7 @@
       }
 
       .quick-add-btn:hover {
-        background: var(--secondary-dark);
-        transform: scale(1.1);
-        box-shadow: 0 4px 12px rgba(var(--shadow-weak-rgb), 0.4);
+        background: color-mix(in srgb, var(--secondary-dark) 90%, black);
       }
 
       /* Toast Animation */
@@ -797,7 +792,7 @@
         cursor: pointer;
         font-family: 'Inter', sans-serif;
         font-weight: 700;
-        transition: all 0.3s ease;
+        transition: all 0.15s ease;
       }
 
       .cancel-btn:hover {
@@ -815,12 +810,11 @@
         cursor: pointer;
         font-family: 'Inter', sans-serif;
         font-weight: 700;
-        transition: all 0.3s ease;
+        transition: all 0.15s ease;
       }
 
       .confirm-btn:hover {
-        background: var(--error);
-        transform: translateY(-1px);
+        background: color-mix(in srgb, var(--error) 90%, black);
       }
 
       /* Error styling for unparseable URLs */
@@ -866,7 +860,7 @@
         font-size: 0.8rem;
         font-weight: 600;
         cursor: help;
-        transition: all 0.3s ease;
+        transition: all 0.15s ease;
         font-family: 'Inter', sans-serif;
         position: relative;
         z-index: 1; /* create stacking context */
@@ -945,7 +939,7 @@
         color: var(--text-primary);
         width: 80px;
         text-align: center;
-        transition: all 0.3s ease;
+        transition: all 0.15s ease;
       }
 
       .timeout-input:focus {
@@ -966,7 +960,7 @@
         cursor: pointer;
         padding: 0.5rem;
         border-radius: 6px;
-        transition: all 0.3s ease;
+        transition: all 0.15s ease;
         font-family: 'Inter', sans-serif;
       }
 
@@ -975,8 +969,12 @@
         box-shadow: 0 2px 8px rgba(var(--primary-rgb), 0.1);
       }
 
+      .radio-option input[type='radio'] {
+        filter: drop-shadow(0 0 0 rgba(0, 0, 0, 0));
+        transition: filter 0.15s ease;
+      }
       .radio-option:hover input[type='radio'] {
-        transform: scale(1.1);
+        filter: drop-shadow(0 0 0.75px rgba(var(--primary-rgb), 0.9));
       }
 
       .radio-option input[type='radio'] {
@@ -1008,7 +1006,7 @@
         color: var(--text-primary);
         width: 100px;
         text-align: center;
-        transition: all 0.3s ease;
+        transition: all 0.15s ease;
         font-weight: 500;
       }
 
@@ -1040,7 +1038,7 @@
         background: var(--white);
         border-radius: 12px;
         cursor: pointer;
-        transition: all 0.3s ease;
+        transition: all 0.15s ease;
       }
 
       .advanced-settings-header.expanded {
@@ -1119,7 +1117,7 @@
         background: var(--input-background-color);
         border: 1px solid var(--border-color);
         border-radius: 8px;
-        transition: all 0.3s ease;
+        transition: all 0.15s ease;
         margin: 0;
       }
 
@@ -1172,7 +1170,7 @@
         font-family: 'Inter', sans-serif;
         font-size: 0.9rem;
         color: var(--text-primary);
-        transition: all 0.3s ease;
+        transition: all 0.15s ease;
         flex-shrink: 0;
       }
 
