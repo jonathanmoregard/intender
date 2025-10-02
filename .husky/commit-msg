@@ -1,0 +1,11 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+commit_msg_file="$1"
+commit_msg=$(cat "$commit_msg_file")
+
+if [ ${#commit_msg} -gt 300 ]; then
+  echo "❌ Keep commit messages succinct: explain what you implemented and why, do not go into implementation details." >&2
+  echo "Current length: ${#commit_msg} characters (max: 300)" >&2
+  exit 1
+fi
