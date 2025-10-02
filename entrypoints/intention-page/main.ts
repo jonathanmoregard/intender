@@ -248,7 +248,7 @@ storage
             e.preventDefault(); // Prevent newline from being added
             if (acceptableCompletePrompt(inputEl.value)) {
               const targetUrl = new URL(target!);
-              targetUrl.searchParams.set('intention_completed', 'true');
+              targetUrl.searchParams.set('intention_completed_53c5890', 'true');
               window.location.href = targetUrl.toString();
             }
           }
@@ -266,7 +266,7 @@ storage
             // Navigate after animation
             setTimeout(() => {
               const targetUrl = new URL(target!);
-              targetUrl.searchParams.set('intention_completed', 'true');
+              targetUrl.searchParams.set('intention_completed_53c5890', 'true');
               window.location.href = targetUrl.toString();
             }, 200);
           }
