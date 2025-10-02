@@ -379,7 +379,9 @@
         font-size: 1rem;
         border-radius: 12px;
         cursor: pointer;
-        transition: all 1.6s ease;
+        transition:
+          opacity 1.6s ease,
+          background 0.15s ease;
         width: auto;
         min-width: 160px;
         font-family: 'Inter', sans-serif;
@@ -404,11 +406,9 @@
         box-shadow: 0 2px 8px rgba(var(--shadow-weak-rgb), 0.05);
       }
 
-      .enter-btn:hover {
-        background: var(--primary);
-        transform: scale(1.02);
-        transition: all 0.15s ease;
-        box-shadow: 0 4px 12px rgba(var(--shadow-weak-rgb), 0.4);
+      .enter-btn:hover:not(:disabled) {
+        background: color-mix(in srgb, var(--primary) 90%, black);
+        transition: background 0.15s ease;
       }
 
       .enter-btn:active {
