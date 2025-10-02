@@ -160,8 +160,12 @@
         border-radius: 6px;
       }
 
+      .setting-label input[type='checkbox'] {
+        filter: drop-shadow(0 0 0 rgba(0, 0, 0, 0));
+        transition: filter 0.15s ease;
+      }
       .setting-label:hover input[type='checkbox'] {
-        transform: scale(1.1);
+        filter: drop-shadow(0 0 0.75px rgba(var(--primary-rgb), 0.9));
       }
 
       .setting-label input[type='checkbox'] {
@@ -965,8 +969,12 @@
         box-shadow: 0 2px 8px rgba(var(--primary-rgb), 0.1);
       }
 
+      .radio-option input[type='radio'] {
+        filter: drop-shadow(0 0 0 rgba(0, 0, 0, 0));
+        transition: filter 0.15s ease;
+      }
       .radio-option:hover input[type='radio'] {
-        transform: scale(1.1);
+        filter: drop-shadow(0 0 0.75px rgba(var(--primary-rgb), 0.9));
       }
 
       .radio-option input[type='radio'] {
