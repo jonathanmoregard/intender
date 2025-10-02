@@ -5,7 +5,7 @@
 
     <link rel="preload" as="image" href="/assets/misty-1920.avif" />
     <style>
-      @keyframes breathe {
+      @keyframes breathe-minimal {
         0% {
           transform: scale(1);
         }
@@ -14,6 +14,42 @@
         }
         50% {
           transform: scale(1.015);
+        }
+        83.33% {
+          transform: scale(1);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+
+      @keyframes breathe-medium {
+        0% {
+          transform: scale(1);
+        }
+        33.33% {
+          transform: scale(1.025);
+        }
+        50% {
+          transform: scale(1.025);
+        }
+        83.33% {
+          transform: scale(1);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+
+      @keyframes breathe-heavy {
+        0% {
+          transform: scale(1);
+        }
+        33.33% {
+          transform: scale(1.04);
+        }
+        50% {
+          transform: scale(1.04);
         }
         83.33% {
           transform: scale(1);
@@ -208,9 +244,7 @@
       .container {
         flex-direction: column;
         align-items: center;
-        animation:
-          fadeIn 0.6s ease-out,
-          breathe 10s ease-in-out infinite;
+        animation: fadeIn 0.6s ease-out;
       }
 
       .headline {
