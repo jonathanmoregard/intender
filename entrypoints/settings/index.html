@@ -321,8 +321,6 @@
 
       .remove-btn:hover {
         background: var(--error-vivid);
-        transform: scale(1.1);
-        box-shadow: 0 4px 12px rgba(var(--error-vivid-rgb), 0.4);
       }
 
       .remove-btn-wrapper {
@@ -338,8 +336,11 @@
         width: 36px;
         height: 36px;
         font-size: 1.4rem;
-        background: #ff6b3d;
-        box-shadow: 0 4px 12px rgba(var(--error-rgb), 0.5);
+        background: var(--error-vivid);
+      }
+
+      .remove-btn.shift-held:hover {
+        background: var(--error-vivider);
       }
 
       .remove-btn.disabled {
@@ -592,9 +593,7 @@
       }
 
       .quick-add-btn:hover {
-        background: var(--secondary-dark);
-        transform: scale(1.1);
-        box-shadow: 0 4px 12px rgba(var(--shadow-weak-rgb), 0.4);
+        background: color-mix(in srgb, var(--secondary-dark) 90%, black);
       }
 
       /* Toast Animation */
