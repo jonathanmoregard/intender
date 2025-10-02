@@ -39,6 +39,8 @@ const tabUrlMap = new Map<TabId, string>();
 // Inactivity tracking
 const lastActiveByScope = new Map<IntentionScopeId, Timestamp>();
 const intentionScopePerTabId = new Map<TabId, IntentionScopeId>();
+// Skip gating once per tab to avoid loop when cleaning completion flag
+const skipGatingOncePerTabId = new Set<TabId>();
 const lastActiveTabIdByWindow = new Map<WindowId, TabId>();
 // never -1, ignore non proper browser windows
 let lastFocusedWindowId: WindowId | null = null;
@@ -663,7 +665,44 @@ export default defineBackground(async () => {
       url: details.url,
     });
 
+    // Post-commit cleanup: remove intention completion flag without looping
+    // We do this here (after commit) so that the next onBeforeNavigate run
+    // has a non-intention-page sourceUrl, avoiding Rule 2 re-evaluation.
+    try {
+      const committedUrl = new URL(details.url);
+      const completionFlag = committedUrl.searchParams.get(
+        'intention_completed_53c5890'
+      );
+      if (completionFlag === 'true') {
+        committedUrl.searchParams.delete('intention_completed_53c5890');
+        const cleaned = committedUrl.toString();
+        if (cleaned !== details.url) {
+          console.log(
+            '[Intender] Cleaned completion flag from URL post-commit'
+          );
+          await browser.tabs.update(details.tabId, { url: cleaned });
+          // Next commit is ours; skip gating once to avoid redirect loop
+          skipGatingOncePerTabId.add(numberToTabId(details.tabId));
+          return;
+        }
+      }
+    } catch (e) {
+      // Non-fatal: if URL parsing fails, skip cleanup
+      console.log(
+        '[Intender] Post-commit cleanup skipped due to parse error:',
+        e
+      );
+    }
+
     // If the destination URL matches an intention, record scope and possibly redirect.
+    // Honor one-shot skip if we're cleaning up URL
+    const tabIdForCommit = numberToTabId(details.tabId);
+    if (skipGatingOncePerTabId.has(tabIdForCommit)) {
+      skipGatingOncePerTabId.delete(tabIdForCommit);
+      console.log('[Intender] Skipping gating once post-cleanup');
+      return;
+    }
+
     const matched = lookupIntention(details.url, intentionIndex);
     if (matched) {
       const scopeId = intentionToIntentionScopeId(matched);
@@ -955,11 +994,9 @@ export default defineBackground(async () => {
           console.log(
             '[Intender] Rule 2: Origin intention page with completion flag, allowing (initiated from intention page)'
           );
-          // Remove the query parameter after validation
-          targetUrlObj.searchParams.delete('intention_completed_53c5890');
-          await browser.tabs.update(details.tabId, {
-            url: targetUrlObj.toString(),
-          });
+          // Mark this tab to skip gating once to avoid loops after cleanup
+          skipGatingOncePerTabId.add(numberToTabId(details.tabId));
+          // Allow navigation as-is; cleanup happens post-commit to avoid loops
           return;
         } else {
           console.log(
