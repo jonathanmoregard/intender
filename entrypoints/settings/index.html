@@ -1201,7 +1201,7 @@
       .slider-container {
         position: relative;
         width: 100%;
-        padding: 24px 4px 36px;
+        padding: 0px 4px 16px;
         display: flex;
         flex-direction: column; /* stack children vertically */
         justify-content: center; /* center them as a group vertically */
@@ -1209,7 +1209,7 @@
         padding-right: 1rem;
         /* thumb size variable to sync track travel and tick scale insets */
         --slider-thumb-size: 22px;
-        --slider-transition-ms: 180ms;
+        --slider-transition-ms: 120ms;
       }
 
       .slider-input {
@@ -1221,8 +1221,9 @@
         border-radius: 999px;
         outline: none;
         position: relative;
-        z-index: 100;
+        z-index: 3; /* above custom track/ticks to receive drag */
         opacity: 0; /* visually hide native input (thumb + track) */
+        pointer-events: auto; /* allow dragging and clicking */
       }
 
       /* Hide native tracks explicitly */
@@ -1267,7 +1268,8 @@
         margin-left: calc(var(--slider-thumb-size) / 2);
         margin-right: calc(var(--slider-thumb-size) / 2);
         height: 36px; /* room for larger ticks + labels */
-        pointer-events: none; /* keep interactions on the input */
+        pointer-events: auto; /* accept clicks */
+        z-index: 2; /* under the invisible input */
       }
 
       /* Custom track that matches tick extents */
@@ -1286,7 +1288,7 @@
       /* Fake thumb that follows a CSS variable for smooth transitions */
       .slider-scale .fake-thumb {
         position: absolute;
-        top: -5px; /* visually center over the track */
+        top: -4px; /* visually center over the track */
         left: var(--slider-position, 0%);
         transform: translateX(-50%);
         width: var(--slider-thumb-size);
@@ -1297,6 +1299,7 @@
         box-shadow: 0 2px 6px rgba(var(--shadow-weak-rgb), 0.2);
         transition: left var(--slider-transition-ms) ease-in-out;
         z-index: 2;
+        pointer-events: none; /* do not block dragging on the input */
       }
 
       .slider-scale .tick {
@@ -1309,6 +1312,7 @@
         height: 16px;
         background: var(--border-color);
         border-radius: 50%;
+        cursor: pointer;
       }
 
       .slider-scale .tick:nth-child(1) {

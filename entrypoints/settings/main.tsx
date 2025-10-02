@@ -1022,11 +1022,68 @@ const SettingsTab = memo(
                     aria-valuenow={sliderValue}
                     aria-valuetext={breathIntensity}
                   />
-                  <div className='slider-scale' aria-hidden='true'>
-                    <span className='tick' data-label='Off'></span>
-                    <span className='tick' data-label='Minimal'></span>
-                    <span className='tick' data-label='Medium'></span>
-                    <span className='tick' data-label='Heavy'></span>
+                  <div
+                    className='slider-scale'
+                    aria-hidden='true'
+                    onClick={e => {
+                      const rect = (
+                        e.currentTarget as HTMLDivElement
+                      ).getBoundingClientRect();
+                      const x = e.clientX - rect.left;
+                      const fraction = Math.max(0, Math.min(1, x / rect.width));
+                      const idx = Math.round(
+                        fraction * (intensityOptions.length - 1)
+                      );
+                      setSliderValue(idx);
+                      const next = intensityOptions[idx] ?? 'minimal';
+                      setBreathIntensity(next);
+                      saveBreathAnimationIntensity(next);
+                    }}
+                  >
+                    <span
+                      className='tick'
+                      data-label='Off'
+                      role='button'
+                      tabIndex={0}
+                      onClick={() => setSliderValue(0)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' || e.key === ' ')
+                          setSliderValue(0);
+                      }}
+                    ></span>
+                    <span
+                      className='tick'
+                      data-label='Minimal'
+                      role='button'
+                      tabIndex={0}
+                      onClick={() => setSliderValue(1)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' || e.key === ' ')
+                          setSliderValue(1);
+                      }}
+                    ></span>
+                    <span
+                      className='tick'
+                      data-label='Medium'
+                      role='button'
+                      tabIndex={0}
+                      onClick={() => setSliderValue(2)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' || e.key === ' ')
+                          setSliderValue(2);
+                      }}
+                    ></span>
+                    <span
+                      className='tick'
+                      data-label='Heavy'
+                      role='button'
+                      tabIndex={0}
+                      onClick={() => setSliderValue(3)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' || e.key === ' ')
+                          setSliderValue(3);
+                      }}
+                    ></span>
                     <span className='fake-thumb'></span>
                   </div>
                 </div>
