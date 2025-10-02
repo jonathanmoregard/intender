@@ -419,30 +419,48 @@ const SettingsTab = memo(
       );
     });
 
-    const exportIntentions = () => {
-      const nonemptyIntentions = intentions.filter(
-        intention => !isEmpty(intention)
-      );
+    const exportSettings = async () => {
+      try {
+        // Get all current settings
+        const allSettings = await storage.get();
+        const nonemptyIntentions = intentions.filter(
+          intention => !isEmpty(intention)
+        );
 
-      const dataStr = JSON.stringify(nonemptyIntentions, null, 2);
-      const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        const exportData = {
+          ...allSettings,
+          version: BUILD_VERSION,
+          intentions: nonemptyIntentions,
+        };
 
-      const url = URL.createObjectURL(dataBlob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = 'intender-intentions.json';
-      link.click();
-      URL.revokeObjectURL(url);
+        const dataStr = JSON.stringify(exportData, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
 
-      setToast({
-        show: true,
-        message: `Exported ${nonemptyIntentions.length} intention(s)`,
-        type: 'success',
-      });
-      setTimeout(() => setToast(prev => ({ ...prev, show: false })), 3000);
+        const url = URL.createObjectURL(dataBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'intender-settings.json';
+        link.click();
+        URL.revokeObjectURL(url);
+
+        setToast({
+          show: true,
+          message: `Settings Exported`,
+          type: 'success',
+        });
+        setTimeout(() => setToast(prev => ({ ...prev, show: false })), 3000);
+      } catch (error) {
+        console.error('Export failed:', error);
+        setToast({
+          show: true,
+          message: 'Failed to export settings',
+          type: 'error',
+        });
+        setTimeout(() => setToast(prev => ({ ...prev, show: false })), 3000);
+      }
     };
 
-    const importIntentions = () => {
+    const importSettings = () => {
       const input = document.createElement('input');
       input.type = 'file';
       input.accept = '.json';
@@ -452,29 +470,94 @@ const SettingsTab = memo(
 
         try {
           const text = await file.text();
-          const importedIntentions: RawIntention[] = JSON.parse(text);
+          const importedData = JSON.parse(text);
 
-          // Regenerate all GUIDs on import to ensure uniqueness
-          const processedIntentions = importedIntentions.map(intention => ({
-            ...intention,
-            id: generateUUID(),
-          }));
+          // Handle both old format (just intentions array) and new format (full settings object)
+          if (Array.isArray(importedData)) {
+            // Old format: just intentions array
+            const processedIntentions = importedData.map(intention => ({
+              ...intention,
+              id: generateUUID(),
+            }));
 
-          setIntentions(processedIntentions);
-          await storage.set({ intentions: processedIntentions });
+            setIntentions(processedIntentions);
+            await storage.set({ intentions: processedIntentions });
 
-          // Mark all imported intentions as loaded so they show proper validation highlighting
-          const importedIds = new Set(
-            processedIntentions.map(intention => intention.id)
-          );
-          updateLoadedIntentionIds(importedIds);
+            // Mark all imported intentions as loaded
+            const importedIds = new Set(
+              processedIntentions.map(intention => intention.id as string)
+            );
+            updateLoadedIntentionIds(importedIds);
 
-          setToast({
-            show: true,
-            message: `Imported ${processedIntentions.length} intention(s)`,
-            type: 'success',
-          });
-          setTimeout(() => setToast(prev => ({ ...prev, show: false })), 3000);
+            setToast({
+              show: true,
+              message: `Settings Imported`,
+              type: 'success',
+            });
+            setTimeout(
+              () => setToast(prev => ({ ...prev, show: false })),
+              3000
+            );
+          } else {
+            // New format: full settings object - load all settings except version
+            const {
+              version,
+              intentions: importedIntentions,
+              ...otherSettings
+            } = importedData;
+
+            // Process intentions with new IDs
+            const processedIntentions = (importedIntentions || []).map(
+              (intention: any) => ({
+                ...intention,
+                id: generateUUID(),
+              })
+            ) as RawIntention[];
+
+            // Load all settings (excluding version)
+            const settingsToApply = {
+              ...otherSettings,
+              intentions: processedIntentions,
+            };
+
+            setIntentions(processedIntentions);
+            await storage.set(settingsToApply);
+
+            // Update UI state for all settings
+            if (settingsToApply.fuzzyMatching !== undefined) {
+              setFuzzyMatching(settingsToApply.fuzzyMatching);
+            }
+            if (settingsToApply.inactivityMode !== undefined) {
+              setInactivityMode(settingsToApply.inactivityMode);
+            }
+            if (settingsToApply.inactivityTimeoutMs !== undefined) {
+              setInactivityTimeoutMinutes(
+                msToMinutes(settingsToApply.inactivityTimeoutMs)
+              );
+            }
+            if (settingsToApply.showAdvancedSettings !== undefined) {
+              setShowAdvancedSettings(settingsToApply.showAdvancedSettings);
+            }
+            if (settingsToApply.canCopyIntentionText !== undefined) {
+              setCanCopyIntentionText(settingsToApply.canCopyIntentionText);
+            }
+
+            // Mark all imported intentions as loaded
+            const importedIds = new Set(
+              processedIntentions.map(intention => intention.id as string)
+            );
+            updateLoadedIntentionIds(importedIds);
+
+            setToast({
+              show: true,
+              message: `Settings Imported`,
+              type: 'success',
+            });
+            setTimeout(
+              () => setToast(prev => ({ ...prev, show: false })),
+              3000
+            );
+          }
         } catch (error) {
           console.error('Import failed:', error);
           setToast({
@@ -647,17 +730,17 @@ const SettingsTab = memo(
             >
               <button
                 className='dropdown-item'
-                data-testid='export-intentions-btn'
-                onClick={exportIntentions}
+                data-testid='export-settings-btn'
+                onClick={exportSettings}
               >
-                Export Intentions
+                Export Settings
               </button>
               <button
                 className='dropdown-item'
-                data-testid='import-intentions-btn'
-                onClick={importIntentions}
+                data-testid='import-settings-btn'
+                onClick={importSettings}
               >
-                Import Intentions
+                Import Settings
               </button>
             </div>
           </div>

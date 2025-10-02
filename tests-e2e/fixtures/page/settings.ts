@@ -35,7 +35,7 @@ export const SettingsPage = {
 
   async importFromFile(page: Page, absolutePath: string): Promise<void> {
     const fileChooserPromise = page.waitForEvent('filechooser');
-    const importButton = page.getByTestId('import-intentions-btn');
+    const importButton = page.getByTestId('import-settings-btn');
     await importButton.click();
     const fileChooser = await fileChooserPromise;
     await fileChooser.setFiles(absolutePath);
@@ -79,7 +79,7 @@ export const SettingsPage = {
     });
 
     // Click export button with robust waiting
-    const exportButton = page.getByTestId('export-intentions-btn');
+    const exportButton = page.getByTestId('export-settings-btn');
     await exportButton.waitFor({ state: 'visible', timeout: 5000 });
     await exportButton.scrollIntoViewIfNeeded();
     await exportButton.click();

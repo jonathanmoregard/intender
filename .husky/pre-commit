@@ -1,4 +1,12 @@
 #!/usr/bin/env sh
 . "$(dirname -- "$0")/_/husky.sh"
 
+# Check commit message length
+commit_msg=$(git log -1 --pretty=%B)
+if [ ${#commit_msg} -gt 300 ]; then
+  echo "❌ Keep commit messages succinct: explain what you implemented and why, do not go into implementation details."
+  echo "Current length: ${#commit_msg} characters (max: 300)"
+  exit 1
+fi
+
 npx lint-staged 

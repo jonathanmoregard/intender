@@ -1,0 +1,20 @@
+{
+  "version": "0.6.0",
+  "intentions": [
+    {
+      "id": "test-uuid-1",
+      "url": "example.com",
+      "phrase": "Test intention for golden test"
+    },
+    {
+      "id": "test-uuid-2",
+      "url": "github.com",
+      "phrase": "Check pull requests and issues"
+    }
+  ],
+  "fuzzyMatching": true,
+  "inactivityMode": "off",
+  "inactivityTimeoutMs": 1800000,
+  "showAdvancedSettings": false,
+  "canCopyIntentionText": false
+}
