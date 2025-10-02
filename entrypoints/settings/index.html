@@ -1216,12 +1216,13 @@
         -webkit-appearance: none;
         appearance: none;
         width: 100%;
-        height: 4px;
+        height: var(--slider-thumb-size); /* keep interactive area */
         background: transparent; /* hide native track background */
         border-radius: 999px;
         outline: none;
         position: relative;
         z-index: 100;
+        opacity: 0; /* visually hide native input (thumb + track) */
       }
 
       /* Hide native tracks explicitly */
