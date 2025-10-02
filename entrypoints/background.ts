@@ -948,7 +948,7 @@ export default defineBackground(async () => {
       try {
         const targetUrlObj = new URL(targetUrl);
         const intentionCompleted = targetUrlObj.searchParams.get(
-          'intention_completed'
+          'intention_completed_53c5890'
         );
 
         if (intentionCompleted === 'true') {
