@@ -41,9 +41,29 @@ Download the latest version: [intender-chrome.zip](https://github.com/jonathanmo
 
 ## Updating
 
-- Before switching builds or reinstalling, open Intender → Settings.
-- Click the "⋯" (more options) button and select "Export Intentions" to download a `.json` backup.
-- After installing the new build, open Settings, click "⋯" and select "Import Intentions" to restore.
+### For Testers (Unpacked Extension)
+
+1. **Backup your data** (optional but recommended):
+   - Open Intender → Settings
+   - Click "⋯" (more options) → "Export Settings" to download a backup
+
+2. **Update the extension (overwrite in place)**:
+   - Download the latest [intender-chrome.zip](https://github.com/jonathanmoregard/intender/releases/latest/download/intender-chrome.zip)
+   - Extract it into the SAME folder as your previous extraction and choose "Replace/Overwrite" when prompted
+   - Keep the folder path unchanged so Chrome’s "Load unpacked" continues pointing at the same `chrome-mv3` directory
+   - Go to `chrome://extensions/` and click the reload icon on the Intender card (or click the global "Update" button)
+
+3. **Verify the update**:
+   - Check the version shown on the Intender card matches the new build
+   - Open the popup and Settings to confirm everything loads correctly
+
+4. **Restore data (only if needed)**:
+   - Open Settings → "⋯" → "Import Settings" to restore your backup
+
+### For Production Users
+
+- Updates are handled automatically through the Chrome Web Store
+- No manual action required
 
 ## Troubleshooting
 
