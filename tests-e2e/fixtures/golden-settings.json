@@ -16,5 +16,6 @@
   "inactivityMode": "off",
   "inactivityTimeoutMs": 1800000,
   "showAdvancedSettings": false,
-  "canCopyIntentionText": false
+  "canCopyIntentionText": false,
+  "breathAnimationIntensity": "minimal"
 }

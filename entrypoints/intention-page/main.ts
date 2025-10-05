@@ -169,12 +169,26 @@ if (urlDisplayEl && target) {
 storage
   .get()
   .then(
-    ({ intentions, fuzzyMatching = true, canCopyIntentionText = false }) => {
+    ({
+      intentions,
+      fuzzyMatching = true,
+      canCopyIntentionText = false,
+      breathAnimationIntensity = 'minimal',
+    }) => {
       // Use intention ID for precise lookup
       const match = intentions.find(r => r.id === intentionId);
       if (match) {
         expectedPhrase = match.phrase;
         phraseDisplayEl.textContent = expectedPhrase;
+
+        // Apply breath animation intensity
+        const container = document.querySelector('.container') as HTMLElement;
+        if (container) {
+          container.style.animation =
+            breathAnimationIntensity === 'off'
+              ? 'fadeIn 0.6s ease-out'
+              : `fadeIn 0.6s ease-out, breathe-${breathAnimationIntensity} 10s ease-in-out infinite`;
+        }
 
         if (!canCopyIntentionText) {
           phraseDisplayEl.classList.add('no-copy');

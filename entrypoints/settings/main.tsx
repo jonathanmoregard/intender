@@ -10,7 +10,11 @@ import {
   makeRawIntention,
   type RawIntention,
 } from '../../components/intention';
-import { storage, type InactivityMode } from '../../components/storage';
+import {
+  storage,
+  type BreathAnimationIntensity,
+  type InactivityMode,
+} from '../../components/storage';
 import { minutesToMs, msToMinutes } from '../../components/time';
 import { generateUUID } from '../../components/uuid';
 import packageJson from '../../package.json';
@@ -51,6 +55,8 @@ const SettingsTab = memo(
     const [inactivityTimeoutMinutes, setInactivityTimeoutMinutes] =
       useState(30);
     const [canCopyIntentionText, setCanCopyIntentionText] = useState(false);
+    const [breathIntensity, setBreathIntensity] =
+      useState<BreathAnimationIntensity>('minimal');
 
     const [blurredUrlIds, setBlurredUrlIds] = useState<Set<string>>(new Set());
     const [blurredPhraseIds, setBlurredPhraseIds] = useState<Set<string>>(
@@ -155,6 +161,13 @@ const SettingsTab = memo(
       []
     );
 
+    const saveBreathAnimationIntensity = useCallback(
+      async (intensity: BreathAnimationIntensity) => {
+        await storage.set({ breathAnimationIntensity: intensity });
+      },
+      []
+    );
+
     const saveAdvancedSettingsState = useCallback(async (expanded: boolean) => {
       await storage.set({ showAdvancedSettings: expanded });
     }, []);
@@ -190,6 +203,10 @@ const SettingsTab = memo(
         );
         setShowAdvancedSettings(data.showAdvancedSettings ?? false);
         setCanCopyIntentionText(data.canCopyIntentionText ?? false);
+        setBreathIntensity(
+          (data.breathAnimationIntensity as BreathAnimationIntensity) ??
+            'minimal'
+        );
 
         // E2E testing hook: allow overriding inactivity timeout via query param
         try {
@@ -572,6 +589,33 @@ const SettingsTab = memo(
       input.click();
     };
 
+    const intensityOptions: BreathAnimationIntensity[] = [
+      'off',
+      'minimal',
+      'medium',
+      'heavy',
+    ];
+
+    const intensityIndex = Math.max(
+      0,
+      intensityOptions.indexOf(breathIntensity)
+    );
+
+    const [sliderValue, setSliderValue] = useState<number>(intensityIndex);
+    const sliderContainerRef = useRef<HTMLDivElement | null>(null);
+
+    useEffect(() => {
+      setSliderValue(intensityIndex);
+      // update CSS var for fake thumb
+      const pct = (intensityIndex / (intensityOptions.length - 1)) * 100;
+      if (sliderContainerRef.current) {
+        sliderContainerRef.current.style.setProperty(
+          '--slider-position',
+          `${pct}%`
+        );
+      }
+    }, [intensityIndex, intensityOptions.length]);
+
     return (
       <div className='settings-tab'>
         {/* 1. Intentions */}
@@ -934,6 +978,116 @@ const SettingsTab = memo(
                 />
                 <span className='setting-text'>Can copy intention text</span>
               </label>
+            </div>
+
+            {/* Breath Intensity Slider - moved to bottom */}
+            <div className='setting-group'>
+              <div className='setting-item'>
+                <div className='setting-header'>
+                  <span className='setting-text'>
+                    Breath animation intensity
+                  </span>
+                  <div
+                    className='setting-help'
+                    aria-label='The box on the intention page grows and shrinks in a breathing pattern, this slider controls how big the breath movements are.'
+                    data-tooltip='The box on the intention page grows and shrinks in a breathing pattern, this slider controls how big the breath movements are.'
+                  >
+                    ?
+                  </div>
+                </div>
+                <div
+                  className='slider-container'
+                  ref={el => {
+                    sliderContainerRef.current = el;
+                  }}
+                  role='group'
+                  aria-label='Breath animation intensity'
+                >
+                  <input
+                    type='range'
+                    min='0'
+                    max='3'
+                    step='1'
+                    value={sliderValue}
+                    onChange={e => {
+                      const index = Number(e.target.value);
+                      setSliderValue(index);
+                      const next = intensityOptions[index] ?? 'minimal';
+                      setBreathIntensity(next);
+                      saveBreathAnimationIntensity(next);
+                    }}
+                    className='slider-input'
+                    aria-valuemin={0}
+                    aria-valuemax={3}
+                    aria-valuenow={sliderValue}
+                    aria-valuetext={breathIntensity}
+                  />
+                  <div
+                    className='slider-scale'
+                    aria-hidden='true'
+                    onClick={e => {
+                      const rect = (
+                        e.currentTarget as HTMLDivElement
+                      ).getBoundingClientRect();
+                      const x = e.clientX - rect.left;
+                      const fraction = Math.max(0, Math.min(1, x / rect.width));
+                      const idx = Math.round(
+                        fraction * (intensityOptions.length - 1)
+                      );
+                      setSliderValue(idx);
+                      const next = intensityOptions[idx] ?? 'minimal';
+                      setBreathIntensity(next);
+                      saveBreathAnimationIntensity(next);
+                    }}
+                  >
+                    <span
+                      className='tick'
+                      data-label='Off'
+                      role='button'
+                      tabIndex={0}
+                      onClick={() => setSliderValue(0)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' || e.key === ' ')
+                          setSliderValue(0);
+                      }}
+                    ></span>
+                    <span
+                      className='tick'
+                      data-label='Minimal'
+                      role='button'
+                      tabIndex={0}
+                      onClick={() => setSliderValue(1)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' || e.key === ' ')
+                          setSliderValue(1);
+                      }}
+                    ></span>
+                    <span
+                      className='tick'
+                      data-label='Medium'
+                      role='button'
+                      tabIndex={0}
+                      onClick={() => setSliderValue(2)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' || e.key === ' ')
+                          setSliderValue(2);
+                      }}
+                    ></span>
+                    <span
+                      className='tick'
+                      data-label='Heavy'
+                      role='button'
+                      tabIndex={0}
+                      onClick={() => setSliderValue(3)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' || e.key === ' ')
+                          setSliderValue(3);
+                      }}
+                    ></span>
+                    <span className='fake-thumb'></span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
