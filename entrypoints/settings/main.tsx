@@ -603,6 +603,10 @@ const SettingsTab = memo(
 
     const [sliderValue, setSliderValue] = useState<number>(intensityIndex);
     const sliderContainerRef = useRef<HTMLDivElement | null>(null);
+    const pointerDownRef = useRef<boolean>(false);
+    const dragVisualActiveRef = useRef<boolean>(true);
+    const lastDistanceRef = useRef<number>(0);
+    const prevValueRef = useRef<number>(sliderValue);
 
     useEffect(() => {
       setSliderValue(intensityIndex);
@@ -1009,6 +1013,102 @@ const SettingsTab = memo(
                     max='3'
                     step='1'
                     value={sliderValue}
+                    onMouseDown={e => {
+                      pointerDownRef.current = true;
+                      dragVisualActiveRef.current = true;
+                      prevValueRef.current = sliderValue;
+                      const scaleEl = sliderContainerRef.current?.querySelector(
+                        '.slider-scale'
+                      ) as HTMLDivElement | null;
+                      const rect = scaleEl?.getBoundingClientRect();
+                      if (rect) {
+                        const thumbPct =
+                          sliderValue / (intensityOptions.length - 1);
+                        const thumbX = rect.left + rect.width * thumbPct;
+                        lastDistanceRef.current = Math.abs(e.clientX - thumbX);
+                      } else {
+                        lastDistanceRef.current = 0;
+                      }
+                      sliderContainerRef.current?.classList.add('dragged');
+                    }}
+                    onMouseMove={e => {
+                      if (
+                        !pointerDownRef.current ||
+                        !sliderContainerRef.current
+                      )
+                        return;
+                      const scaleEl = sliderContainerRef.current.querySelector(
+                        '.slider-scale'
+                      ) as HTMLDivElement | null;
+                      const rect = scaleEl?.getBoundingClientRect();
+                      if (!rect) return;
+                      const thumbPct =
+                        sliderValue / (intensityOptions.length - 1);
+                      const thumbX = rect.left + rect.width * thumbPct;
+                      const distPx = e.clientX - thumbX;
+                      const absDist = Math.abs(distPx);
+                      // On snap (value changed), pause visual drag and record new baseline distance
+                      if (sliderValue !== prevValueRef.current) {
+                        dragVisualActiveRef.current = false;
+                        sliderContainerRef.current.classList.remove('dragged');
+                        sliderContainerRef.current.style.removeProperty(
+                          '--drag-offset-px'
+                        );
+                        lastDistanceRef.current = absDist;
+                        prevValueRef.current = sliderValue;
+                        return;
+                      }
+                      if (!dragVisualActiveRef.current) {
+                        if (absDist > lastDistanceRef.current) {
+                          dragVisualActiveRef.current = true;
+                          sliderContainerRef.current.classList.add('dragged');
+                        } else {
+                          lastDistanceRef.current = absDist;
+                          return;
+                        }
+                      }
+                      if (!dragVisualActiveRef.current) {
+                        if (absDist > lastDistanceRef.current) {
+                          dragVisualActiveRef.current = true;
+                          sliderContainerRef.current.classList.add('dragged');
+                        } else {
+                          lastDistanceRef.current = absDist;
+                          return;
+                        }
+                      }
+                      // Non-linear stretchy mapping: fast initially, then ease out
+                      // offset = sign(dist) * max * (1 - exp(-|dist| / scale))
+                      const max = 10; // px cap
+                      const scale = 40; // larger -> slower growth
+                      const easedMagnitude =
+                        max * (1 - Math.exp(-Math.abs(distPx) / scale));
+                      const clamped =
+                        (distPx >= 0 ? 1 : -1) * Math.min(max, easedMagnitude);
+                      sliderContainerRef.current.style.setProperty(
+                        '--drag-offset-px',
+                        `${clamped}px`
+                      );
+                    }}
+                    onMouseUp={() => {
+                      pointerDownRef.current = false;
+                      dragVisualActiveRef.current = false;
+                      if (sliderContainerRef.current) {
+                        sliderContainerRef.current.classList.remove('dragged');
+                        sliderContainerRef.current.style.removeProperty(
+                          '--drag-offset-px'
+                        );
+                      }
+                    }}
+                    onMouseLeave={() => {
+                      pointerDownRef.current = false;
+                      dragVisualActiveRef.current = false;
+                      if (sliderContainerRef.current) {
+                        sliderContainerRef.current.classList.remove('dragged');
+                        sliderContainerRef.current.style.removeProperty(
+                          '--drag-offset-px'
+                        );
+                      }
+                    }}
                     onChange={e => {
                       const index = Number(e.target.value);
                       setSliderValue(index);
@@ -1260,4 +1360,6 @@ const Options = () => {
 };
 
 const root = createRoot(document.getElementById('root')!);
+root.render(<Options />);
+
 root.render(<Options />);

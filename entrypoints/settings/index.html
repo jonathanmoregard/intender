@@ -1208,6 +1208,7 @@
         /* thumb size variable to sync track travel and tick scale insets */
         --slider-thumb-size: 22px;
         --slider-transition-ms: 100ms;
+        --slider-drag-transition-ms: 180ms; /* smoother follow while dragging */
       }
 
       .slider-input {
@@ -1292,7 +1293,7 @@
       .slider-scale .fake-thumb {
         position: absolute;
         top: -3px; /* visually center over the track */
-        left: var(--slider-position, 0%);
+        left: calc(var(--slider-position, 0%) + var(--drag-offset-px, 0px));
         transform: translateX(-50%);
         width: var(--slider-thumb-size);
         height: var(--slider-thumb-size);
@@ -1304,6 +1305,12 @@
         will-change: left;
         z-index: 10;
         pointer-events: none; /* do not block dragging on the input */
+      }
+
+      /* While dragging, use a slightly longer, ease-out curve for smoother follow */
+      .slider-container.dragged .slider-scale .fake-thumb {
+        transition: left var(--slider-drag-transition-ms)
+          cubic-bezier(0.22, 1, 0.36, 1);
       }
 
       .slider-scale .tick {
