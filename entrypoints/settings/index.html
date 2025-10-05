@@ -1201,12 +1201,10 @@
       .slider-container {
         position: relative;
         width: 100%;
-        padding: 0px 4px 16px;
+        padding: 20px 1.5rem 16px;
         display: flex;
         flex-direction: column; /* stack children vertically */
         justify-content: center; /* center them as a group vertically */
-        padding-left: 1rem;
-        padding-right: 1rem;
         /* thumb size variable to sync track travel and tick scale insets */
         --slider-thumb-size: 22px;
         --slider-transition-ms: 100ms;
@@ -1216,7 +1214,7 @@
         -webkit-appearance: none;
         appearance: none;
         width: 100%;
-        height: var(--slider-thumb-size); /* keep interactive area */
+        height: 0; /* keep interactive area */
         background: transparent; /* hide native track background */
         border-radius: 999px;
         outline: none;
@@ -1293,7 +1291,7 @@
       /* Fake thumb that follows a CSS variable for smooth transitions */
       .slider-scale .fake-thumb {
         position: absolute;
-        top: -4px; /* visually center over the track */
+        top: -3px; /* visually center over the track */
         left: var(--slider-position, 0%);
         transform: translateX(-50%);
         width: var(--slider-thumb-size);
