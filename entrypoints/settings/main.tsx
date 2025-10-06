@@ -874,37 +874,6 @@ const SettingsTab = memo(
                     className='quick-add-btn'
                     onMouseDown={e => e.preventDefault()}
                     onClick={() => addExampleIntention(example)}
-                    onKeyDown={e => {
-                      const isLast = i === filteredExampleIntentions.length - 1;
-                      if (
-                        isLast &&
-                        e.key === 'Tab' &&
-                        !e.shiftKey &&
-                        !e.ctrlKey &&
-                        !e.altKey &&
-                        !e.metaKey
-                      ) {
-                        if (!showAdvancedSettings) {
-                          const newState = true;
-                          setShowAdvancedSettings(newState);
-                          saveAdvancedSettingsState(newState);
-                          const scheduleScroll = () => {
-                            try {
-                              scrollAdvancedIntoViewIfNeeded();
-                              setTimeout(
-                                () => scrollAdvancedIntoViewIfNeeded(),
-                                120
-                              );
-                              setTimeout(
-                                () => scrollAdvancedIntoViewIfNeeded(),
-                                300
-                              );
-                            } catch {}
-                          };
-                          setTimeout(scheduleScroll, 0);
-                        }
-                      }
-                    }}
                     title={`Add ${example.url} intention`}
                   >
                     +
@@ -932,6 +901,33 @@ const SettingsTab = memo(
           >
             <span
               className={`toggle-icon ${showAdvancedSettings ? 'expanded' : ''}`}
+              role='button'
+              tabIndex={0}
+              aria-expanded={showAdvancedSettings}
+              aria-controls='advanced-settings-content'
+              aria-label={
+                showAdvancedSettings
+                  ? 'Collapse advanced settings'
+                  : 'Expand advanced settings'
+              }
+              onKeyDown={e => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  const newState = !showAdvancedSettings;
+                  setShowAdvancedSettings(newState);
+                  saveAdvancedSettingsState(newState);
+                  if (newState)
+                    setTimeout(() => scrollAdvancedIntoViewIfNeeded(), 0);
+                }
+              }}
+              onClick={e => {
+                e.stopPropagation();
+                const newState = !showAdvancedSettings;
+                setShowAdvancedSettings(newState);
+                saveAdvancedSettingsState(newState);
+                if (newState)
+                  setTimeout(() => scrollAdvancedIntoViewIfNeeded(), 0);
+              }}
             >
               ▼
             </span>
@@ -940,6 +936,7 @@ const SettingsTab = memo(
 
           <div
             className={`advanced-settings-content ${showAdvancedSettings ? 'expanded' : ''}`}
+            id='advanced-settings-content'
           >
             <div className='setting-group'>
               <div className='setting-item'>
