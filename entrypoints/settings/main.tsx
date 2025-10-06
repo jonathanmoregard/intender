@@ -402,7 +402,9 @@ const SettingsTab = memo(
         const intention = intentions[intentionIndex];
         const isLastIntention = intentionIndex === intentions.length - 1;
 
-        if (isLastIntention) {
+        // Only auto-create a new intention when tabbing from the last intention
+        // and that last intention is non-empty.
+        if (isLastIntention && !isEmpty(intention)) {
           e.preventDefault();
           setIntentions(prev => {
             const newIntentions = [...prev, emptyRawIntention()];
