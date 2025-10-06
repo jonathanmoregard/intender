@@ -864,11 +864,13 @@
         font-family: 'Inter', sans-serif;
         position: relative;
         z-index: 1; /* create stacking context */
+        border: 1px solid rgba(var(--primary-rgb), 0.35);
       }
 
       .setting-help:hover {
-        background: rgba(var(--success-rgb), 0.3);
-        transform: scale(1.1);
+        background: rgba(var(--success-rgb), 0.45);
+        transform: scale(1.08);
+        border-color: rgba(var(--primary-rgb), 0.6);
       }
 
       /* Custom tooltip on hover via data-tooltip; keep native title for a11y readers only */
