@@ -458,8 +458,8 @@ const SettingsTab = memo(
         phrase: 'I want to use events/chat, and have set a 5 minute timer',
       },
       {
-        url: 'gmail.com',
-        phrase: 'I am not checking my email out of habit/boredom',
+        url: 'proton.me',
+        phrase: 'I am not checking my mail out of habit/boredom',
       },
     ];
 
