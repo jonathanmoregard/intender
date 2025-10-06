@@ -950,6 +950,17 @@ export default defineBackground(async () => {
         const intentionCompleted = targetUrlObj.searchParams.get(
           'intention_completed_53c5890'
         );
+        const queryParams: Record<string, string> = {};
+        try {
+          targetUrlObj.searchParams.forEach((value, key) => {
+            queryParams[key] = value;
+          });
+        } catch {}
+        console.log('[Intender] Rule2 target inspect', {
+          targetUrl,
+          queryParams,
+          intentionCompleted,
+        });
 
         if (intentionCompleted === 'true') {
           console.log(
