@@ -78,3 +78,9 @@
   /* Semantic surfaces */
   --surface-muted-rgb: 255, 255, 255; /* typical blurred white cards */
 }
+
+/* Global shimmering secondary focus ring - scanning gradient */
+*:focus-visible {
+  outline: 3px solid var(--secondary);
+  outline-offset: 1px;
+}
