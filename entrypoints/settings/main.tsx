@@ -1120,7 +1120,18 @@ const SettingsTab = memo(
                     aria-valuemin={0}
                     aria-valuemax={3}
                     aria-valuenow={sliderValue}
-                    aria-valuetext={breathIntensity}
+                    aria-valuetext={
+                      sliderValue === 0
+                        ? 'Off'
+                        : sliderValue === 1
+                          ? 'Minimal'
+                          : sliderValue === 2
+                            ? 'Medium'
+                            : 'Heavy'
+                    }
+                    aria-orientation='horizontal'
+                    aria-label='Breath animation intensity'
+                    aria-describedby='breath-intensity-desc'
                   />
                   <div
                     className='slider-scale'
@@ -1143,46 +1154,30 @@ const SettingsTab = memo(
                     <span
                       className='tick'
                       data-label='Off'
-                      role='button'
-                      tabIndex={0}
+                      role='presentation'
+                      tabIndex={-1}
                       onClick={() => setSliderValue(0)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' || e.key === ' ')
-                          setSliderValue(0);
-                      }}
                     ></span>
                     <span
                       className='tick'
                       data-label='Minimal'
-                      role='button'
-                      tabIndex={0}
+                      role='presentation'
+                      tabIndex={-1}
                       onClick={() => setSliderValue(1)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' || e.key === ' ')
-                          setSliderValue(1);
-                      }}
                     ></span>
                     <span
                       className='tick'
                       data-label='Medium'
-                      role='button'
-                      tabIndex={0}
+                      role='presentation'
+                      tabIndex={-1}
                       onClick={() => setSliderValue(2)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' || e.key === ' ')
-                          setSliderValue(2);
-                      }}
                     ></span>
                     <span
                       className='tick'
                       data-label='Heavy'
-                      role='button'
-                      tabIndex={0}
+                      role='presentation'
+                      tabIndex={-1}
                       onClick={() => setSliderValue(3)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' || e.key === ' ')
-                          setSliderValue(3);
-                      }}
                     ></span>
                     <span className='fake-thumb'></span>
                   </div>

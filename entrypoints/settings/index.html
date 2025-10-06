@@ -1225,6 +1225,12 @@
         pointer-events: auto; /* allow dragging and clicking */
       }
 
+      /* Focus-visible ring on fake thumb when range receives focus */
+      .slider-input:focus-visible + .slider-scale .fake-thumb {
+        outline: 3px solid var(--primary);
+        outline-offset: 3px;
+      }
+
       /* Hide native tracks explicitly */
       .slider-input::-webkit-slider-runnable-track {
         height: 4px;
@@ -1281,12 +1287,24 @@
         right: 0;
         top: 4px;
         height: 8px;
-        background: var(--border-color);
+        /* Improve contrast using text base rgb at 0.28 alpha */
+        background: var(--secondary-light);
         border-radius: 999px;
         box-shadow:
           0 1px 2px rgba(var(--shadow-weak-rgb), 0.15),
           inset 0 1px 0 rgba(255, 255, 255, 0.6);
         z-index: 0;
+      }
+
+      /* Reduced motion: shorten/effectively remove transitions for users preferring less motion */
+      @media (prefers-reduced-motion: reduce) {
+        .slider-scale .fake-thumb {
+          transition: left 50ms linear;
+        }
+        .slider-input::-webkit-slider-thumb,
+        .slider-input::-moz-range-thumb {
+          transition: transform 50ms linear;
+        }
       }
 
       /* Fake thumb that follows a CSS variable for smooth transitions */
@@ -1321,9 +1339,11 @@
         display: inline-block;
         width: 16px;
         height: 16px;
-        background: var(--border-color);
+        background: var(--secondary);
         border-radius: 50%;
         cursor: pointer;
+        /* Make ticks presentational for a11y; still clickable by mouse but not tabbable */
+        pointer-events: auto;
         box-shadow:
           0 1px 3px rgba(var(--shadow-weak-rgb), 0.25),
           inset 0 1px 0 rgba(255, 255, 255, 0.7);
@@ -1349,7 +1369,7 @@
         left: 50%;
         transform: translateX(-50%);
         white-space: nowrap;
-        color: var(--text-primary);
+        color: rgba(var(--text-base-rgb), 0.86);
         font-size: 15px;
         font-family: 'Inter', sans-serif;
       }
