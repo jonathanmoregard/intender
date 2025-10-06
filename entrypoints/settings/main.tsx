@@ -127,6 +127,9 @@ const SettingsTab = memo(
 
     const urlInputRefs = useRef<(HTMLInputElement | null)[]>([]);
     const moreOptionsRef = useRef<HTMLDivElement>(null);
+    const moreOptionsBtnRef = useRef<HTMLButtonElement | null>(null);
+    const exportBtnRef = useRef<HTMLButtonElement | null>(null);
+    const importBtnRef = useRef<HTMLButtonElement | null>(null);
 
     const isIntentionEmpty = useCallback((intention: RawIntention) => {
       return isEmpty(intention);
@@ -296,6 +299,35 @@ const SettingsTab = memo(
         document.removeEventListener('mousedown', handleClickOutside);
       };
     }, []);
+
+    // When menu opens, focus the first item for keyboard users
+    useEffect(() => {
+      if (showMoreOptions) {
+        // Defer to next frame to ensure elements are mounted
+        requestAnimationFrame(() => {
+          exportBtnRef.current?.focus();
+        });
+      }
+    }, [showMoreOptions]);
+
+    // Inline utility to scroll advanced box into view a11y-safely
+    const scrollAdvancedIntoViewIfNeeded = () => {
+      try {
+        const el = document.querySelector(
+          '.advanced-settings'
+        ) as HTMLElement | null;
+        if (!el) return;
+        const prefersReduced = window.matchMedia(
+          '(prefers-reduced-motion: reduce)'
+        ).matches;
+        // Center the advanced box within its nearest scrollable container for stronger effect
+        el.scrollIntoView({
+          behavior: prefersReduced ? 'auto' : 'smooth',
+          block: 'center',
+          inline: 'nearest',
+        });
+      } catch {}
+    };
 
     const update = async () => {
       await saveIntentions(intentions);
@@ -767,7 +799,22 @@ const SettingsTab = memo(
             <button
               className='more-options-btn'
               data-testid='more-options-btn'
+              ref={el => {
+                moreOptionsBtnRef.current = el;
+              }}
+              aria-expanded={showMoreOptions}
+              aria-controls='more-options-dropdown'
               onClick={() => setShowMoreOptions(!showMoreOptions)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  // Ensure open and let the effect focus first item
+                  e.preventDefault();
+                  setShowMoreOptions(true);
+                } else if (e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  setShowMoreOptions(true);
+                }
+              }}
               title='More options'
             >
               ⋯
@@ -777,10 +824,14 @@ const SettingsTab = memo(
                 showMoreOptions ? 'show' : ''
               }`}
               data-testid='more-options-dropdown'
+              id='more-options-dropdown'
             >
               <button
                 className='dropdown-item'
                 data-testid='export-settings-btn'
+                ref={el => {
+                  exportBtnRef.current = el;
+                }}
                 onClick={exportSettings}
               >
                 Export Settings
@@ -788,6 +839,15 @@ const SettingsTab = memo(
               <button
                 className='dropdown-item'
                 data-testid='import-settings-btn'
+                ref={el => {
+                  importBtnRef.current = el;
+                }}
+                onKeyDown={e => {
+                  // Close the menu when tabbing away from the last item
+                  if (e.key === 'Tab' && !e.shiftKey) {
+                    setShowMoreOptions(false);
+                  }
+                }}
                 onClick={importSettings}
               >
                 Import Settings
@@ -814,6 +874,37 @@ const SettingsTab = memo(
                     className='quick-add-btn'
                     onMouseDown={e => e.preventDefault()}
                     onClick={() => addExampleIntention(example)}
+                    onKeyDown={e => {
+                      const isLast = i === filteredExampleIntentions.length - 1;
+                      if (
+                        isLast &&
+                        e.key === 'Tab' &&
+                        !e.shiftKey &&
+                        !e.ctrlKey &&
+                        !e.altKey &&
+                        !e.metaKey
+                      ) {
+                        if (!showAdvancedSettings) {
+                          const newState = true;
+                          setShowAdvancedSettings(newState);
+                          saveAdvancedSettingsState(newState);
+                          const scheduleScroll = () => {
+                            try {
+                              scrollAdvancedIntoViewIfNeeded();
+                              setTimeout(
+                                () => scrollAdvancedIntoViewIfNeeded(),
+                                120
+                              );
+                              setTimeout(
+                                () => scrollAdvancedIntoViewIfNeeded(),
+                                300
+                              );
+                            } catch {}
+                          };
+                          setTimeout(scheduleScroll, 0);
+                        }
+                      }
+                    }}
                     title={`Add ${example.url} intention`}
                   >
                     +
@@ -834,13 +925,8 @@ const SettingsTab = memo(
               setShowAdvancedSettings(newState);
               saveAdvancedSettingsState(newState);
               if (!showAdvancedSettings) {
-                // Scroll to the advanced settings when opening
-                setTimeout(() => {
-                  document.querySelector('.advanced-settings')?.scrollIntoView({
-                    behavior: 'smooth',
-                    block: 'start',
-                  });
-                }, 100);
+                // Scroll inline, a11y safe
+                setTimeout(() => scrollAdvancedIntoViewIfNeeded(), 0);
               }
             }}
           >
