@@ -127,6 +127,9 @@ const SettingsTab = memo(
 
     const urlInputRefs = useRef<(HTMLInputElement | null)[]>([]);
     const moreOptionsRef = useRef<HTMLDivElement>(null);
+    const moreOptionsBtnRef = useRef<HTMLButtonElement | null>(null);
+    const exportBtnRef = useRef<HTMLButtonElement | null>(null);
+    const importBtnRef = useRef<HTMLButtonElement | null>(null);
 
     const isIntentionEmpty = useCallback((intention: RawIntention) => {
       return isEmpty(intention);
@@ -297,6 +300,35 @@ const SettingsTab = memo(
       };
     }, []);
 
+    // When menu opens, focus the first item for keyboard users
+    useEffect(() => {
+      if (showMoreOptions) {
+        // Defer to next frame to ensure elements are mounted
+        requestAnimationFrame(() => {
+          exportBtnRef.current?.focus();
+        });
+      }
+    }, [showMoreOptions]);
+
+    // Inline utility to scroll advanced box into view a11y-safely
+    const scrollAdvancedIntoViewIfNeeded = () => {
+      try {
+        const el = document.querySelector(
+          '.advanced-settings'
+        ) as HTMLElement | null;
+        if (!el) return;
+        const prefersReduced = window.matchMedia(
+          '(prefers-reduced-motion: reduce)'
+        ).matches;
+        // Center the advanced box within its nearest scrollable container for stronger effect
+        el.scrollIntoView({
+          behavior: prefersReduced ? 'auto' : 'smooth',
+          block: 'center',
+          inline: 'nearest',
+        });
+      } catch {}
+    };
+
     const update = async () => {
       await saveIntentions(intentions);
 
@@ -402,7 +434,9 @@ const SettingsTab = memo(
         const intention = intentions[intentionIndex];
         const isLastIntention = intentionIndex === intentions.length - 1;
 
-        if (isLastIntention) {
+        // Only auto-create a new intention when tabbing from the last intention
+        // and that last intention is non-empty.
+        if (isLastIntention && !isEmpty(intention)) {
           e.preventDefault();
           setIntentions(prev => {
             const newIntentions = [...prev, emptyRawIntention()];
@@ -603,6 +637,10 @@ const SettingsTab = memo(
 
     const [sliderValue, setSliderValue] = useState<number>(intensityIndex);
     const sliderContainerRef = useRef<HTMLDivElement | null>(null);
+    const pointerDownRef = useRef<boolean>(false);
+    const dragVisualActiveRef = useRef<boolean>(true);
+    const lastDistanceRef = useRef<number>(0);
+    const prevValueRef = useRef<number>(sliderValue);
 
     useEffect(() => {
       setSliderValue(intensityIndex);
@@ -761,7 +799,22 @@ const SettingsTab = memo(
             <button
               className='more-options-btn'
               data-testid='more-options-btn'
+              ref={el => {
+                moreOptionsBtnRef.current = el;
+              }}
+              aria-expanded={showMoreOptions}
+              aria-controls='more-options-dropdown'
               onClick={() => setShowMoreOptions(!showMoreOptions)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  // Ensure open and let the effect focus first item
+                  e.preventDefault();
+                  setShowMoreOptions(true);
+                } else if (e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  setShowMoreOptions(true);
+                }
+              }}
               title='More options'
             >
               ⋯
@@ -771,10 +824,14 @@ const SettingsTab = memo(
                 showMoreOptions ? 'show' : ''
               }`}
               data-testid='more-options-dropdown'
+              id='more-options-dropdown'
             >
               <button
                 className='dropdown-item'
                 data-testid='export-settings-btn'
+                ref={el => {
+                  exportBtnRef.current = el;
+                }}
                 onClick={exportSettings}
               >
                 Export Settings
@@ -782,6 +839,15 @@ const SettingsTab = memo(
               <button
                 className='dropdown-item'
                 data-testid='import-settings-btn'
+                ref={el => {
+                  importBtnRef.current = el;
+                }}
+                onKeyDown={e => {
+                  // Close the menu when tabbing away from the last item
+                  if (e.key === 'Tab' && !e.shiftKey) {
+                    setShowMoreOptions(false);
+                  }
+                }}
                 onClick={importSettings}
               >
                 Import Settings
@@ -808,6 +874,37 @@ const SettingsTab = memo(
                     className='quick-add-btn'
                     onMouseDown={e => e.preventDefault()}
                     onClick={() => addExampleIntention(example)}
+                    onKeyDown={e => {
+                      const isLast = i === filteredExampleIntentions.length - 1;
+                      if (
+                        isLast &&
+                        e.key === 'Tab' &&
+                        !e.shiftKey &&
+                        !e.ctrlKey &&
+                        !e.altKey &&
+                        !e.metaKey
+                      ) {
+                        if (!showAdvancedSettings) {
+                          const newState = true;
+                          setShowAdvancedSettings(newState);
+                          saveAdvancedSettingsState(newState);
+                          const scheduleScroll = () => {
+                            try {
+                              scrollAdvancedIntoViewIfNeeded();
+                              setTimeout(
+                                () => scrollAdvancedIntoViewIfNeeded(),
+                                120
+                              );
+                              setTimeout(
+                                () => scrollAdvancedIntoViewIfNeeded(),
+                                300
+                              );
+                            } catch {}
+                          };
+                          setTimeout(scheduleScroll, 0);
+                        }
+                      }
+                    }}
                     title={`Add ${example.url} intention`}
                   >
                     +
@@ -828,13 +925,8 @@ const SettingsTab = memo(
               setShowAdvancedSettings(newState);
               saveAdvancedSettingsState(newState);
               if (!showAdvancedSettings) {
-                // Scroll to the advanced settings when opening
-                setTimeout(() => {
-                  document.querySelector('.advanced-settings')?.scrollIntoView({
-                    behavior: 'smooth',
-                    block: 'start',
-                  });
-                }, 100);
+                // Scroll inline, a11y safe
+                setTimeout(() => scrollAdvancedIntoViewIfNeeded(), 0);
               }
             }}
           >
@@ -1009,6 +1101,102 @@ const SettingsTab = memo(
                     max='3'
                     step='1'
                     value={sliderValue}
+                    onMouseDown={e => {
+                      pointerDownRef.current = true;
+                      dragVisualActiveRef.current = true;
+                      prevValueRef.current = sliderValue;
+                      const scaleEl = sliderContainerRef.current?.querySelector(
+                        '.slider-scale'
+                      ) as HTMLDivElement | null;
+                      const rect = scaleEl?.getBoundingClientRect();
+                      if (rect) {
+                        const thumbPct =
+                          sliderValue / (intensityOptions.length - 1);
+                        const thumbX = rect.left + rect.width * thumbPct;
+                        lastDistanceRef.current = Math.abs(e.clientX - thumbX);
+                      } else {
+                        lastDistanceRef.current = 0;
+                      }
+                      sliderContainerRef.current?.classList.add('dragged');
+                    }}
+                    onMouseMove={e => {
+                      if (
+                        !pointerDownRef.current ||
+                        !sliderContainerRef.current
+                      )
+                        return;
+                      const scaleEl = sliderContainerRef.current.querySelector(
+                        '.slider-scale'
+                      ) as HTMLDivElement | null;
+                      const rect = scaleEl?.getBoundingClientRect();
+                      if (!rect) return;
+                      const thumbPct =
+                        sliderValue / (intensityOptions.length - 1);
+                      const thumbX = rect.left + rect.width * thumbPct;
+                      const distPx = e.clientX - thumbX;
+                      const absDist = Math.abs(distPx);
+                      // On snap (value changed), pause visual drag and record new baseline distance
+                      if (sliderValue !== prevValueRef.current) {
+                        dragVisualActiveRef.current = false;
+                        sliderContainerRef.current.classList.remove('dragged');
+                        sliderContainerRef.current.style.removeProperty(
+                          '--drag-offset-px'
+                        );
+                        lastDistanceRef.current = absDist;
+                        prevValueRef.current = sliderValue;
+                        return;
+                      }
+                      if (!dragVisualActiveRef.current) {
+                        if (absDist > lastDistanceRef.current) {
+                          dragVisualActiveRef.current = true;
+                          sliderContainerRef.current.classList.add('dragged');
+                        } else {
+                          lastDistanceRef.current = absDist;
+                          return;
+                        }
+                      }
+                      if (!dragVisualActiveRef.current) {
+                        if (absDist > lastDistanceRef.current) {
+                          dragVisualActiveRef.current = true;
+                          sliderContainerRef.current.classList.add('dragged');
+                        } else {
+                          lastDistanceRef.current = absDist;
+                          return;
+                        }
+                      }
+                      // Non-linear stretchy mapping: fast initially, then ease out
+                      // offset = sign(dist) * max * (1 - exp(-|dist| / scale))
+                      const max = 10; // px cap
+                      const scale = 40; // larger -> slower growth
+                      const easedMagnitude =
+                        max * (1 - Math.exp(-Math.abs(distPx) / scale));
+                      const clamped =
+                        (distPx >= 0 ? 1 : -1) * Math.min(max, easedMagnitude);
+                      sliderContainerRef.current.style.setProperty(
+                        '--drag-offset-px',
+                        `${clamped}px`
+                      );
+                    }}
+                    onMouseUp={() => {
+                      pointerDownRef.current = false;
+                      dragVisualActiveRef.current = false;
+                      if (sliderContainerRef.current) {
+                        sliderContainerRef.current.classList.remove('dragged');
+                        sliderContainerRef.current.style.removeProperty(
+                          '--drag-offset-px'
+                        );
+                      }
+                    }}
+                    onMouseLeave={() => {
+                      pointerDownRef.current = false;
+                      dragVisualActiveRef.current = false;
+                      if (sliderContainerRef.current) {
+                        sliderContainerRef.current.classList.remove('dragged');
+                        sliderContainerRef.current.style.removeProperty(
+                          '--drag-offset-px'
+                        );
+                      }
+                    }}
                     onChange={e => {
                       const index = Number(e.target.value);
                       setSliderValue(index);
@@ -1020,7 +1208,18 @@ const SettingsTab = memo(
                     aria-valuemin={0}
                     aria-valuemax={3}
                     aria-valuenow={sliderValue}
-                    aria-valuetext={breathIntensity}
+                    aria-valuetext={
+                      sliderValue === 0
+                        ? 'Off'
+                        : sliderValue === 1
+                          ? 'Minimal'
+                          : sliderValue === 2
+                            ? 'Medium'
+                            : 'Heavy'
+                    }
+                    aria-orientation='horizontal'
+                    aria-label='Breath animation intensity'
+                    aria-describedby='breath-intensity-desc'
                   />
                   <div
                     className='slider-scale'
@@ -1043,46 +1242,30 @@ const SettingsTab = memo(
                     <span
                       className='tick'
                       data-label='Off'
-                      role='button'
-                      tabIndex={0}
+                      role='presentation'
+                      tabIndex={-1}
                       onClick={() => setSliderValue(0)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' || e.key === ' ')
-                          setSliderValue(0);
-                      }}
                     ></span>
                     <span
                       className='tick'
                       data-label='Minimal'
-                      role='button'
-                      tabIndex={0}
+                      role='presentation'
+                      tabIndex={-1}
                       onClick={() => setSliderValue(1)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' || e.key === ' ')
-                          setSliderValue(1);
-                      }}
                     ></span>
                     <span
                       className='tick'
                       data-label='Medium'
-                      role='button'
-                      tabIndex={0}
+                      role='presentation'
+                      tabIndex={-1}
                       onClick={() => setSliderValue(2)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' || e.key === ' ')
-                          setSliderValue(2);
-                      }}
                     ></span>
                     <span
                       className='tick'
                       data-label='Heavy'
-                      role='button'
-                      tabIndex={0}
+                      role='presentation'
+                      tabIndex={-1}
                       onClick={() => setSliderValue(3)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' || e.key === ' ')
-                          setSliderValue(3);
-                      }}
                     ></span>
                     <span className='fake-thumb'></span>
                   </div>
@@ -1260,4 +1443,6 @@ const Options = () => {
 };
 
 const root = createRoot(document.getElementById('root')!);
+root.render(<Options />);
+
 root.render(<Options />);

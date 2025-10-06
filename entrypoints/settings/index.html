@@ -1201,22 +1201,21 @@
       .slider-container {
         position: relative;
         width: 100%;
-        padding: 0px 4px 16px;
+        padding: 20px 1.5rem 16px;
         display: flex;
         flex-direction: column; /* stack children vertically */
         justify-content: center; /* center them as a group vertically */
-        padding-left: 1rem;
-        padding-right: 1rem;
         /* thumb size variable to sync track travel and tick scale insets */
         --slider-thumb-size: 22px;
-        --slider-transition-ms: 120ms;
+        --slider-transition-ms: 100ms;
+        --slider-drag-transition-ms: 180ms; /* smoother follow while dragging */
       }
 
       .slider-input {
         -webkit-appearance: none;
         appearance: none;
         width: 100%;
-        height: var(--slider-thumb-size); /* keep interactive area */
+        height: 0; /* keep interactive area */
         background: transparent; /* hide native track background */
         border-radius: 999px;
         outline: none;
@@ -1224,6 +1223,12 @@
         z-index: 3; /* above custom track/ticks to receive drag */
         opacity: 0; /* visually hide native input (thumb + track) */
         pointer-events: auto; /* allow dragging and clicking */
+      }
+
+      /* Focus-visible ring on fake thumb when range receives focus */
+      .slider-input:focus-visible + .slider-scale .fake-thumb {
+        outline: 3px solid var(--secondary);
+        outline-offset: 3px;
       }
 
       /* Hide native tracks explicitly */
@@ -1248,7 +1253,8 @@
         border: 1px solid var(--primary-dark);
         box-shadow: 0 2px 6px rgba(var(--shadow-weak-rgb), 0.2);
         cursor: pointer;
-        transition: transform var(--slider-transition-ms) ease-in-out;
+        transition: transform var(--slider-transition-ms)
+          cubic-bezier(0.2, 0, 0, 1);
       }
 
       .slider-input::-moz-range-thumb {
@@ -1259,7 +1265,8 @@
         border: 1px solid var(--primary-dark);
         box-shadow: 0 2px 6px rgba(var(--shadow-weak-rgb), 0.2);
         cursor: pointer;
-        transition: transform var(--slider-transition-ms) ease-in-out;
+        transition: transform var(--slider-transition-ms)
+          cubic-bezier(0.2, 0, 0, 1);
       }
 
       .slider-scale {
@@ -1280,7 +1287,8 @@
         right: 0;
         top: 4px;
         height: 8px;
-        background: var(--border-color);
+        /* Improve contrast using text base rgb at 0.28 alpha */
+        background: var(--secondary-light);
         border-radius: 999px;
         box-shadow:
           0 1px 2px rgba(var(--shadow-weak-rgb), 0.15),
@@ -1288,11 +1296,22 @@
         z-index: 0;
       }
 
+      /* Reduced motion: shorten/effectively remove transitions for users preferring less motion */
+      @media (prefers-reduced-motion: reduce) {
+        .slider-scale .fake-thumb {
+          transition: left 50ms linear;
+        }
+        .slider-input::-webkit-slider-thumb,
+        .slider-input::-moz-range-thumb {
+          transition: transform 50ms linear;
+        }
+      }
+
       /* Fake thumb that follows a CSS variable for smooth transitions */
       .slider-scale .fake-thumb {
         position: absolute;
-        top: -4px; /* visually center over the track */
-        left: var(--slider-position, 0%);
+        top: -3px; /* visually center over the track */
+        left: calc(var(--slider-position, 0%) + var(--drag-offset-px, 0px));
         transform: translateX(-50%);
         width: var(--slider-thumb-size);
         height: var(--slider-thumb-size);
@@ -1300,9 +1319,16 @@
         background: var(--primary);
         border: 1px solid var(--primary-dark);
         box-shadow: 0 2px 6px rgba(var(--shadow-weak-rgb), 0.2);
-        transition: left var(--slider-transition-ms) ease-in-out;
+        transition: left var(--slider-transition-ms) cubic-bezier(0.2, 0, 0, 1);
+        will-change: left;
         z-index: 10;
         pointer-events: none; /* do not block dragging on the input */
+      }
+
+      /* While dragging, use a slightly longer, ease-out curve for smoother follow */
+      .slider-container.dragged .slider-scale .fake-thumb {
+        transition: left var(--slider-drag-transition-ms)
+          cubic-bezier(0.22, 1, 0.36, 1);
       }
 
       .slider-scale .tick {
@@ -1313,9 +1339,11 @@
         display: inline-block;
         width: 16px;
         height: 16px;
-        background: var(--border-color);
+        background: var(--secondary);
         border-radius: 50%;
         cursor: pointer;
+        /* Make ticks presentational for a11y; still clickable by mouse but not tabbable */
+        pointer-events: auto;
         box-shadow:
           0 1px 3px rgba(var(--shadow-weak-rgb), 0.25),
           inset 0 1px 0 rgba(255, 255, 255, 0.7);
@@ -1341,7 +1369,7 @@
         left: 50%;
         transform: translateX(-50%);
         white-space: nowrap;
-        color: var(--text-primary);
+        color: rgba(var(--text-base-rgb), 0.86);
         font-size: 15px;
         font-family: 'Inter', sans-serif;
       }
