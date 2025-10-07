@@ -79,6 +79,12 @@ class PopupController {
     this.elements.settingsBtn.addEventListener('click', () =>
       this.handleSettings()
     );
+    this.elements.urlInput.addEventListener('blur', () =>
+      this.validateUrlField()
+    );
+    this.elements.urlInput.addEventListener('input', () =>
+      this.clearUrlErrorOnTyping()
+    );
     this.elements.quickAddClose.addEventListener('click', () =>
       this.closeQuickAdd()
     );
@@ -199,6 +205,7 @@ class PopupController {
 
     this.elements.urlInput.value = this.getDisplayUrl();
     this.elements.phraseInput.value = '';
+    this.elements.urlInput.classList.remove('error');
 
     this.elements.optionsCard.classList.add('hidden');
     this.elements.quickAddOverlay.classList.add('visible');
@@ -213,6 +220,7 @@ class PopupController {
     this.elements.optionsCard.classList.remove('hidden');
     this.elements.urlInput.value = '';
     this.elements.phraseInput.value = '';
+    this.elements.urlInput.classList.remove('error');
   }
 
   private quickAddVisible(): boolean {
@@ -231,6 +239,15 @@ class PopupController {
     if (!phrase) {
       this.showStatus('Please enter an intention', 'error');
       return;
+    }
+
+    // Ensure the edited URL is parseable before proceeding
+    {
+      const testIntention = makeRawIntention(url, '');
+      if (!canParseIntention(testIntention)) {
+        this.showStatus('Cannot create intention for this URL', 'error');
+        return;
+      }
     }
 
     try {
@@ -291,6 +308,27 @@ class PopupController {
       return normalized;
     } catch {
       return url.toLowerCase();
+    }
+  }
+
+  private validateUrlField(): void {
+    const url = this.elements.urlInput.value.trim();
+    if (!url) {
+      this.elements.urlInput.classList.remove('error');
+      return;
+    }
+    const testIntention = makeRawIntention(url, '');
+    if (!canParseIntention(testIntention)) {
+      this.elements.urlInput.classList.add('error');
+      this.showStatus('Invalid URL', 'error');
+    } else {
+      this.elements.urlInput.classList.remove('error');
+    }
+  }
+
+  private clearUrlErrorOnTyping(): void {
+    if (this.elements.urlInput.classList.contains('error')) {
+      this.elements.urlInput.classList.remove('error');
     }
   }
 }
