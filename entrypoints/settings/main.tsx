@@ -814,7 +814,7 @@ const SettingsTab = memo(
             onClick={addIntention}
             title='Add another intention'
           >
-           Add Intention
+            Add Intention
           </button>
           <button className='save-btn' onClick={update}>
             Save Changes
