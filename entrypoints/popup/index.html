@@ -120,8 +120,19 @@
       }
 
       .option-icon {
-        font-size: 1.1rem;
-        line-height: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 17.6px;
+        height: 17.6px;
+        line-height: 0;
+        flex-shrink: 0;
+      }
+
+      .option-icon svg {
+        display: block;
+        width: 17.6px;
+        height: 17.6px;
       }
 
       .modal-overlay {
@@ -412,7 +423,23 @@
         </div>
         <div class="option-buttons">
           <button class="option-btn primary" id="quick-add-btn">
-            <span class="option-icon" aria-hidden="true">+</span>
+            <span class="option-icon" aria-hidden="true">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="3"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+            </span>
             Quick Add Intention
           </button>
           <button class="option-btn secondary" id="settings-btn">

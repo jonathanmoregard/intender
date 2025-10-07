@@ -900,7 +900,21 @@ const SettingsTab = memo(
                     onClick={() => addExampleIntention(example)}
                     title={`Add ${example.url} intention`}
                   >
-                    +
+                    <svg
+                      xmlns='http://www.w3.org/2000/svg'
+                      width='16'
+                      height='16'
+                      viewBox='0 0 24 24'
+                      fill='none'
+                      stroke='currentColor'
+                      strokeWidth='3'
+                      strokeLinecap='round'
+                      strokeLinejoin='round'
+                      aria-hidden='true'
+                    >
+                      <line x1='12' y1='5' x2='12' y2='19'></line>
+                      <line x1='5' y1='12' x2='19' y2='12'></line>
+                    </svg>
                   </button>
                 </div>
               ))}
@@ -1109,8 +1123,8 @@ const SettingsTab = memo(
                 </span>
                 <div
                   className='setting-help'
-                  aria-label='Normally, clicking the Intender icon opens a small menu with quick actions. Turn this on to skip the menu and open the Settings page instead.'
-                  data-tooltip='Normally, clicking the Intender icon opens a small menu with quick actions. Turn this on to skip the menu and open the Settings page instead.'
+                  aria-label='Normally, clicking the Intender icon opens a small menu with quick actions. This setting allows you to skip the menu and open this page instead.'
+                  data-tooltip='Normally, clicking the Intender icon opens a small menu with quick actions. This setting allows you to skip the menu and open this page instead.'
                 >
                   ?
                 </div>
