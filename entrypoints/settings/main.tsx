@@ -450,8 +450,9 @@ const SettingsTab = memo(
 
     const exampleIntentions = [
       {
-        url: 'reddit.com',
-        phrase: 'I want to access something specific',
+        url: 'reddit.com/r/Cooking',
+        phrase:
+          'I want to look up a specific recipe, and have set a 5 minute timer',
       },
       {
         url: 'facebook.com',
