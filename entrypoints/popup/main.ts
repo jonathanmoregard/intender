@@ -10,7 +10,6 @@ interface PopupElements {
   quickAddOverlay: HTMLDivElement;
   quickAddBtn: HTMLButtonElement;
   settingsBtn: HTMLButtonElement;
-  quickAddClose: HTMLButtonElement;
   quickAddSave: HTMLButtonElement;
   urlInput: HTMLInputElement;
   phraseInput: HTMLTextAreaElement;
@@ -31,9 +30,6 @@ class PopupController {
         'quick-add-btn'
       ) as HTMLButtonElement,
       settingsBtn: document.getElementById('settings-btn') as HTMLButtonElement,
-      quickAddClose: document.getElementById(
-        'quick-add-close'
-      ) as HTMLButtonElement,
       quickAddSave: document.getElementById(
         'quick-add-save'
       ) as HTMLButtonElement,
@@ -84,9 +80,6 @@ class PopupController {
     );
     this.elements.urlInput.addEventListener('input', () =>
       this.clearUrlErrorOnTyping()
-    );
-    this.elements.quickAddClose.addEventListener('click', () =>
-      this.closeQuickAdd()
     );
     this.elements.quickAddSave.addEventListener('click', () =>
       this.handleSaveIntention()
