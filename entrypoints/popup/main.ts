@@ -161,6 +161,7 @@ class PopupController {
     this.elements.urlInput.value = this.getDisplayUrl();
     this.elements.phraseInput.value = '';
 
+    this.elements.optionsCard.classList.add('hidden');
     this.elements.quickAddOverlay.classList.add('visible');
     setTimeout(() => {
       this.elements.urlInput.focus();
@@ -170,6 +171,7 @@ class PopupController {
 
   private closeQuickAdd(): void {
     this.elements.quickAddOverlay.classList.remove('visible');
+    this.elements.optionsCard.classList.remove('hidden');
     this.elements.urlInput.value = '';
     this.elements.phraseInput.value = '';
   }

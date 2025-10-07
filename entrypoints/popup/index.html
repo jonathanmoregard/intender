@@ -97,6 +97,10 @@
         gap: 1.25rem;
       }
 
+      .options-card.hidden {
+        display: none;
+      }
+
       .options-header {
         display: flex;
         align-items: center;
@@ -169,12 +173,10 @@
       }
 
       .modal-overlay {
-        position: fixed;
         inset: 0;
         display: none;
         align-items: center;
         justify-content: center;
-        padding: 1.25rem;
         background: rgba(var(--shadow-weak-rgb), 0.4);
         backdrop-filter: blur(8px);
       }
