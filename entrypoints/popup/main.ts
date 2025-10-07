@@ -52,6 +52,7 @@ class PopupController {
       await this.loadCurrentTab();
       this.setupEventListeners();
       this.updateUI();
+      await this.maybeRedirectToSettingsOnInvalidOrDuplicate();
     } catch (error) {
       console.error('Failed to initialise popup:', error);
       this.showStatus('Failed to load popup', 'error');
@@ -158,6 +159,33 @@ class PopupController {
     } catch (error) {
       console.error('Failed to check existing intentions:', error);
       this.showStatus('Could not prepare quick add', 'error');
+    }
+  }
+
+  private async maybeRedirectToSettingsOnInvalidOrDuplicate(): Promise<void> {
+    if (!this.currentTab?.url) return;
+    try {
+      const testIntention = makeRawIntention(this.currentTab.url, '');
+      if (!canParseIntention(testIntention)) {
+        this.handleSettings();
+        return;
+      }
+
+      const data = await storage.get();
+      const existingIntentions = data.intentions || [];
+      const hasDuplicate = existingIntentions.some(intention => {
+        if (!intention.url) return false;
+        return (
+          this.normalizeUrl(intention.url) ===
+          this.normalizeUrl(this.currentTab!.url!)
+        );
+      });
+      if (hasDuplicate) {
+        this.handleSettings();
+      }
+    } catch (error) {
+      // On any error, do not redirect; keep popup usable
+      console.error('Validation failed during popup init:', error);
     }
   }
 
