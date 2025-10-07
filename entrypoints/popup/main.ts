@@ -15,6 +15,7 @@ interface PopupElements {
   phraseInput: HTMLTextAreaElement;
   statusMessage: HTMLDivElement;
   urlError: HTMLDivElement;
+  successOverlay: HTMLDivElement;
 }
 
 class PopupController {
@@ -40,6 +41,9 @@ class PopupController {
       ) as HTMLTextAreaElement,
       statusMessage: document.getElementById('status') as HTMLDivElement,
       urlError: document.getElementById('url-error') as HTMLDivElement,
+      successOverlay: document.getElementById(
+        'success-overlay'
+      ) as HTMLDivElement,
     };
 
     this.init();
@@ -269,8 +273,13 @@ class PopupController {
 
       await storage.set({ intentions: updatedIntentions });
 
-      this.closeQuickAdd();
-      this.showStatus('Intention added', 'success');
+      // Show success overlay
+      this.elements.successOverlay.classList.add('visible');
+
+      // Close the popup after a short delay
+      setTimeout(() => {
+        window.close();
+      }, 500);
     } catch (error) {
       console.error('Failed to add intention:', error);
       this.showStatus('Failed to add intention', 'error');
