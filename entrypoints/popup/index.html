@@ -314,21 +314,33 @@
         box-shadow: none;
       }
 
+      /* Toast Animation */
+      @keyframes slideIn {
+        from {
+          transform: translateX(100%);
+          opacity: 0;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+
       .status-message {
         position: fixed;
-        left: 50%;
-        bottom: 1.1rem;
-        transform: translateX(-50%);
+        top: 1.5rem;
+        right: 1.5rem;
         background: rgba(var(--shadow-weak-rgb), 0.85);
         color: var(--text-white);
-        padding: 0.55rem 1.1rem;
-        border-radius: 0;
+        padding: 0.65rem 1.1rem;
+        border-radius: 8px;
         font-size: 0.85rem;
         font-weight: 500;
         letter-spacing: 0.2px;
-        box-shadow: 0 8px 18px rgba(var(--shadow-weak-rgb), 0.25);
+        box-shadow: 0 4px 12px rgba(var(--shadow-weak-rgb), 0.15);
         display: none;
         z-index: 20;
+        animation: slideIn 0.3s ease-out;
       }
 
       .status-message.visible {

@@ -218,7 +218,7 @@ class PopupController {
       await storage.set({ intentions: updatedIntentions });
 
       this.closeQuickAdd();
-      this.showStatus('Intention added!', 'success');
+      this.showStatus('Intention added', 'success');
     } catch (error) {
       console.error('Failed to add intention:', error);
       this.showStatus('Failed to add intention', 'error');
