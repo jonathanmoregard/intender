@@ -52,17 +52,16 @@ class PopupController {
 
   private async init(): Promise<void> {
     try {
-      await this.loadCurrentTab();
-      this.setupEventListeners();
-      this.updateUI();
-
-      // Check if direct to settings is enabled
+      // Check direct-to-settings ASAP to avoid flicker
       const data = await storage.get();
       if (data.directToSettings === true) {
         this.handleSettings();
         return;
       }
 
+      await this.loadCurrentTab();
+      this.setupEventListeners();
+      this.updateUI();
       await this.maybeRedirectToSettingsOnInvalidOrDuplicate();
     } catch (error) {
       console.error('Failed to initialise popup:', error);
@@ -231,6 +230,7 @@ class PopupController {
     this.elements.phraseInput.value = '';
     this.elements.urlInput.classList.remove('error');
     this.elements.urlError.classList.remove('show');
+    this.elements.quickAddBtn.focus();
   }
 
   private quickAddVisible(): boolean {
@@ -336,18 +336,19 @@ class PopupController {
     const testIntention = makeRawIntention(url, '');
     if (!canParseIntention(testIntention)) {
       this.elements.urlInput.classList.add('error');
+      this.elements.urlInput.parentElement?.classList.add('error');
       this.elements.urlError.classList.add('show');
     } else {
       this.elements.urlInput.classList.remove('error');
+      this.elements.urlInput.parentElement?.classList.remove('error');
       this.elements.urlError.classList.remove('show');
     }
   }
 
   private clearUrlErrorOnTyping(): void {
-    if (this.elements.urlInput.classList.contains('error')) {
-      this.elements.urlInput.classList.remove('error');
-      this.elements.urlError.classList.remove('show');
-    }
+    this.elements.urlInput.classList.remove('error');
+    this.elements.urlInput.parentElement?.classList.remove('error');
+    this.elements.urlError.classList.remove('show');
   }
 }
 
