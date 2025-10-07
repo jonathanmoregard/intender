@@ -6,7 +6,7 @@ Intender is a Chrome extension that enables intention-based browsing. The user c
 
 ## Repository Layout (high-signal)
 
-Read these files!
+Go through these files/folders one by one and load them into context:
 
 - `entrypoints/background.ts`: Service worker (inactivity, scope detection, redirects, focus handling)
 - `entrypoints/intention-page/`: Intention page
@@ -17,6 +17,8 @@ Read these files!
 - `cursor_instructions/`: Owner preferences for code, PRs, and process. Take
 
 ## Testing & Execution
+
+Read this text for future reference:
 
 ### Commands
 
