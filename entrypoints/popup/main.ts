@@ -14,6 +14,7 @@ interface PopupElements {
   urlInput: HTMLInputElement;
   phraseInput: HTMLTextAreaElement;
   statusMessage: HTMLDivElement;
+  urlError: HTMLDivElement;
 }
 
 class PopupController {
@@ -38,6 +39,7 @@ class PopupController {
         'quick-add-phrase'
       ) as HTMLTextAreaElement,
       statusMessage: document.getElementById('status') as HTMLDivElement,
+      urlError: document.getElementById('url-error') as HTMLDivElement,
     };
 
     this.init();
@@ -199,6 +201,7 @@ class PopupController {
     this.elements.urlInput.value = this.getDisplayUrl();
     this.elements.phraseInput.value = '';
     this.elements.urlInput.classList.remove('error');
+    this.elements.urlError.classList.remove('show');
 
     this.elements.optionsCard.classList.add('hidden');
     this.elements.quickAddOverlay.classList.add('visible');
@@ -214,6 +217,7 @@ class PopupController {
     this.elements.urlInput.value = '';
     this.elements.phraseInput.value = '';
     this.elements.urlInput.classList.remove('error');
+    this.elements.urlError.classList.remove('show');
   }
 
   private quickAddVisible(): boolean {
@@ -308,20 +312,23 @@ class PopupController {
     const url = this.elements.urlInput.value.trim();
     if (!url) {
       this.elements.urlInput.classList.remove('error');
+      this.elements.urlError.classList.remove('show');
       return;
     }
     const testIntention = makeRawIntention(url, '');
     if (!canParseIntention(testIntention)) {
       this.elements.urlInput.classList.add('error');
-      this.showStatus('Invalid URL', 'error');
+      this.elements.urlError.classList.add('show');
     } else {
       this.elements.urlInput.classList.remove('error');
+      this.elements.urlError.classList.remove('show');
     }
   }
 
   private clearUrlErrorOnTyping(): void {
     if (this.elements.urlInput.classList.contains('error')) {
       this.elements.urlInput.classList.remove('error');
+      this.elements.urlError.classList.remove('show');
     }
   }
 }
