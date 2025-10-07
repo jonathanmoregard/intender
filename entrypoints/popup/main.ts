@@ -87,7 +87,8 @@ class PopupController {
       }
     });
     this.elements.phraseInput.addEventListener('keydown', event => {
-      if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
         this.handleSaveIntention();
       }
     });
@@ -164,8 +165,8 @@ class PopupController {
     this.elements.optionsCard.classList.add('hidden');
     this.elements.quickAddOverlay.classList.add('visible');
     setTimeout(() => {
-      this.elements.urlInput.focus();
-      this.elements.urlInput.select();
+      this.elements.phraseInput.focus();
+      this.elements.phraseInput.select();
     }, 0);
   }
 
