@@ -1,5 +1,8 @@
 import browser from 'webextension-polyfill';
-import { makeRawIntention } from '../../components/intention';
+import {
+  canParseIntention,
+  makeRawIntention,
+} from '../../components/intention';
 import { storage } from '../../components/storage';
 
 interface PopupElements {
@@ -128,6 +131,13 @@ class PopupController {
     }
 
     try {
+      // Check if the current URL can be parsed
+      const testIntention = makeRawIntention(this.currentTab.url, '');
+      if (!canParseIntention(testIntention)) {
+        this.showStatus('Cannot create intention for this URL', 'error');
+        return;
+      }
+
       const data = await storage.get();
       const existingIntentions = data.intentions || [];
 
