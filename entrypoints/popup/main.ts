@@ -47,6 +47,13 @@ class PopupController {
       ) as HTMLDivElement,
     };
 
+    // Ensure logo icon resolves after bundling
+    const logo = document.querySelector('.logo-badge') as HTMLDivElement | null;
+    if (logo) {
+      const iconUrl = browser.runtime.getURL('icon/intender-48.png');
+      logo.style.backgroundImage = `url(${iconUrl})`;
+    }
+
     this.init();
   }
 
@@ -89,6 +96,12 @@ class PopupController {
     this.elements.settingsBtn.addEventListener('click', () =>
       this.handleSettings()
     );
+    this.elements.urlInput.addEventListener('keydown', event => {
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        this.handleSaveIntention();
+      }
+    });
     this.elements.urlInput.addEventListener('blur', () =>
       this.validateUrlField()
     );
@@ -112,6 +125,9 @@ class PopupController {
     window.addEventListener('keydown', event => {
       if (event.key === 'Escape' && this.quickAddVisible()) {
         this.closeQuickAdd();
+      }
+      if (event.key === 'Tab' && this.quickAddVisible()) {
+        this.handleFocusTrap(event);
       }
     });
   }
@@ -139,35 +155,20 @@ class PopupController {
   }
 
   private async handleQuickAdd(): Promise<void> {
-    if (!this.currentTab?.url) {
-      this.showStatus('No active tab available', 'error');
-      return;
-    }
-
     try {
-      // Check if the current URL can be parsed
-      const testIntention = makeRawIntention(this.currentTab.url, '');
-      if (!canParseIntention(testIntention)) {
+      const eligibility = await this.checkCurrentTabEligibility();
+      if (eligibility === 'no-tab') {
+        this.showStatus('No active tab available', 'error');
+        return;
+      }
+      if (eligibility === 'invalid') {
         this.showStatus('Cannot create intention for this URL', 'error');
         return;
       }
-
-      const data = await storage.get();
-      const existingIntentions = data.intentions || [];
-
-      const existingIntention = existingIntentions.find(intention => {
-        if (!intention.url) return false;
-        return (
-          this.normalizeUrl(intention.url) ===
-          this.normalizeUrl(this.currentTab!.url!)
-        );
-      });
-
-      if (existingIntention) {
+      if (eligibility === 'duplicate') {
         this.showStatus('Intention already exists for this site', 'error');
         return;
       }
-
       this.openQuickAdd();
     } catch (error) {
       console.error('Failed to check existing intentions:', error);
@@ -176,24 +177,9 @@ class PopupController {
   }
 
   private async maybeRedirectToSettingsOnInvalidOrDuplicate(): Promise<void> {
-    if (!this.currentTab?.url) return;
     try {
-      const testIntention = makeRawIntention(this.currentTab.url, '');
-      if (!canParseIntention(testIntention)) {
-        this.handleSettings();
-        return;
-      }
-
-      const data = await storage.get();
-      const existingIntentions = data.intentions || [];
-      const hasDuplicate = existingIntentions.some(intention => {
-        if (!intention.url) return false;
-        return (
-          this.normalizeUrl(intention.url) ===
-          this.normalizeUrl(this.currentTab!.url!)
-        );
-      });
-      if (hasDuplicate) {
+      const eligibility = await this.checkCurrentTabEligibility();
+      if (eligibility !== 'ok') {
         this.handleSettings();
       }
     } catch (error) {
@@ -214,6 +200,8 @@ class PopupController {
     this.elements.phraseInput.value = '';
     this.elements.urlInput.classList.remove('error');
     this.elements.urlError.classList.remove('show');
+    this.elements.urlInput.removeAttribute('aria-invalid');
+    this.elements.urlInput.removeAttribute('aria-describedby');
 
     this.elements.optionsCard.classList.add('hidden');
     this.elements.quickAddOverlay.classList.add('visible');
@@ -331,6 +319,8 @@ class PopupController {
     if (!url) {
       this.elements.urlInput.classList.remove('error');
       this.elements.urlError.classList.remove('show');
+      this.elements.urlInput.removeAttribute('aria-invalid');
+      this.elements.urlInput.removeAttribute('aria-describedby');
       return;
     }
     const testIntention = makeRawIntention(url, '');
@@ -338,10 +328,14 @@ class PopupController {
       this.elements.urlInput.classList.add('error');
       this.elements.urlInput.parentElement?.classList.add('error');
       this.elements.urlError.classList.add('show');
+      this.elements.urlInput.setAttribute('aria-invalid', 'true');
+      this.elements.urlInput.setAttribute('aria-describedby', 'url-error');
     } else {
       this.elements.urlInput.classList.remove('error');
       this.elements.urlInput.parentElement?.classList.remove('error');
       this.elements.urlError.classList.remove('show');
+      this.elements.urlInput.removeAttribute('aria-invalid');
+      this.elements.urlInput.removeAttribute('aria-describedby');
     }
   }
 
@@ -349,6 +343,58 @@ class PopupController {
     this.elements.urlInput.classList.remove('error');
     this.elements.urlInput.parentElement?.classList.remove('error');
     this.elements.urlError.classList.remove('show');
+    this.elements.urlInput.removeAttribute('aria-invalid');
+    this.elements.urlInput.removeAttribute('aria-describedby');
+  }
+
+  private handleFocusTrap(event: KeyboardEvent): void {
+    const dialog = this.elements.quickAddOverlay.querySelector(
+      '.quick-add-card'
+    ) as HTMLElement | null;
+    if (!dialog) return;
+    const focusable = Array.from(
+      dialog.querySelectorAll<HTMLElement>(
+        'button, [href], input, textarea, select, [tabindex]:not([tabindex="-1"])'
+      )
+    ).filter(
+      el =>
+        !el.hasAttribute('disabled') &&
+        el.getAttribute('aria-hidden') !== 'true'
+    );
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement as HTMLElement | null;
+    if (event.shiftKey) {
+      if (active === first || !dialog.contains(active)) {
+        event.preventDefault();
+        last.focus();
+      }
+    } else {
+      if (active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+  }
+
+  private async checkCurrentTabEligibility(): Promise<
+    'ok' | 'invalid' | 'duplicate' | 'no-tab'
+  > {
+    if (!this.currentTab?.url) return 'no-tab';
+    const testIntention = makeRawIntention(this.currentTab.url, '');
+    if (!canParseIntention(testIntention)) return 'invalid';
+    const data = await storage.get();
+    const existingIntentions = data.intentions || [];
+    const hasDuplicate = existingIntentions.some(intention => {
+      if (!intention.url) return false;
+      return (
+        this.normalizeUrl(intention.url) ===
+        this.normalizeUrl(this.currentTab!.url!)
+      );
+    });
+    if (hasDuplicate) return 'duplicate';
+    return 'ok';
   }
 }
 
