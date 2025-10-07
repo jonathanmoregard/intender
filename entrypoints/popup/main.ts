@@ -1,3 +1,4 @@
+import '@theme';
 import browser from 'webextension-polyfill';
 import {
   canParseIntention,
