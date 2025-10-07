@@ -242,7 +242,7 @@ class PopupController {
     {
       const testIntention = makeRawIntention(url, '');
       if (!canParseIntention(testIntention)) {
-        this.showStatus('Cannot create intention for this URL', 'error');
+        this.showStatus('Invalid URL', 'error');
         return;
       }
     }
