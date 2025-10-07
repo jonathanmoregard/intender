@@ -9,19 +9,6 @@ const backend = __IS_DEV__ ? browser.storage.local : browser.storage.sync;
 export type InactivityMode = 'off' | 'all-except-audio' | 'all';
 export type BreathAnimationIntensity = 'off' | 'minimal' | 'medium' | 'heavy';
 
-export interface InactivitySettings {
-  mode: InactivityMode;
-  timeoutMs: TimeoutMs;
-}
-
-export interface BreathAnimationSettings {
-  intensity: BreathAnimationIntensity;
-}
-
-export interface PopupSettings {
-  directToSettings: boolean;
-}
-
 export const storage = {
   async get(): Promise<{
     intentions: RawIntention[];
