@@ -117,7 +117,7 @@ class PopupController {
     }
 
     this.elements.quickAddBtn.disabled = false;
-    this.elements.quickAddBtn.title = `Quick add ${this.getDisplayUrl()}`;
+    this.elements.quickAddBtn.title = `Add intention for ${this.getDisplayUrl()}`;
   }
 
   private getDisplayUrl(): string {
