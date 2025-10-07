@@ -57,6 +57,7 @@ const SettingsTab = memo(
     const [canCopyIntentionText, setCanCopyIntentionText] = useState(false);
     const [breathIntensity, setBreathIntensity] =
       useState<BreathAnimationIntensity>('minimal');
+    const [directToSettings, setDirectToSettings] = useState(false);
 
     const [blurredUrlIds, setBlurredUrlIds] = useState<Set<string>>(new Set());
     const [blurredPhraseIds, setBlurredPhraseIds] = useState<Set<string>>(
@@ -179,6 +180,10 @@ const SettingsTab = memo(
       await storage.set({ canCopyIntentionText: enabled });
     }, []);
 
+    const saveDirectToSettings = useCallback(async (enabled: boolean) => {
+      await storage.set({ directToSettings: enabled });
+    }, []);
+
     // Debounced save function
     const debouncedSave = useCallback(
       debounce(async (intentionsToSave: RawIntention[]) => {
@@ -210,6 +215,7 @@ const SettingsTab = memo(
           (data.breathAnimationIntensity as BreathAnimationIntensity) ??
             'minimal'
         );
+        setDirectToSettings(data.directToSettings ?? false);
 
         // E2E testing hook: allow overriding inactivity timeout via query param
         try {
@@ -592,6 +598,9 @@ const SettingsTab = memo(
             }
             if (settingsToApply.canCopyIntentionText !== undefined) {
               setCanCopyIntentionText(settingsToApply.canCopyIntentionText);
+            }
+            if (settingsToApply.directToSettings !== undefined) {
+              setDirectToSettings(settingsToApply.directToSettings);
             }
 
             // Mark all imported intentions as loaded
@@ -1081,6 +1090,30 @@ const SettingsTab = memo(
                   }}
                 />
                 <span className='setting-text'>Can copy intention text</span>
+              </label>
+            </div>
+
+            <div className='setting-group'>
+              <label className='setting-label clickable-setting-item'>
+                <input
+                  type='checkbox'
+                  checked={directToSettings}
+                  onChange={e => {
+                    const enabled = e.target.checked;
+                    setDirectToSettings(enabled);
+                    saveDirectToSettings(enabled);
+                  }}
+                />
+                <span className='setting-text'>
+                  Open Settings when clicking the Intender icon
+                </span>
+                <div
+                  className='setting-help'
+                  aria-label='Normally, clicking the Intender icon opens a small menu with quick actions. Turn this on to skip the menu and open the Settings page instead.'
+                  data-tooltip='Normally, clicking the Intender icon opens a small menu with quick actions. Turn this on to skip the menu and open the Settings page instead.'
+                >
+                  ?
+                </div>
               </label>
             </div>
 

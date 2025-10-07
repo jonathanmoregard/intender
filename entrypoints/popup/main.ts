@@ -55,6 +55,14 @@ class PopupController {
       await this.loadCurrentTab();
       this.setupEventListeners();
       this.updateUI();
+
+      // Check if direct to settings is enabled
+      const data = await storage.get();
+      if (data.directToSettings === true) {
+        this.handleSettings();
+        return;
+      }
+
       await this.maybeRedirectToSettingsOnInvalidOrDuplicate();
     } catch (error) {
       console.error('Failed to initialise popup:', error);
