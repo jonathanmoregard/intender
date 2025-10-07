@@ -1109,8 +1109,8 @@ const SettingsTab = memo(
                 </span>
                 <div
                   className='setting-help'
-                  aria-label='Normally, clicking the Intender icon opens a small menu with quick actions. Turn this on to skip the menu and open the Settings page instead.'
-                  data-tooltip='Normally, clicking the Intender icon opens a small menu with quick actions. Turn this on to skip the menu and open the Settings page instead.'
+                  aria-label='Normally, clicking the Intender icon opens a small menu with quick actions. This setting allows you to skip the menu and open this page instead.'
+                  data-tooltip='Normally, clicking the Intender icon opens a small menu with quick actions. This setting allows you to skip the menu and open this page instead.'
                 >
                   ?
                 </div>
