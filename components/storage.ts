@@ -9,15 +9,6 @@ const backend = __IS_DEV__ ? browser.storage.local : browser.storage.sync;
 export type InactivityMode = 'off' | 'all-except-audio' | 'all';
 export type BreathAnimationIntensity = 'off' | 'minimal' | 'medium' | 'heavy';
 
-export interface InactivitySettings {
-  mode: InactivityMode;
-  timeoutMs: TimeoutMs;
-}
-
-export interface BreathAnimationSettings {
-  intensity: BreathAnimationIntensity;
-}
-
 export const storage = {
   async get(): Promise<{
     intentions: RawIntention[];
@@ -27,24 +18,23 @@ export const storage = {
     showAdvancedSettings?: boolean;
     canCopyIntentionText?: boolean;
     breathAnimationIntensity?: BreathAnimationIntensity;
+    directToSettings?: boolean;
   }> {
-    const result = await backend.get({
+    const defaults = {
       intentions: [],
       fuzzyMatching: true,
-      inactivityMode: 'off',
+      inactivityMode: 'off' as InactivityMode,
       inactivityTimeoutMs: (30 * 60 * 1000) as TimeoutMs,
       showAdvancedSettings: false,
       canCopyIntentionText: false,
-      breathAnimationIntensity: 'minimal',
-    });
-    return result as {
-      intentions: RawIntention[];
-      fuzzyMatching?: boolean;
-      inactivityMode?: InactivityMode;
-      inactivityTimeoutMs?: TimeoutMs;
-      showAdvancedSettings?: boolean;
-      canCopyIntentionText?: boolean;
-      breathAnimationIntensity?: BreathAnimationIntensity;
+      breathAnimationIntensity: 'minimal' as BreathAnimationIntensity,
+      directToSettings: false,
+    };
+
+    const result = await backend.get(defaults);
+    return {
+      ...defaults,
+      ...result,
     };
   },
   async set(
@@ -56,6 +46,7 @@ export const storage = {
       | { showAdvancedSettings: boolean }
       | { canCopyIntentionText: boolean }
       | { breathAnimationIntensity: BreathAnimationIntensity }
+      | { directToSettings: boolean }
   ) {
     await backend.set(data);
   },
