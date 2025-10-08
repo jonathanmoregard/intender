@@ -663,6 +663,7 @@ const SettingsTab = memo(
                         >
                           <div
                             className='drag-handle'
+                            tabIndex={0}
                             role='button'
                             aria-label='Reorder intention'
                             title='Drag to reorder'
