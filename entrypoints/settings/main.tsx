@@ -25,10 +25,6 @@ import { minutesToMs, msToMinutes } from '../../components/time';
 import { generateUUID } from '../../components/uuid';
 import packageJson from '../../package.json';
 import {
-  ValidatedTextArea,
-  type ValidatedTextAreaHandle,
-} from './components/ValidatedTextArea';
-import {
   ValidatedTextInput,
   type ValidatedTextInputHandle,
 } from './components/ValidatedTextInput';
@@ -82,7 +78,7 @@ const SettingsTab = memo(
     const exportBtnRef = useRef<HTMLButtonElement | null>(null);
     const importBtnRef = useRef<HTMLButtonElement | null>(null);
     const urlValidatedRefs = useRef<(ValidatedTextInputHandle | null)[]>([]);
-    const phraseValidatedRefs = useRef<(ValidatedTextAreaHandle | null)[]>([]);
+    const phraseValidatedRefs = useRef<(ValidatedTextInputHandle | null)[]>([]);
     const hasShownValidityOnLoad = useRef<boolean>(false);
 
     const reorderByIndices = (fromIndex: number, toIndex: number) => {
@@ -707,10 +703,11 @@ const SettingsTab = memo(
                                 />
                               </div>
 
-                              <ValidatedTextArea
+                              <ValidatedTextInput
                                 ref={instance => {
                                   phraseValidatedRefs.current[i] = instance;
                                 }}
+                                inputRef={el => {}}
                                 className='phrase-input'
                                 value={intention.phrase}
                                 onChange={next => {
@@ -725,7 +722,6 @@ const SettingsTab = memo(
                                 label='Intention'
                                 placeholder='Write your intention'
                                 maxLength={150}
-                                rows={2}
                                 validate={input => {
                                   const urlOk = canParseIntention(intention);
                                   if (
@@ -739,6 +735,7 @@ const SettingsTab = memo(
                                 }}
                                 errorText='Please write your intention'
                                 name={`phrase-${intention.id}`}
+                                showCheckmarkOnValid={false}
                               />
                             </div>
 

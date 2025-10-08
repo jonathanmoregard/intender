@@ -205,6 +205,9 @@
 
       .intentions-list {
         margin-bottom: 2rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
       }
 
       .intention-row {
@@ -212,7 +215,6 @@
         display: flex;
         align-items: stretch;
         gap: 10px;
-        margin-bottom: 1.5rem;
         margin-left: 0.5rem;
       }
 
@@ -221,7 +223,7 @@
         border: 1px solid var(--border-color);
         border-radius: 12px;
         box-shadow: 0 2px 8px rgba(var(--shadow-weak-rgb), 0.05);
-        padding: 1.5rem;
+        padding: 1rem;
         display: flex;
         align-items: center;
         gap: 1rem;
@@ -327,10 +329,7 @@
         font-size: 0.9rem;
         transition: all 0.15s ease;
         background: var(--input-background-color);
-        min-height: 3rem;
-        resize: vertical;
         font-family: 'Inter', sans-serif;
-        line-height: 1.4;
       }
 
       .url-input:focus,

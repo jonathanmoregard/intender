@@ -29,6 +29,7 @@ export interface ValidatedTextInputProps {
   onFocus?: (e: React.FocusEvent<HTMLInputElement>) => void;
   onBlur?: (e: React.FocusEvent<HTMLInputElement>) => void;
   validationVisibility?: 'blur' | 'always' | 'hidden';
+  maxLength?: number;
 }
 
 export type ValidatedTextInputHandle = {
@@ -59,6 +60,7 @@ export const ValidatedTextInput = forwardRef<
     onFocus,
     onBlur,
     validationVisibility,
+    maxLength,
   } = props;
 
   const [blurred, setBlurred] = useState<boolean>(false);
@@ -118,6 +120,7 @@ export const ValidatedTextInput = forwardRef<
         required={required}
         autoComplete={autoComplete}
         inputMode={inputMode}
+        maxLength={maxLength}
         aria-invalid={showError ? true : false}
         aria-describedby={showError ? errorId : undefined}
       />
