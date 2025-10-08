@@ -18,6 +18,14 @@ import {
 import { minutesToMs, msToMinutes } from '../../components/time';
 import { generateUUID } from '../../components/uuid';
 import packageJson from '../../package.json';
+import {
+  ValidatedTextArea,
+  type ValidatedTextAreaHandle,
+} from './components/ValidatedTextArea';
+import {
+  ValidatedTextInput,
+  type ValidatedTextInputHandle,
+} from './components/ValidatedTextInput';
 
 type Tab = 'settings' | 'about';
 
@@ -59,78 +67,17 @@ const SettingsTab = memo(
       useState<BreathAnimationIntensity>('minimal');
     const [directToSettings, setDirectToSettings] = useState(false);
 
-    const [blurredUrlIds, setBlurredUrlIds] = useState<Set<string>>(new Set());
-    const [blurredPhraseIds, setBlurredPhraseIds] = useState<Set<string>>(
-      new Set()
-    );
-    const [loadedIntentionIds, setLoadedIntentionIds] = useState<Set<string>>(
-      new Set()
-    );
+    // Local UI only state
     const [isShiftHeld, setIsShiftHeld] = useState(false);
-
-    // ============================================================================
-    // INTENTION CARD STATE MANAGEMENT
-    // ============================================================================
-    // Functions for managing the visual state of intention cards:
-    // - Error highlighting (blurred inputs)
-    // - Loaded state tracking (for initial vs new intentions)
-    // - Focus/blur state management
-
-    const markUrlBlurred = (id: string) => {
-      setBlurredUrlIds(prev => new Set([...prev, id]));
-    };
-
-    const markUrlFocused = (id: string) => {
-      setBlurredUrlIds(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(id);
-        return newSet;
-      });
-    };
-
-    const isUrlBlurred = (id: string) => {
-      return blurredUrlIds.has(id);
-    };
-
-    const markPhraseBlurred = (id: string) => {
-      setBlurredPhraseIds(prev => new Set([...prev, id]));
-    };
-
-    const markPhraseFocused = (id: string) => {
-      setBlurredPhraseIds(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(id);
-        return newSet;
-      });
-    };
-
-    const isPhraseBlurred = (id: string) => {
-      return blurredPhraseIds.has(id);
-    };
-
-    const isLoaded = (id: string) => {
-      return loadedIntentionIds.has(id);
-    };
-
-    const updateLoadedIntentionIds = (
-      ids: Set<string> | ((prev: Set<string>) => Set<string>)
-    ) => {
-      if (typeof ids === 'function') {
-        setLoadedIntentionIds(ids);
-      } else {
-        setLoadedIntentionIds(ids);
-      }
-    };
-
-    // ============================================================================
-    // END INTENTION CARD STATE MANAGEMENT
-    // ============================================================================
 
     const urlInputRefs = useRef<(HTMLInputElement | null)[]>([]);
     const moreOptionsRef = useRef<HTMLDivElement>(null);
     const moreOptionsBtnRef = useRef<HTMLButtonElement | null>(null);
     const exportBtnRef = useRef<HTMLButtonElement | null>(null);
     const importBtnRef = useRef<HTMLButtonElement | null>(null);
+    const urlValidatedRefs = useRef<(ValidatedTextInputHandle | null)[]>([]);
+    const phraseValidatedRefs = useRef<(ValidatedTextAreaHandle | null)[]>([]);
+    const hasShownValidityOnLoad = useRef<boolean>(false);
 
     const isIntentionEmpty = useCallback((intention: RawIntention) => {
       return isEmpty(intention);
@@ -230,15 +177,6 @@ const SettingsTab = memo(
           }
         } catch {}
 
-        // Track which intentions were loaded from storage (not newly created)
-        const loadedIds = new Set<string>();
-        initialIntentions.forEach(intention => {
-          if (!isEmpty(intention)) {
-            loadedIds.add(intention.id);
-          }
-        });
-        updateLoadedIntentionIds(loadedIds);
-
         // Check if we should show examples based on initial load
         const nonEmptyIntentions = initialIntentions.filter(
           intention => !isEmpty(intention)
@@ -255,6 +193,15 @@ const SettingsTab = memo(
           setTimeout(() => {
             urlInputRefs.current[firstEmptyIndex]?.focus();
           }, 100);
+        }
+
+        // After initial render, show validity for prefilled items once
+        if (!hasShownValidityOnLoad.current) {
+          hasShownValidityOnLoad.current = true;
+          requestAnimationFrame(() => {
+            urlValidatedRefs.current.forEach(ref => ref?.showValidity());
+            phraseValidatedRefs.current.forEach(ref => ref?.showValidity());
+          });
         }
       });
     }, []);
@@ -369,10 +316,6 @@ const SettingsTab = memo(
       setIntentions(prev => {
         const newIntention = makeRawIntention(example.url, example.phrase);
         const newIntentions = [newIntention, ...prev];
-
-        // Mark the newly added example as solidified
-        updateLoadedIntentionIds(prev => new Set([...prev, newIntention.id]));
-
         return newIntentions;
       });
     };
@@ -398,15 +341,7 @@ const SettingsTab = memo(
         newIntentions.length > 0 ? newIntentions : [emptyRawIntention()];
       setIntentions(finalIntentions);
 
-      // Update loaded IDs after deletion - remove the deleted intention's ID
-      const deletedIntention = intentions[index];
-      if (deletedIntention) {
-        updateLoadedIntentionIds(prev => {
-          const newLoadedIds = new Set(prev);
-          newLoadedIds.delete(deletedIntention.id);
-          return newLoadedIds;
-        });
-      }
+      // No loaded-id tracking needed
     };
 
     const confirmDelete = () => {
@@ -418,11 +353,6 @@ const SettingsTab = memo(
 
     const cancelDelete = () => {
       setDeleteConfirm({ show: false, index: null });
-    };
-
-    const handlePhraseBlur = (intentionIndex: number) => {
-      // Remove auto-adding on blur since we handle it in keydown
-      // This was causing conflicts with tab navigation
     };
 
     const handlePhraseKeyDown = (
@@ -533,19 +463,28 @@ const SettingsTab = memo(
           // Handle both old format (just intentions array) and new format (full settings object)
           if (Array.isArray(importedData)) {
             // Old format: just intentions array
-            const processedIntentions = importedData.map(intention => ({
-              ...intention,
-              id: generateUUID(),
-            }));
+            const rawList = importedData as any[];
+            const processedIntentions: RawIntention[] = rawList
+              .map(item => ({
+                id: generateUUID(),
+                url: typeof item?.url === 'string' ? item.url : '',
+                phrase: typeof item?.phrase === 'string' ? item.phrase : '',
+              }))
+              // Keep items that have some meaningful content
+              .filter(it => it.url.trim() !== '' || it.phrase.trim() !== '');
+
+            if (processedIntentions.length === 0) {
+              throw new Error('No valid intentions found in file');
+            }
 
             setIntentions(processedIntentions);
             await storage.set({ intentions: processedIntentions });
 
-            // Mark all imported intentions as loaded
-            const importedIds = new Set(
-              processedIntentions.map(intention => intention.id as string)
-            );
-            updateLoadedIntentionIds(importedIds);
+            // After import, force show validity for prefilled fields
+            requestAnimationFrame(() => {
+              urlValidatedRefs.current.forEach(ref => ref?.showValidity());
+              phraseValidatedRefs.current.forEach(ref => ref?.showValidity());
+            });
 
             setToast({
               show: true,
@@ -558,19 +497,30 @@ const SettingsTab = memo(
             );
           } else {
             // New format: full settings object - load all settings except version
+            const maybeIntentions = Array.isArray(
+              (importedData as any)?.intentions
+            )
+              ? ((importedData as any).intentions as any[])
+              : [];
+
             const {
               version,
-              intentions: importedIntentions,
+              intentions: _ignored,
               ...otherSettings
-            } = importedData;
+            } = importedData as any;
 
             // Process intentions with new IDs
-            const processedIntentions = (importedIntentions || []).map(
-              (intention: any) => ({
-                ...intention,
+            const processedIntentions = maybeIntentions
+              .map(item => ({
                 id: generateUUID(),
-              })
-            ) as RawIntention[];
+                url: typeof item?.url === 'string' ? item.url : '',
+                phrase: typeof item?.phrase === 'string' ? item.phrase : '',
+              }))
+              .filter(it => it.url.trim() !== '' || it.phrase.trim() !== '');
+
+            if (processedIntentions.length === 0) {
+              throw new Error('No valid intentions found in file');
+            }
 
             // Load all settings (excluding version)
             const settingsToApply = {
@@ -580,6 +530,11 @@ const SettingsTab = memo(
 
             setIntentions(processedIntentions);
             await storage.set(settingsToApply);
+
+            requestAnimationFrame(() => {
+              urlValidatedRefs.current.forEach(ref => ref?.showValidity());
+              phraseValidatedRefs.current.forEach(ref => ref?.showValidity());
+            });
 
             // Update UI state for all settings
             if (settingsToApply.fuzzyMatching !== undefined) {
@@ -602,12 +557,6 @@ const SettingsTab = memo(
             if (settingsToApply.directToSettings !== undefined) {
               setDirectToSettings(settingsToApply.directToSettings);
             }
-
-            // Mark all imported intentions as loaded
-            const importedIds = new Set(
-              processedIntentions.map(intention => intention.id as string)
-            );
-            updateLoadedIntentionIds(importedIds);
 
             setToast({
               show: true,
@@ -678,94 +627,65 @@ const SettingsTab = memo(
             <div key={intention.id || `new-${i}`} className='intention-item'>
               <div className='intention-inputs'>
                 <div className='url-section'>
-                  <div className='input-group'>
-                    <input
-                      ref={el => {
-                        urlInputRefs.current[i] = el;
-                      }}
-                      type='text'
-                      className={`url-input ${
-                        (isUrlBlurred(intention.id) ||
-                          isLoaded(intention.id)) &&
-                        !isEmpty(intention) &&
-                        !canParseIntention(intention)
-                          ? 'error'
-                          : ''
-                      } ${
-                        (isUrlBlurred(intention.id) ||
-                          isLoaded(intention.id)) &&
-                        canParseIntention(intention)
-                          ? 'parseable'
-                          : ''
-                      }`}
-                      value={intention.url}
-                      onChange={e => {
-                        const newIntentions = [...intentions];
-                        newIntentions[i] = {
-                          ...newIntentions[i],
-                          url: e.target.value,
-                        };
-                        setIntentions(newIntentions);
-                      }}
-                      onFocus={() => markUrlFocused(intention.id)}
-                      onBlur={() => markUrlBlurred(intention.id)}
-                      placeholder='Website (e.g., example.com)'
-                    />
-                    <label className='input-label'>Website</label>
-                    {(isUrlBlurred(intention.id) || isLoaded(intention.id)) &&
-                      canParseIntention(intention) && (
-                        <span className='valid-checkmark'>✓</span>
-                      )}
-                  </div>
-
-                  {(isUrlBlurred(intention.id) || isLoaded(intention.id)) &&
-                    !isEmpty(intention) &&
-                    !canParseIntention(intention) && (
-                      <div className='error-text show'>
-                        Enter a website like example.com
-                      </div>
-                    )}
-                </div>
-
-                <div className='input-group'>
-                  <textarea
-                    className={`phrase-input ${
-                      isPhraseBlurred(intention.id) &&
-                      !isEmpty(intention) &&
-                      canParseIntention(intention) &&
-                      isPhraseEmpty(intention.phrase)
-                        ? 'error'
-                        : ''
-                    }`}
-                    value={intention.phrase}
-                    onChange={e => {
+                  <ValidatedTextInput
+                    ref={instance => {
+                      urlValidatedRefs.current[i] = instance;
+                    }}
+                    inputRef={el => {
+                      urlInputRefs.current[i] = el;
+                    }}
+                    value={intention.url}
+                    onChange={next => {
                       const newIntentions = [...intentions];
-                      newIntentions[i] = {
-                        ...newIntentions[i],
-                        phrase: e.target.value,
-                      };
+                      newIntentions[i] = { ...newIntentions[i], url: next };
                       setIntentions(newIntentions);
                     }}
-                    onFocus={() => markPhraseFocused(intention.id)}
-                    onBlur={() => {
-                      markPhraseBlurred(intention.id);
-                      handlePhraseBlur(i);
-                    }}
-                    onKeyDown={e => handlePhraseKeyDown(e, i)}
-                    placeholder='Write your intention'
-                    maxLength={150}
-                    rows={2}
+                    label='Website'
+                    placeholder='Website (e.g., example.com)'
+                    className='url-input'
+                    validate={input =>
+                      canParseIntention({ ...intention, url: input })
+                        ? { ok: true }
+                        : { ok: false }
+                    }
+                    errorText='Enter a website like example.com'
+                    showCheckmarkOnValid={true}
+                    name={`url-${intention.id}`}
+                    inputMode='url'
+                    autoComplete='url'
                   />
-                  <label className='input-label'>Intention</label>
-                  {isPhraseBlurred(intention.id) &&
-                    !isEmpty(intention) &&
-                    canParseIntention(intention) &&
-                    isPhraseEmpty(intention.phrase) && (
-                      <div className='error-text show'>
-                        Please write your intention
-                      </div>
-                    )}
                 </div>
+
+                <ValidatedTextArea
+                  ref={instance => {
+                    phraseValidatedRefs.current[i] = instance;
+                  }}
+                  className='phrase-input'
+                  value={intention.phrase}
+                  onChange={next => {
+                    const newIntentions = [...intentions];
+                    newIntentions[i] = { ...newIntentions[i], phrase: next };
+                    setIntentions(newIntentions);
+                  }}
+                  onKeyDown={e => handlePhraseKeyDown(e, i)}
+                  label='Intention'
+                  placeholder='Write your intention'
+                  maxLength={150}
+                  rows={2}
+                  validate={input => {
+                    const urlOk = canParseIntention(intention);
+                    if (
+                      urlOk &&
+                      isPhraseEmpty(input) &&
+                      !isEmpty({ ...intention, phrase: input })
+                    ) {
+                      return { ok: false };
+                    }
+                    return { ok: true };
+                  }}
+                  errorText='Please write your intention'
+                  name={`phrase-${intention.id}`}
+                />
               </div>
 
               <div className='remove-btn-wrapper'>
@@ -1145,7 +1065,7 @@ const SettingsTab = memo(
               </label>
             </div>
 
-            {/* Breath Intensity Slider - moved to bottom */}
+            {/* Breath Intensity Slider */}
             <div className='setting-group'>
               <div className='setting-item'>
                 <div className='setting-header'>
