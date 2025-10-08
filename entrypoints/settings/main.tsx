@@ -22,7 +22,7 @@ import {
   type InactivityMode,
 } from '../../components/storage';
 import { minutesToMs, msToMinutes } from '../../components/time';
-import { generateUUID } from '../../components/uuid';
+import { generateUUID, type UUID } from '../../components/uuid';
 import packageJson from '../../package.json';
 import {
   ValidatedTextInput,
@@ -72,13 +72,17 @@ const SettingsTab = memo(
     // Local UI only state
     const [isShiftHeld, setIsShiftHeld] = useState(false);
 
-    const urlInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+    const urlInputRefs = useRef<Map<UUID, HTMLInputElement | null>>(new Map());
     const moreOptionsRef = useRef<HTMLDivElement>(null);
     const moreOptionsBtnRef = useRef<HTMLButtonElement | null>(null);
     const exportBtnRef = useRef<HTMLButtonElement | null>(null);
     const importBtnRef = useRef<HTMLButtonElement | null>(null);
-    const urlValidatedRefs = useRef<(ValidatedTextInputHandle | null)[]>([]);
-    const phraseValidatedRefs = useRef<(ValidatedTextInputHandle | null)[]>([]);
+    const urlValidatedRefs = useRef<Map<UUID, ValidatedTextInputHandle | null>>(
+      new Map()
+    );
+    const phraseValidatedRefs = useRef<
+      Map<UUID, ValidatedTextInputHandle | null>
+    >(new Map());
     const hasShownValidityOnLoad = useRef<boolean>(false);
 
     const reorderByIndices = (fromIndex: number, toIndex: number) => {
@@ -100,10 +104,10 @@ const SettingsTab = memo(
       return isEmpty(intention);
     }, []);
 
-    const focusNewIntentionUrl = useCallback((intentionIndex: number) => {
+    const focusNewIntentionUrl = useCallback((intentionId: UUID) => {
       // Small delay to ensure DOM is updated
       setTimeout(() => {
-        urlInputRefs.current[intentionIndex]?.focus();
+        urlInputRefs.current.get(intentionId)?.focus();
       }, 50);
     }, []);
 
@@ -201,14 +205,12 @@ const SettingsTab = memo(
         setShowExamples(nonEmptyIntentions.length < 2);
 
         // Auto-focus first empty unparseable intention URL
-        const firstEmptyIndex = initialIntentions.findIndex(
-          (intention: RawIntention) => {
-            return isEmpty(intention);
-          }
-        );
-        if (firstEmptyIndex !== -1) {
+        const firstEmpty = initialIntentions.find((intention: RawIntention) => {
+          return isEmpty(intention);
+        });
+        if (firstEmpty) {
           setTimeout(() => {
-            urlInputRefs.current[firstEmptyIndex]?.focus();
+            urlInputRefs.current.get(firstEmpty.id)?.focus();
           }, 100);
         }
 
@@ -320,13 +322,13 @@ const SettingsTab = memo(
     };
 
     const addIntention = () => {
+      const newIntention = emptyRawIntention();
       setIntentions(prev => {
-        const newIntentions = [...prev, emptyRawIntention()];
+        const newIntentions = [...prev, newIntention];
         // Focus the new intention's URL input
-        focusNewIntentionUrl(newIntentions.length - 1);
+        focusNewIntentionUrl(newIntention.id);
         return newIntentions;
       });
-      // Newly created intentions are not marked as loaded
     };
 
     const addExampleIntention = (example: { url: string; phrase: string }) => {
@@ -392,9 +394,10 @@ const SettingsTab = memo(
         if (isLastIntention && !isEmpty(intention)) {
           e.preventDefault();
           setIntentions(prev => {
-            const newIntentions = [...prev, emptyRawIntention()];
+            const newIntention = emptyRawIntention();
+            const newIntentions = [...prev, newIntention];
             // Focus the new intention's URL input
-            focusNewIntentionUrl(newIntentions.length - 1);
+            focusNewIntentionUrl(newIntention.id);
             return newIntentions;
           });
         }
@@ -670,10 +673,26 @@ const SettingsTab = memo(
                               <div className='url-section'>
                                 <ValidatedTextInput
                                   ref={instance => {
-                                    urlValidatedRefs.current[i] = instance;
+                                    if (instance) {
+                                      urlValidatedRefs.current.set(
+                                        intention.id,
+                                        instance
+                                      );
+                                    } else {
+                                      urlValidatedRefs.current.delete(
+                                        intention.id
+                                      );
+                                    }
                                   }}
                                   inputRef={el => {
-                                    urlInputRefs.current[i] = el;
+                                    if (el) {
+                                      urlInputRefs.current.set(
+                                        intention.id,
+                                        el
+                                      );
+                                    } else {
+                                      urlInputRefs.current.delete(intention.id);
+                                    }
                                   }}
                                   value={intention.url}
                                   onChange={next => {
@@ -705,7 +724,16 @@ const SettingsTab = memo(
 
                               <ValidatedTextInput
                                 ref={instance => {
-                                  phraseValidatedRefs.current[i] = instance;
+                                  if (instance) {
+                                    phraseValidatedRefs.current.set(
+                                      intention.id,
+                                      instance
+                                    );
+                                  } else {
+                                    phraseValidatedRefs.current.delete(
+                                      intention.id
+                                    );
+                                  }
                                 }}
                                 inputRef={el => {}}
                                 className='phrase-input'
