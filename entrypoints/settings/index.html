@@ -207,17 +207,60 @@
         margin-bottom: 2rem;
       }
 
+      .intention-row {
+        position: relative;
+        display: flex;
+        align-items: stretch;
+        gap: 10px;
+        margin-bottom: 1.5rem;
+        margin-left: 0.5rem;
+      }
+
       .intention-item {
         background: var(--white);
         border: 1px solid var(--border-color);
         border-radius: 12px;
-        margin-bottom: 1.5rem;
         box-shadow: 0 2px 8px rgba(var(--shadow-weak-rgb), 0.05);
-        position: relative;
         padding: 1.5rem;
         display: flex;
         align-items: center;
         gap: 1rem;
+        flex: 1;
+      }
+      /* Drag handle and DnD styling - local to settings */
+      .drag-handle {
+        position: absolute; /* remove from flow; do not affect layout */
+        left: -33px; /* sit just outside the card's left edge */
+        top: 50%;
+        transform: translateY(-50%);
+        width: 30px;
+        height: 40px;
+        border-radius: 3px;
+        cursor: grab;
+        z-index: 1; /* keep above card for drag pick-up */
+        background: transparent;
+      }
+
+      .drag-handle::before {
+        content: '';
+        position: absolute;
+        left: 4px;
+        top: 4px;
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        background: rgba(var(--primary-rgb), 0.45);
+        /* Duplicate the base dot into a 2x3 grid using box-shadow */
+        box-shadow:
+          10px 0 0 0 rgba(var(--primary-rgb), 0.45),
+          0 10px 0 0 rgba(var(--primary-rgb), 0.45),
+          10px 10px 0 0 rgba(var(--primary-rgb), 0.45),
+          0 20px 0 0 rgba(var(--primary-rgb), 0.45),
+          10px 20px 0 0 rgba(var(--primary-rgb), 0.45);
+      }
+
+      .drag-handle:active {
+        cursor: grabbing;
       }
 
       /* Remove hover affordance from intention items */
@@ -708,10 +751,6 @@
         .tab-btn.active {
           border-left-color: transparent;
           border-bottom-color: var(--primary);
-        }
-
-        .content {
-          padding: 1rem;
         }
 
         .intention-inputs {

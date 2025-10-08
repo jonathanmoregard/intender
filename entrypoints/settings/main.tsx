@@ -1,6 +1,12 @@
+import {
+  DragDropContext,
+  Draggable,
+  Droppable,
+  type DropResult,
+} from '@hello-pangea/dnd';
 import '@theme';
 import { debounce } from 'lodash-es';
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   canParseIntention,
@@ -78,6 +84,21 @@ const SettingsTab = memo(
     const urlValidatedRefs = useRef<(ValidatedTextInputHandle | null)[]>([]);
     const phraseValidatedRefs = useRef<(ValidatedTextAreaHandle | null)[]>([]);
     const hasShownValidityOnLoad = useRef<boolean>(false);
+
+    const reorderByIndices = (fromIndex: number, toIndex: number) => {
+      if (fromIndex === toIndex) return;
+      const updated = intentions.slice();
+      const [moved] = updated.splice(fromIndex, 1);
+      updated.splice(toIndex, 0, moved);
+      setIntentions(updated);
+    };
+
+    const onDragEnd = (result: DropResult) => {
+      const { source, destination } = result;
+      if (!destination) return;
+      if (source.index === destination.index) return;
+      reorderByIndices(source.index, destination.index);
+    };
 
     const isIntentionEmpty = useCallback((intention: RawIntention) => {
       return isEmpty(intention);
@@ -622,110 +643,153 @@ const SettingsTab = memo(
           you’ll pause for a moment to re‑enter your intention.
         </p>
 
-        <div className='intentions-list'>
-          {intentions.map((intention, i) => (
-            <div key={intention.id || `new-${i}`} className='intention-item'>
-              <div className='intention-inputs'>
-                <div className='url-section'>
-                  <ValidatedTextInput
-                    ref={instance => {
-                      urlValidatedRefs.current[i] = instance;
-                    }}
-                    inputRef={el => {
-                      urlInputRefs.current[i] = el;
-                    }}
-                    value={intention.url}
-                    onChange={next => {
-                      const newIntentions = [...intentions];
-                      newIntentions[i] = { ...newIntentions[i], url: next };
-                      setIntentions(newIntentions);
-                    }}
-                    label='Website'
-                    placeholder='Website (e.g., example.com)'
-                    className='url-input'
-                    validate={input =>
-                      canParseIntention({ ...intention, url: input })
-                        ? { ok: true }
-                        : { ok: false }
-                    }
-                    errorText='Enter a website like example.com'
-                    showCheckmarkOnValid={true}
-                    name={`url-${intention.id}`}
-                    inputMode='url'
-                    autoComplete='url'
-                  />
-                </div>
+        <DragDropContext onDragEnd={onDragEnd}>
+          <Droppable droppableId='intentions'>
+            {(provided: import('@hello-pangea/dnd').DroppableProvided) => (
+              <div
+                className='intentions-list'
+                ref={provided.innerRef}
+                {...provided.droppableProps}
+              >
+                {intentions.map((intention, i) => (
+                  <React.Fragment key={intention.id || `new-${i}`}>
+                    <Draggable draggableId={String(intention.id)} index={i}>
+                      {(
+                        providedDr: import('@hello-pangea/dnd').DraggableProvided
+                      ) => (
+                        <div
+                          ref={providedDr.innerRef}
+                          {...providedDr.draggableProps}
+                          className='intention-row'
+                        >
+                          <div
+                            className='drag-handle'
+                            role='button'
+                            aria-label='Reorder intention'
+                            title='Drag to reorder'
+                            {...(providedDr.dragHandleProps as React.HTMLAttributes<HTMLDivElement>)}
+                          />
+                          <div className='intention-item'>
+                            <div className='intention-inputs'>
+                              <div className='url-section'>
+                                <ValidatedTextInput
+                                  ref={instance => {
+                                    urlValidatedRefs.current[i] = instance;
+                                  }}
+                                  inputRef={el => {
+                                    urlInputRefs.current[i] = el;
+                                  }}
+                                  value={intention.url}
+                                  onChange={next => {
+                                    const newIntentions = [...intentions];
+                                    newIntentions[i] = {
+                                      ...newIntentions[i],
+                                      url: next,
+                                    };
+                                    setIntentions(newIntentions);
+                                  }}
+                                  label='Website'
+                                  placeholder='Website (e.g., example.com)'
+                                  className='url-input'
+                                  validate={input =>
+                                    canParseIntention({
+                                      ...intention,
+                                      url: input,
+                                    })
+                                      ? { ok: true }
+                                      : { ok: false }
+                                  }
+                                  errorText='Enter a website like example.com'
+                                  showCheckmarkOnValid={true}
+                                  name={`url-${intention.id}`}
+                                  inputMode='url'
+                                  autoComplete='url'
+                                />
+                              </div>
 
-                <ValidatedTextArea
-                  ref={instance => {
-                    phraseValidatedRefs.current[i] = instance;
-                  }}
-                  className='phrase-input'
-                  value={intention.phrase}
-                  onChange={next => {
-                    const newIntentions = [...intentions];
-                    newIntentions[i] = { ...newIntentions[i], phrase: next };
-                    setIntentions(newIntentions);
-                  }}
-                  onKeyDown={e => handlePhraseKeyDown(e, i)}
-                  label='Intention'
-                  placeholder='Write your intention'
-                  maxLength={150}
-                  rows={2}
-                  validate={input => {
-                    const urlOk = canParseIntention(intention);
-                    if (
-                      urlOk &&
-                      isPhraseEmpty(input) &&
-                      !isEmpty({ ...intention, phrase: input })
-                    ) {
-                      return { ok: false };
-                    }
-                    return { ok: true };
-                  }}
-                  errorText='Please write your intention'
-                  name={`phrase-${intention.id}`}
-                />
-              </div>
+                              <ValidatedTextArea
+                                ref={instance => {
+                                  phraseValidatedRefs.current[i] = instance;
+                                }}
+                                className='phrase-input'
+                                value={intention.phrase}
+                                onChange={next => {
+                                  const newIntentions = [...intentions];
+                                  newIntentions[i] = {
+                                    ...newIntentions[i],
+                                    phrase: next,
+                                  };
+                                  setIntentions(newIntentions);
+                                }}
+                                onKeyDown={e => handlePhraseKeyDown(e, i)}
+                                label='Intention'
+                                placeholder='Write your intention'
+                                maxLength={150}
+                                rows={2}
+                                validate={input => {
+                                  const urlOk = canParseIntention(intention);
+                                  if (
+                                    urlOk &&
+                                    isPhraseEmpty(input) &&
+                                    !isEmpty({ ...intention, phrase: input })
+                                  ) {
+                                    return { ok: false };
+                                  }
+                                  return { ok: true };
+                                }}
+                                errorText='Please write your intention'
+                                name={`phrase-${intention.id}`}
+                              />
+                            </div>
 
-              <div className='remove-btn-wrapper'>
-                <button
-                  className={`remove-btn ${isShiftHeld ? 'shift-held' : ''} ${
-                    intentions.length === 1 && isEmpty(intention)
-                      ? 'disabled'
-                      : ''
-                  }`}
-                  onClick={() => remove(i, isShiftHeld)}
-                  title={
-                    intentions.length === 1 && isEmpty(intention)
-                      ? 'Cannot delete the last intention'
-                      : isShiftHeld
-                        ? 'Remove intention (no confirmation)'
-                        : 'Remove intention (hold Shift to skip confirmation)'
-                  }
-                  tabIndex={-1}
-                  disabled={intentions.length === 1 && isEmpty(intention)}
-                >
-                  <svg
-                    xmlns='http://www.w3.org/2000/svg'
-                    width='16'
-                    height='16'
-                    viewBox='0 0 24 24'
-                    fill='none'
-                    stroke='currentColor'
-                    strokeWidth='3'
-                    strokeLinecap='round'
-                    strokeLinejoin='round'
-                    aria-hidden='true'
-                  >
-                    <line x1='18' y1='6' x2='6' y2='18'></line>
-                    <line x1='6' y1='6' x2='18' y2='18'></line>
-                  </svg>
-                </button>
+                            <div className='remove-btn-wrapper'>
+                              <button
+                                className={`remove-btn ${isShiftHeld ? 'shift-held' : ''} ${
+                                  intentions.length === 1 && isEmpty(intention)
+                                    ? 'disabled'
+                                    : ''
+                                }`}
+                                onClick={() => remove(i, isShiftHeld)}
+                                title={
+                                  intentions.length === 1 && isEmpty(intention)
+                                    ? 'Cannot delete the last intention'
+                                    : isShiftHeld
+                                      ? 'Remove intention (no confirmation)'
+                                      : 'Remove intention (hold Shift to skip confirmation)'
+                                }
+                                tabIndex={-1}
+                                disabled={
+                                  intentions.length === 1 && isEmpty(intention)
+                                }
+                              >
+                                <svg
+                                  xmlns='http://www.w3.org/2000/svg'
+                                  width='16'
+                                  height='16'
+                                  viewBox='0 0 24 24'
+                                  fill='none'
+                                  stroke='currentColor'
+                                  strokeWidth='3'
+                                  strokeLinecap='round'
+                                  strokeLinejoin='round'
+                                  aria-hidden='true'
+                                >
+                                  <line x1='18' y1='6' x2='6' y2='18'></line>
+                                  <line x1='6' y1='6' x2='18' y2='18'></line>
+                                </svg>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </Draggable>
+                  </React.Fragment>
+                ))}
+                {provided.placeholder}
               </div>
-            </div>
-          ))}
-        </div>
+            )}
+          </Droppable>
+        </DragDropContext>
 
         {/* 1b. Buttons */}
         <div className='actions'>
