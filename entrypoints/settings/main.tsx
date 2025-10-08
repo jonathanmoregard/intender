@@ -722,49 +722,51 @@ const SettingsTab = memo(
                                 />
                               </div>
 
-                              <ValidatedTextInput
-                                ref={instance => {
-                                  if (instance) {
-                                    phraseValidatedRefs.current.set(
-                                      intention.id,
-                                      instance
-                                    );
-                                  } else {
-                                    phraseValidatedRefs.current.delete(
-                                      intention.id
-                                    );
-                                  }
-                                }}
-                                inputRef={el => {}}
-                                className='phrase-input'
-                                value={intention.phrase}
-                                onChange={next => {
-                                  const newIntentions = [...intentions];
-                                  newIntentions[i] = {
-                                    ...newIntentions[i],
-                                    phrase: next,
-                                  };
-                                  setIntentions(newIntentions);
-                                }}
-                                onKeyDown={e => handlePhraseKeyDown(e, i)}
-                                label='Intention'
-                                placeholder='Write your intention'
-                                maxLength={150}
-                                validate={input => {
-                                  const urlOk = canParseIntention(intention);
-                                  if (
-                                    urlOk &&
-                                    isPhraseEmpty(input) &&
-                                    !isEmpty({ ...intention, phrase: input })
-                                  ) {
-                                    return { ok: false };
-                                  }
-                                  return { ok: true };
-                                }}
-                                errorText='Please write your intention'
-                                name={`phrase-${intention.id}`}
-                                showCheckmarkOnValid={false}
-                              />
+                              <div className='phrase-section'>
+                                <ValidatedTextInput
+                                  ref={instance => {
+                                    if (instance) {
+                                      phraseValidatedRefs.current.set(
+                                        intention.id,
+                                        instance
+                                      );
+                                    } else {
+                                      phraseValidatedRefs.current.delete(
+                                        intention.id
+                                      );
+                                    }
+                                  }}
+                                  inputRef={el => {}}
+                                  className='phrase-input'
+                                  value={intention.phrase}
+                                  onChange={next => {
+                                    const newIntentions = [...intentions];
+                                    newIntentions[i] = {
+                                      ...newIntentions[i],
+                                      phrase: next,
+                                    };
+                                    setIntentions(newIntentions);
+                                  }}
+                                  onKeyDown={e => handlePhraseKeyDown(e, i)}
+                                  label='Intention'
+                                  placeholder='Write your intention'
+                                  maxLength={150}
+                                  validate={input => {
+                                    const urlOk = canParseIntention(intention);
+                                    if (
+                                      urlOk &&
+                                      isPhraseEmpty(input) &&
+                                      !isEmpty({ ...intention, phrase: input })
+                                    ) {
+                                      return { ok: false };
+                                    }
+                                    return { ok: true };
+                                  }}
+                                  errorText='Please write your intention'
+                                  name={`phrase-${intention.id}`}
+                                  showCheckmarkOnValid={false}
+                                />
+                              </div>
                             </div>
 
                             <div className='remove-btn-wrapper'>
