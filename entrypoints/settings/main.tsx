@@ -785,7 +785,6 @@ const SettingsTab = memo(
                                       ? 'Remove intention (no confirmation)'
                                       : 'Remove intention (hold Shift to skip confirmation)'
                                 }
-                                tabIndex={-1}
                                 disabled={
                                   intentions.length === 1 && isEmpty(intention)
                                 }
