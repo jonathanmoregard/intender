@@ -1,11 +1,5 @@
 import type React from 'react';
-import {
-  forwardRef,
-  useId,
-  useImperativeHandle,
-  useMemo,
-  useState,
-} from 'react';
+import { useId, useMemo, useState } from 'react';
 
 export type ValidationResult = { ok: true } | { ok: false; reason?: string };
 
@@ -30,16 +24,10 @@ export interface ValidatedTextInputProps {
   onBlur?: (e: React.FocusEvent<HTMLInputElement>) => void;
   validationVisibility?: 'blur' | 'always' | 'hidden';
   maxLength?: number;
+  forceShowValidation?: boolean;
 }
 
-export type ValidatedTextInputHandle = {
-  showValidity: () => void;
-};
-
-export const ValidatedTextInput = forwardRef<
-  ValidatedTextInputHandle,
-  ValidatedTextInputProps
->(function ValidatedTextInputInner(props, ref) {
+export function ValidatedTextInput(props: ValidatedTextInputProps) {
   const {
     value,
     onChange,
@@ -61,16 +49,10 @@ export const ValidatedTextInput = forwardRef<
     onBlur,
     validationVisibility,
     maxLength,
+    forceShowValidation,
   } = props;
 
   const [blurred, setBlurred] = useState<boolean>(false);
-  const [forceShow, setForceShow] = useState<boolean>(false);
-
-  useImperativeHandle(ref, () => ({
-    showValidity() {
-      setForceShow(true);
-    },
-  }));
 
   const validation = useMemo(() => validate(value), [validate, value]);
 
@@ -81,7 +63,7 @@ export const ValidatedTextInput = forwardRef<
       ? true
       : visibilityMode === 'hidden'
         ? false
-        : blurred || forceShow;
+        : blurred || (forceShowValidation ?? false);
   const showError = shouldShow && !isValid;
   const showValid = shouldShow && isValid;
 
@@ -142,4 +124,4 @@ export const ValidatedTextInput = forwardRef<
       ) : null}
     </div>
   );
-});
+}

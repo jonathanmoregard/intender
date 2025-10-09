@@ -24,10 +24,7 @@ import {
 import { minutesToMs, msToMinutes } from '../../components/time';
 import { generateUUID, type UUID } from '../../components/uuid';
 import packageJson from '../../package.json';
-import {
-  ValidatedTextInput,
-  type ValidatedTextInputHandle,
-} from './components/ValidatedTextInput';
+import { ValidatedTextInput } from './components/ValidatedTextInput';
 
 type Tab = 'settings' | 'about';
 
@@ -73,18 +70,15 @@ const SettingsTab = memo(
 
     // Local UI only state
     const [isShiftHeld, setIsShiftHeld] = useState(false);
+    const [forceShowValidation, setForceShowValidation] = useState<Set<UUID>>(
+      new Set()
+    );
 
     const urlInputRefs = useRef<Map<UUID, HTMLInputElement | null>>(new Map());
     const moreOptionsRef = useRef<HTMLDivElement>(null);
     const moreOptionsBtnRef = useRef<HTMLButtonElement | null>(null);
     const exportBtnRef = useRef<HTMLButtonElement | null>(null);
     const importBtnRef = useRef<HTMLButtonElement | null>(null);
-    const urlValidatedRefs = useRef<Map<UUID, ValidatedTextInputHandle | null>>(
-      new Map()
-    );
-    const phraseValidatedRefs = useRef<
-      Map<UUID, ValidatedTextInputHandle | null>
-    >(new Map());
     const hasShownValidityOnLoad = useRef<boolean>(false);
     const deleteDialogCancelRef = useRef<HTMLButtonElement | null>(null);
     const deleteDialogConfirmRef = useRef<HTMLButtonElement | null>(null);
@@ -222,8 +216,9 @@ const SettingsTab = memo(
         if (!hasShownValidityOnLoad.current) {
           hasShownValidityOnLoad.current = true;
           requestAnimationFrame(() => {
-            urlValidatedRefs.current.forEach(ref => ref?.showValidity());
-            phraseValidatedRefs.current.forEach(ref => ref?.showValidity());
+            setForceShowValidation(
+              new Set(initialIntentions.map(intention => intention.id))
+            );
           });
         }
       });
@@ -568,8 +563,9 @@ const SettingsTab = memo(
 
             // After import, force show validity for prefilled fields
             requestAnimationFrame(() => {
-              urlValidatedRefs.current.forEach(ref => ref?.showValidity());
-              phraseValidatedRefs.current.forEach(ref => ref?.showValidity());
+              setForceShowValidation(
+                new Set(processedIntentions.map(intention => intention.id))
+              );
             });
 
             setToast({
@@ -618,8 +614,9 @@ const SettingsTab = memo(
             await storage.set(settingsToApply);
 
             requestAnimationFrame(() => {
-              urlValidatedRefs.current.forEach(ref => ref?.showValidity());
-              phraseValidatedRefs.current.forEach(ref => ref?.showValidity());
+              setForceShowValidation(
+                new Set(processedIntentions.map(intention => intention.id))
+              );
             });
 
             // Update UI state for all settings
@@ -739,18 +736,6 @@ const SettingsTab = memo(
                             <div className='intention-inputs'>
                               <div className='url-section'>
                                 <ValidatedTextInput
-                                  ref={instance => {
-                                    if (instance) {
-                                      urlValidatedRefs.current.set(
-                                        intention.id,
-                                        instance
-                                      );
-                                    } else {
-                                      urlValidatedRefs.current.delete(
-                                        intention.id
-                                      );
-                                    }
-                                  }}
                                   inputRef={el => {
                                     if (el) {
                                       urlInputRefs.current.set(
@@ -786,23 +771,14 @@ const SettingsTab = memo(
                                   name={`url-${intention.id}`}
                                   inputMode='url'
                                   autoComplete='url'
+                                  forceShowValidation={forceShowValidation.has(
+                                    intention.id
+                                  )}
                                 />
                               </div>
 
                               <div className='phrase-section'>
                                 <ValidatedTextInput
-                                  ref={instance => {
-                                    if (instance) {
-                                      phraseValidatedRefs.current.set(
-                                        intention.id,
-                                        instance
-                                      );
-                                    } else {
-                                      phraseValidatedRefs.current.delete(
-                                        intention.id
-                                      );
-                                    }
-                                  }}
                                   inputRef={el => {}}
                                   className='phrase-input'
                                   value={intention.phrase}
@@ -832,6 +808,9 @@ const SettingsTab = memo(
                                   errorText='Please write your intention'
                                   name={`phrase-${intention.id}`}
                                   showCheckmarkOnValid={false}
+                                  forceShowValidation={forceShowValidation.has(
+                                    intention.id
+                                  )}
                                 />
                               </div>
                             </div>
