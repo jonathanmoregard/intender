@@ -44,9 +44,11 @@ const SettingsTab = memo(
     const [deleteConfirm, setDeleteConfirm] = useState<{
       show: boolean;
       index: number | null;
+      triggerElement: HTMLButtonElement | null;
     }>({
       show: false,
       index: null,
+      triggerElement: null,
     });
     const [toast, setToast] = useState<{
       show: boolean;
@@ -84,6 +86,8 @@ const SettingsTab = memo(
       Map<UUID, ValidatedTextInputHandle | null>
     >(new Map());
     const hasShownValidityOnLoad = useRef<boolean>(false);
+    const deleteDialogCancelRef = useRef<HTMLButtonElement | null>(null);
+    const deleteDialogConfirmRef = useRef<HTMLButtonElement | null>(null);
 
     const reorderByIndices = (fromIndex: number, toIndex: number) => {
       if (fromIndex === toIndex) return;
@@ -339,13 +343,21 @@ const SettingsTab = memo(
       });
     };
 
-    const remove = (index: number, skipConfirmation: boolean) => {
+    const remove = (
+      index: number,
+      skipConfirmation: boolean,
+      event?: React.MouseEvent<HTMLButtonElement>
+    ) => {
       const intention = intentions[index];
       const hasContent = !isEmpty(intention);
 
       // Skip confirmation if shift is held or explicitly requested
       if (hasContent && !skipConfirmation) {
-        setDeleteConfirm({ show: true, index });
+        setDeleteConfirm({
+          show: true,
+          index,
+          triggerElement: event?.currentTarget || null,
+        });
         return;
       }
 
@@ -363,16 +375,70 @@ const SettingsTab = memo(
       // No loaded-id tracking needed
     };
 
-    const confirmDelete = () => {
+    const confirmDelete = useCallback(() => {
+      const triggerElement = deleteConfirm.triggerElement;
       if (deleteConfirm.index !== null) {
         performDelete(deleteConfirm.index);
       }
-      setDeleteConfirm({ show: false, index: null });
-    };
+      setDeleteConfirm({ show: false, index: null, triggerElement: null });
+      // Restore focus to trigger element after deletion
+      if (triggerElement && document.contains(triggerElement)) {
+        triggerElement.focus();
+      }
+    }, [deleteConfirm.index, deleteConfirm.triggerElement]);
 
-    const cancelDelete = () => {
-      setDeleteConfirm({ show: false, index: null });
-    };
+    const cancelDelete = useCallback(() => {
+      const triggerElement = deleteConfirm.triggerElement;
+      setDeleteConfirm({ show: false, index: null, triggerElement: null });
+      // Restore focus to trigger element
+      if (triggerElement && document.contains(triggerElement)) {
+        triggerElement.focus();
+      }
+    }, [deleteConfirm.triggerElement]);
+
+    // Focus management for delete confirmation dialog
+    useEffect(() => {
+      if (deleteConfirm.show) {
+        // Focus the delete button when dialog opens
+        requestAnimationFrame(() => {
+          deleteDialogConfirmRef.current?.focus();
+        });
+
+        // Handle focus trapping
+        const handleKeyDown = (e: KeyboardEvent) => {
+          if (e.key === 'Tab') {
+            const cancel = deleteDialogCancelRef.current;
+            const confirm = deleteDialogConfirmRef.current;
+            const activeElement = document.activeElement;
+
+            if (!cancel || !confirm) return;
+
+            if (e.shiftKey) {
+              // Shift+Tab - reverse direction
+              if (activeElement === cancel) {
+                e.preventDefault();
+                confirm.focus();
+              }
+            } else {
+              // Tab - forward direction
+              if (activeElement === confirm) {
+                e.preventDefault();
+                cancel.focus();
+              }
+            }
+          } else if (e.key === 'Escape') {
+            // Allow Escape to close the dialog
+            e.preventDefault();
+            cancelDelete();
+          }
+        };
+
+        document.addEventListener('keydown', handleKeyDown);
+        return () => {
+          document.removeEventListener('keydown', handleKeyDown);
+        };
+      }
+    }, [deleteConfirm.show, cancelDelete]);
 
     const handlePhraseKeyDown = (
       e: React.KeyboardEvent,
@@ -777,7 +843,7 @@ const SettingsTab = memo(
                                     ? 'disabled'
                                     : ''
                                 }`}
-                                onClick={() => remove(i, isShiftHeld)}
+                                onClick={e => remove(i, isShiftHeld, e)}
                                 title={
                                   intentions.length === 1 && isEmpty(intention)
                                     ? 'Cannot delete the last intention'
@@ -1372,10 +1438,18 @@ const SettingsTab = memo(
                 cannot be undone.
               </p>
               <div className='confirmation-actions'>
-                <button className='cancel-btn' onClick={cancelDelete}>
+                <button
+                  ref={deleteDialogCancelRef}
+                  className='cancel-btn'
+                  onClick={cancelDelete}
+                >
                   Cancel
                 </button>
-                <button className='confirm-btn' onClick={confirmDelete}>
+                <button
+                  ref={deleteDialogConfirmRef}
+                  className='confirm-btn'
+                  onClick={confirmDelete}
+                >
                   Delete
                 </button>
               </div>
