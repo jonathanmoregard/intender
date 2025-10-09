@@ -2,7 +2,7 @@
   "name": "intender",
   "description": "Set intentions before visiting websites to stay focused and mindful of your browsing goals.",
   "private": true,
-  "version": "0.7.1",
+  "version": "0.8.0",
   "type": "module",
   "scripts": {
     "dev": "wxt",
@@ -64,6 +64,7 @@
   },
   "packageManager": "pnpm@10.0.0",
   "dependencies": {
+    "@hello-pangea/dnd": "^16.5.0",
     "@faker-js/faker": "^9.9.0",
     "@types/uuid": "^10.0.0",
     "i18n-iso-countries": "^7.14.0",
