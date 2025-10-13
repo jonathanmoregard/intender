@@ -114,7 +114,7 @@ export const SettingsPage = {
 
   locators: {
     urlInputs: (page: Page) => page.locator('input.url-input'),
-    phraseInputs: (page: Page) => page.locator('textarea.phrase-input'),
+    phraseInputs: (page: Page) => page.locator('input.phrase-input'),
     saveButton: (page: Page) =>
       page.getByRole('button', { name: 'Save changes' }),
   },

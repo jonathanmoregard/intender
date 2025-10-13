@@ -51,8 +51,8 @@ test.describe('Import/Export', () => {
     await settingsPage.waitForTimeout(2000);
 
     // Verify all three intentions were imported
-    const urlInputs = settingsPage.locator('input.url-input');
-    const phraseInputs = settingsPage.locator('textarea.phrase-input');
+    const urlInputs = SettingsPage.locators.urlInputs(settingsPage);
+    const phraseInputs = SettingsPage.locators.phraseInputs(settingsPage);
 
     await expect(urlInputs).toHaveCount(3);
 

@@ -676,8 +676,8 @@ const SettingsTab = memo(
         <div className='intentions-list'>
           {intentions.map((intention, i) => (
             <div key={intention.id || `new-${i}`} className='intention-item'>
-              <div className='intention-inputs'>
-                <div className='url-section'>
+              <div className='intention-row'>
+                <div className='url-input-group'>
                   <div className='input-group'>
                     <input
                       ref={el => {
@@ -717,91 +717,98 @@ const SettingsTab = memo(
                         <span className='valid-checkmark'>✓</span>
                       )}
                   </div>
+                </div>
 
-                  {(isUrlBlurred(intention.id) || isLoaded(intention.id)) &&
-                    !isEmpty(intention) &&
-                    !canParseIntention(intention) && (
+                {(isUrlBlurred(intention.id) || isLoaded(intention.id)) &&
+                  !isEmpty(intention) &&
+                  !canParseIntention(intention) && (
+                    <div className='url-error'>
                       <div className='error-text show'>
                         Enter a website like example.com
                       </div>
-                    )}
+                    </div>
+                  )}
+
+                <div className='phrase-input-group'>
+                  <div className='input-group'>
+                    <input
+                      type='text'
+                      className={`phrase-input ${
+                        isPhraseBlurred(intention.id) &&
+                        !isEmpty(intention) &&
+                        canParseIntention(intention) &&
+                        isPhraseEmpty(intention.phrase)
+                          ? 'error'
+                          : ''
+                      }`}
+                      value={intention.phrase}
+                      onChange={e => {
+                        const newIntentions = [...intentions];
+                        newIntentions[i] = {
+                          ...newIntentions[i],
+                          phrase: e.target.value,
+                        };
+                        setIntentions(newIntentions);
+                      }}
+                      onFocus={() => markPhraseFocused(intention.id)}
+                      onBlur={() => {
+                        markPhraseBlurred(intention.id);
+                        handlePhraseBlur(i);
+                      }}
+                      onKeyDown={e => handlePhraseKeyDown(e, i)}
+                      placeholder='Write your intention'
+                      maxLength={150}
+                    />
+                    <label className='input-label'>Intention</label>
+                  </div>
                 </div>
 
-                <div className='input-group'>
-                  <textarea
-                    className={`phrase-input ${
-                      isPhraseBlurred(intention.id) &&
-                      !isEmpty(intention) &&
-                      canParseIntention(intention) &&
-                      isPhraseEmpty(intention.phrase)
-                        ? 'error'
-                        : ''
-                    }`}
-                    value={intention.phrase}
-                    onChange={e => {
-                      const newIntentions = [...intentions];
-                      newIntentions[i] = {
-                        ...newIntentions[i],
-                        phrase: e.target.value,
-                      };
-                      setIntentions(newIntentions);
-                    }}
-                    onFocus={() => markPhraseFocused(intention.id)}
-                    onBlur={() => {
-                      markPhraseBlurred(intention.id);
-                      handlePhraseBlur(i);
-                    }}
-                    onKeyDown={e => handlePhraseKeyDown(e, i)}
-                    placeholder='Write your intention'
-                    maxLength={150}
-                    rows={2}
-                  />
-                  <label className='input-label'>Intention</label>
-                  {isPhraseBlurred(intention.id) &&
-                    !isEmpty(intention) &&
-                    canParseIntention(intention) &&
-                    isPhraseEmpty(intention.phrase) && (
+                {isPhraseBlurred(intention.id) &&
+                  !isEmpty(intention) &&
+                  canParseIntention(intention) &&
+                  isPhraseEmpty(intention.phrase) && (
+                    <div className='phrase-error'>
                       <div className='error-text show'>
                         Please write your intention
                       </div>
-                    )}
-                </div>
-              </div>
+                    </div>
+                  )}
 
-              <div className='remove-btn-wrapper'>
-                <button
-                  className={`remove-btn ${isShiftHeld ? 'shift-held' : ''} ${
-                    intentions.length === 1 && isEmpty(intention)
-                      ? 'disabled'
-                      : ''
-                  }`}
-                  onClick={() => remove(i, isShiftHeld)}
-                  title={
-                    intentions.length === 1 && isEmpty(intention)
-                      ? 'Cannot delete the last intention'
-                      : isShiftHeld
-                        ? 'Remove intention (no confirmation)'
-                        : 'Remove intention (hold Shift to skip confirmation)'
-                  }
-                  tabIndex={-1}
-                  disabled={intentions.length === 1 && isEmpty(intention)}
-                >
-                  <svg
-                    xmlns='http://www.w3.org/2000/svg'
-                    width='16'
-                    height='16'
-                    viewBox='0 0 24 24'
-                    fill='none'
-                    stroke='currentColor'
-                    strokeWidth='3'
-                    strokeLinecap='round'
-                    strokeLinejoin='round'
-                    aria-hidden='true'
+                <div className='remove-btn-wrapper'>
+                  <button
+                    className={`remove-btn ${isShiftHeld ? 'shift-held' : ''} ${
+                      intentions.length === 1 && isEmpty(intention)
+                        ? 'disabled'
+                        : ''
+                    }`}
+                    onClick={() => remove(i, isShiftHeld)}
+                    title={
+                      intentions.length === 1 && isEmpty(intention)
+                        ? 'Cannot delete the last intention'
+                        : isShiftHeld
+                          ? 'Remove intention (no confirmation)'
+                          : 'Remove intention (hold Shift to skip confirmation)'
+                    }
+                    tabIndex={-1}
+                    disabled={intentions.length === 1 && isEmpty(intention)}
                   >
-                    <line x1='18' y1='6' x2='6' y2='18'></line>
-                    <line x1='6' y1='6' x2='18' y2='18'></line>
-                  </svg>
-                </button>
+                    <svg
+                      xmlns='http://www.w3.org/2000/svg'
+                      width='16'
+                      height='16'
+                      viewBox='0 0 24 24'
+                      fill='none'
+                      stroke='currentColor'
+                      strokeWidth='3'
+                      strokeLinecap='round'
+                      strokeLinejoin='round'
+                      aria-hidden='true'
+                    >
+                      <line x1='18' y1='6' x2='6' y2='18'></line>
+                      <line x1='6' y1='6' x2='18' y2='18'></line>
+                    </svg>
+                  </button>
+                </div>
               </div>
             </div>
           ))}

@@ -214,10 +214,10 @@
         margin-bottom: 1.5rem;
         box-shadow: 0 2px 8px rgba(var(--shadow-weak-rgb), 0.05);
         position: relative;
-        padding: 1.5rem;
+        padding: 1rem;
         display: flex;
-        align-items: center;
-        gap: 1rem;
+        flex-direction: column;
+        gap: 0.5rem;
       }
 
       /* Remove hover affordance from intention items */
@@ -240,11 +240,35 @@
         background-repeat: no-repeat;
       }
 
-      .intention-inputs {
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
-        flex: 1;
+      .intention-row {
+        display: grid;
+        grid-template-columns: minmax(0, 35fr) minmax(0, 65fr) auto;
+        grid-auto-rows: minmax(0, auto);
+        gap: 0.5rem 1rem;
+        align-items: center;
+        width: 100%;
+      }
+
+      .url-input-group {
+        grid-column: 1;
+        grid-row: 1;
+      }
+
+      .url-error {
+        grid-column: 1;
+        grid-row: 2;
+        align-self: start;
+      }
+
+      .phrase-input-group {
+        grid-column: 2;
+        grid-row: 1;
+      }
+
+      .phrase-error {
+        grid-column: 2;
+        grid-row: 2;
+        align-self: start;
       }
 
       .input-group {
@@ -284,8 +308,6 @@
         font-size: 0.9rem;
         transition: all 0.15s ease;
         background: var(--input-background-color);
-        min-height: 3rem;
-        resize: vertical;
         font-family: 'Inter', sans-serif;
         line-height: 1.4;
       }
@@ -328,12 +350,13 @@
       }
 
       .remove-btn-wrapper {
-        width: 40px;
-        height: 40px;
         display: flex;
         align-items: center;
         justify-content: center;
-        flex-shrink: 0;
+        grid-column: 3;
+        grid-row: 1;
+        align-self: center;
+        justify-self: center;
       }
 
       .remove-btn.shift-held {
@@ -351,6 +374,7 @@
         background: rgba(var(--disabled-rgb), 0.6);
         color: var(--text-white);
         cursor: not-allowed;
+        box-shadow: none;
       }
 
       .remove-btn.disabled:hover {
@@ -369,22 +393,14 @@
         z-index: 2;
       }
 
-      .url-section {
-        display: flex;
-        flex-direction: column;
-        gap: 0;
-        transition: all 0.6s ease;
-      }
-
       .error-text {
         font-size: 0.8rem;
         color: var(--error);
         font-weight: 500;
-        margin-top: 0.5rem;
-        margin-left: 0.5em;
+        margin-left: 0.5rem;
         opacity: 0;
-        transform: translateY(-10px);
-        transition: all 0.6s ease;
+        transform: translateY(-5px);
+        transition: all 0.3s ease;
         max-height: 0;
         overflow: hidden;
       }
@@ -714,9 +730,35 @@
           padding: 1rem;
         }
 
-        .intention-inputs {
-          flex-direction: column;
-          gap: 0.5rem;
+        .intention-row {
+          grid-template-columns: 1fr auto;
+          grid-auto-rows: minmax(0, auto);
+          gap: 0.75rem 1rem;
+          align-items: start;
+        }
+
+        .url-input-group {
+          grid-column: 1;
+          grid-row: 1;
+        }
+
+        .url-error {
+          grid-column: 1;
+          grid-row: 2;
+        }
+
+        .phrase-input-group {
+          grid-column: 1;
+          grid-row: 3;
+        }
+
+        .phrase-error {
+          grid-column: 1;
+          grid-row: 4;
+        }
+
+        .remove-btn-wrapper {
+          grid-column: 2;
         }
 
         .actions {
