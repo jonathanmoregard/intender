@@ -1,6 +1,12 @@
+import {
+  DragDropContext,
+  Draggable,
+  Droppable,
+  type DropResult,
+} from '@hello-pangea/dnd';
 import '@theme';
 import { debounce } from 'lodash-es';
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   canParseIntention,
@@ -16,8 +22,9 @@ import {
   type InactivityMode,
 } from '../../components/storage';
 import { minutesToMs, msToMinutes } from '../../components/time';
-import { generateUUID } from '../../components/uuid';
+import { generateUUID, type UUID } from '../../components/uuid';
 import packageJson from '../../package.json';
+import { ValidatedTextInput } from './components/ValidatedTextInput';
 
 type Tab = 'settings' | 'about';
 
@@ -34,9 +41,11 @@ const SettingsTab = memo(
     const [deleteConfirm, setDeleteConfirm] = useState<{
       show: boolean;
       index: number | null;
+      triggerElement: HTMLButtonElement | null;
     }>({
       show: false,
       index: null,
+      triggerElement: null,
     });
     const [toast, setToast] = useState<{
       show: boolean;
@@ -59,87 +68,44 @@ const SettingsTab = memo(
       useState<BreathAnimationIntensity>('minimal');
     const [directToSettings, setDirectToSettings] = useState(false);
 
-    const [blurredUrlIds, setBlurredUrlIds] = useState<Set<string>>(new Set());
-    const [blurredPhraseIds, setBlurredPhraseIds] = useState<Set<string>>(
-      new Set()
-    );
-    const [loadedIntentionIds, setLoadedIntentionIds] = useState<Set<string>>(
-      new Set()
-    );
+    // Local UI only state
     const [isShiftHeld, setIsShiftHeld] = useState(false);
+    const [forceShowValidation, setForceShowValidation] = useState<Set<UUID>>(
+      new Set()
+    );
 
-    // ============================================================================
-    // INTENTION CARD STATE MANAGEMENT
-    // ============================================================================
-    // Functions for managing the visual state of intention cards:
-    // - Error highlighting (blurred inputs)
-    // - Loaded state tracking (for initial vs new intentions)
-    // - Focus/blur state management
-
-    const markUrlBlurred = (id: string) => {
-      setBlurredUrlIds(prev => new Set([...prev, id]));
-    };
-
-    const markUrlFocused = (id: string) => {
-      setBlurredUrlIds(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(id);
-        return newSet;
-      });
-    };
-
-    const isUrlBlurred = (id: string) => {
-      return blurredUrlIds.has(id);
-    };
-
-    const markPhraseBlurred = (id: string) => {
-      setBlurredPhraseIds(prev => new Set([...prev, id]));
-    };
-
-    const markPhraseFocused = (id: string) => {
-      setBlurredPhraseIds(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(id);
-        return newSet;
-      });
-    };
-
-    const isPhraseBlurred = (id: string) => {
-      return blurredPhraseIds.has(id);
-    };
-
-    const isLoaded = (id: string) => {
-      return loadedIntentionIds.has(id);
-    };
-
-    const updateLoadedIntentionIds = (
-      ids: Set<string> | ((prev: Set<string>) => Set<string>)
-    ) => {
-      if (typeof ids === 'function') {
-        setLoadedIntentionIds(ids);
-      } else {
-        setLoadedIntentionIds(ids);
-      }
-    };
-
-    // ============================================================================
-    // END INTENTION CARD STATE MANAGEMENT
-    // ============================================================================
-
-    const urlInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+    const urlInputRefs = useRef<Map<UUID, HTMLInputElement | null>>(new Map());
     const moreOptionsRef = useRef<HTMLDivElement>(null);
     const moreOptionsBtnRef = useRef<HTMLButtonElement | null>(null);
     const exportBtnRef = useRef<HTMLButtonElement | null>(null);
     const importBtnRef = useRef<HTMLButtonElement | null>(null);
+    const hasShownValidityOnLoad = useRef<boolean>(false);
+    const deleteDialogCancelRef = useRef<HTMLButtonElement | null>(null);
+    const deleteDialogConfirmRef = useRef<HTMLButtonElement | null>(null);
+
+    const reorderByIndices = (fromIndex: number, toIndex: number) => {
+      if (fromIndex === toIndex) return;
+      const updated = intentions.slice();
+      const [moved] = updated.splice(fromIndex, 1);
+      updated.splice(toIndex, 0, moved);
+      setIntentions(updated);
+    };
+
+    const onDragEnd = (result: DropResult) => {
+      const { source, destination } = result;
+      if (!destination) return;
+      if (source.index === destination.index) return;
+      reorderByIndices(source.index, destination.index);
+    };
 
     const isIntentionEmpty = useCallback((intention: RawIntention) => {
       return isEmpty(intention);
     }, []);
 
-    const focusNewIntentionUrl = useCallback((intentionIndex: number) => {
+    const focusNewIntentionUrl = useCallback((intentionId: UUID) => {
       // Small delay to ensure DOM is updated
       setTimeout(() => {
-        urlInputRefs.current[intentionIndex]?.focus();
+        urlInputRefs.current.get(intentionId)?.focus();
       }, 50);
     }, []);
 
@@ -230,15 +196,6 @@ const SettingsTab = memo(
           }
         } catch {}
 
-        // Track which intentions were loaded from storage (not newly created)
-        const loadedIds = new Set<string>();
-        initialIntentions.forEach(intention => {
-          if (!isEmpty(intention)) {
-            loadedIds.add(intention.id);
-          }
-        });
-        updateLoadedIntentionIds(loadedIds);
-
         // Check if we should show examples based on initial load
         const nonEmptyIntentions = initialIntentions.filter(
           intention => !isEmpty(intention)
@@ -246,15 +203,23 @@ const SettingsTab = memo(
         setShowExamples(nonEmptyIntentions.length < 2);
 
         // Auto-focus first empty unparseable intention URL
-        const firstEmptyIndex = initialIntentions.findIndex(
-          (intention: RawIntention) => {
-            return isEmpty(intention);
-          }
-        );
-        if (firstEmptyIndex !== -1) {
+        const firstEmpty = initialIntentions.find((intention: RawIntention) => {
+          return isEmpty(intention);
+        });
+        if (firstEmpty) {
           setTimeout(() => {
-            urlInputRefs.current[firstEmptyIndex]?.focus();
+            urlInputRefs.current.get(firstEmpty.id)?.focus();
           }, 100);
+        }
+
+        // After initial render, show validity for prefilled items once
+        if (!hasShownValidityOnLoad.current) {
+          hasShownValidityOnLoad.current = true;
+          requestAnimationFrame(() => {
+            setForceShowValidation(
+              new Set(initialIntentions.map(intention => intention.id))
+            );
+          });
         }
       });
     }, []);
@@ -356,34 +321,38 @@ const SettingsTab = memo(
     };
 
     const addIntention = () => {
+      const newIntention = emptyRawIntention();
       setIntentions(prev => {
-        const newIntentions = [...prev, emptyRawIntention()];
+        const newIntentions = [...prev, newIntention];
         // Focus the new intention's URL input
-        focusNewIntentionUrl(newIntentions.length - 1);
+        focusNewIntentionUrl(newIntention.id);
         return newIntentions;
       });
-      // Newly created intentions are not marked as loaded
     };
 
     const addExampleIntention = (example: { url: string; phrase: string }) => {
       setIntentions(prev => {
         const newIntention = makeRawIntention(example.url, example.phrase);
         const newIntentions = [newIntention, ...prev];
-
-        // Mark the newly added example as solidified
-        updateLoadedIntentionIds(prev => new Set([...prev, newIntention.id]));
-
         return newIntentions;
       });
     };
 
-    const remove = (index: number, skipConfirmation: boolean) => {
+    const remove = (
+      index: number,
+      skipConfirmation: boolean,
+      event?: React.MouseEvent<HTMLButtonElement>
+    ) => {
       const intention = intentions[index];
       const hasContent = !isEmpty(intention);
 
       // Skip confirmation if shift is held or explicitly requested
       if (hasContent && !skipConfirmation) {
-        setDeleteConfirm({ show: true, index });
+        setDeleteConfirm({
+          show: true,
+          index,
+          triggerElement: event?.currentTarget || null,
+        });
         return;
       }
 
@@ -398,32 +367,73 @@ const SettingsTab = memo(
         newIntentions.length > 0 ? newIntentions : [emptyRawIntention()];
       setIntentions(finalIntentions);
 
-      // Update loaded IDs after deletion - remove the deleted intention's ID
-      const deletedIntention = intentions[index];
-      if (deletedIntention) {
-        updateLoadedIntentionIds(prev => {
-          const newLoadedIds = new Set(prev);
-          newLoadedIds.delete(deletedIntention.id);
-          return newLoadedIds;
-        });
-      }
+      // No loaded-id tracking needed
     };
 
-    const confirmDelete = () => {
+    const confirmDelete = useCallback(() => {
+      const triggerElement = deleteConfirm.triggerElement;
       if (deleteConfirm.index !== null) {
         performDelete(deleteConfirm.index);
       }
-      setDeleteConfirm({ show: false, index: null });
-    };
+      setDeleteConfirm({ show: false, index: null, triggerElement: null });
+      // Restore focus to trigger element after deletion
+      if (triggerElement && document.contains(triggerElement)) {
+        triggerElement.focus();
+      }
+    }, [deleteConfirm.index, deleteConfirm.triggerElement]);
 
-    const cancelDelete = () => {
-      setDeleteConfirm({ show: false, index: null });
-    };
+    const cancelDelete = useCallback(() => {
+      const triggerElement = deleteConfirm.triggerElement;
+      setDeleteConfirm({ show: false, index: null, triggerElement: null });
+      // Restore focus to trigger element
+      if (triggerElement && document.contains(triggerElement)) {
+        triggerElement.focus();
+      }
+    }, [deleteConfirm.triggerElement]);
 
-    const handlePhraseBlur = (intentionIndex: number) => {
-      // Remove auto-adding on blur since we handle it in keydown
-      // This was causing conflicts with tab navigation
-    };
+    // Focus management for delete confirmation dialog
+    useEffect(() => {
+      if (deleteConfirm.show) {
+        // Focus the delete button when dialog opens
+        requestAnimationFrame(() => {
+          deleteDialogConfirmRef.current?.focus();
+        });
+
+        // Handle focus trapping
+        const handleKeyDown = (e: KeyboardEvent) => {
+          if (e.key === 'Tab') {
+            const cancel = deleteDialogCancelRef.current;
+            const confirm = deleteDialogConfirmRef.current;
+            const activeElement = document.activeElement;
+
+            if (!cancel || !confirm) return;
+
+            if (e.shiftKey) {
+              // Shift+Tab - reverse direction
+              if (activeElement === cancel) {
+                e.preventDefault();
+                confirm.focus();
+              }
+            } else {
+              // Tab - forward direction
+              if (activeElement === confirm) {
+                e.preventDefault();
+                cancel.focus();
+              }
+            }
+          } else if (e.key === 'Escape') {
+            // Allow Escape to close the dialog
+            e.preventDefault();
+            cancelDelete();
+          }
+        };
+
+        document.addEventListener('keydown', handleKeyDown);
+        return () => {
+          document.removeEventListener('keydown', handleKeyDown);
+        };
+      }
+    }, [deleteConfirm.show, cancelDelete]);
 
     const handlePhraseKeyDown = (
       e: React.KeyboardEvent,
@@ -445,9 +455,10 @@ const SettingsTab = memo(
         if (isLastIntention && !isEmpty(intention)) {
           e.preventDefault();
           setIntentions(prev => {
-            const newIntentions = [...prev, emptyRawIntention()];
+            const newIntention = emptyRawIntention();
+            const newIntentions = [...prev, newIntention];
             // Focus the new intention's URL input
-            focusNewIntentionUrl(newIntentions.length - 1);
+            focusNewIntentionUrl(newIntention.id);
             return newIntentions;
           });
         }
@@ -533,19 +544,29 @@ const SettingsTab = memo(
           // Handle both old format (just intentions array) and new format (full settings object)
           if (Array.isArray(importedData)) {
             // Old format: just intentions array
-            const processedIntentions = importedData.map(intention => ({
-              ...intention,
-              id: generateUUID(),
-            }));
+            const rawList = importedData as any[];
+            const processedIntentions: RawIntention[] = rawList
+              .map(item => ({
+                id: generateUUID(),
+                url: typeof item?.url === 'string' ? item.url : '',
+                phrase: typeof item?.phrase === 'string' ? item.phrase : '',
+              }))
+              // Keep items that have some meaningful content
+              .filter(it => it.url.trim() !== '' || it.phrase.trim() !== '');
+
+            if (processedIntentions.length === 0) {
+              throw new Error('No valid intentions found in file');
+            }
 
             setIntentions(processedIntentions);
             await storage.set({ intentions: processedIntentions });
 
-            // Mark all imported intentions as loaded
-            const importedIds = new Set(
-              processedIntentions.map(intention => intention.id as string)
-            );
-            updateLoadedIntentionIds(importedIds);
+            // After import, force show validity for prefilled fields
+            requestAnimationFrame(() => {
+              setForceShowValidation(
+                new Set(processedIntentions.map(intention => intention.id))
+              );
+            });
 
             setToast({
               show: true,
@@ -558,19 +579,30 @@ const SettingsTab = memo(
             );
           } else {
             // New format: full settings object - load all settings except version
+            const maybeIntentions = Array.isArray(
+              (importedData as any)?.intentions
+            )
+              ? ((importedData as any).intentions as any[])
+              : [];
+
             const {
               version,
-              intentions: importedIntentions,
+              intentions: _ignored,
               ...otherSettings
-            } = importedData;
+            } = importedData as any;
 
             // Process intentions with new IDs
-            const processedIntentions = (importedIntentions || []).map(
-              (intention: any) => ({
-                ...intention,
+            const processedIntentions = maybeIntentions
+              .map(item => ({
                 id: generateUUID(),
-              })
-            ) as RawIntention[];
+                url: typeof item?.url === 'string' ? item.url : '',
+                phrase: typeof item?.phrase === 'string' ? item.phrase : '',
+              }))
+              .filter(it => it.url.trim() !== '' || it.phrase.trim() !== '');
+
+            if (processedIntentions.length === 0) {
+              throw new Error('No valid intentions found in file');
+            }
 
             // Load all settings (excluding version)
             const settingsToApply = {
@@ -580,6 +612,12 @@ const SettingsTab = memo(
 
             setIntentions(processedIntentions);
             await storage.set(settingsToApply);
+
+            requestAnimationFrame(() => {
+              setForceShowValidation(
+                new Set(processedIntentions.map(intention => intention.id))
+              );
+            });
 
             // Update UI state for all settings
             if (settingsToApply.fuzzyMatching !== undefined) {
@@ -602,12 +640,6 @@ const SettingsTab = memo(
             if (settingsToApply.directToSettings !== undefined) {
               setDirectToSettings(settingsToApply.directToSettings);
             }
-
-            // Mark all imported intentions as loaded
-            const importedIds = new Set(
-              processedIntentions.map(intention => intention.id as string)
-            );
-            updateLoadedIntentionIds(importedIds);
 
             setToast({
               show: true,
@@ -673,146 +705,163 @@ const SettingsTab = memo(
           you’ll pause for a moment to re‑enter your intention.
         </p>
 
-        <div className='intentions-list'>
-          {intentions.map((intention, i) => (
-            <div key={intention.id || `new-${i}`} className='intention-item'>
-              <div className='intention-row'>
-                <div className='url-input-group'>
-                  <div className='input-group'>
-                    <input
-                      ref={el => {
-                        urlInputRefs.current[i] = el;
-                      }}
-                      type='text'
-                      className={`url-input ${
-                        (isUrlBlurred(intention.id) ||
-                          isLoaded(intention.id)) &&
-                        !isEmpty(intention) &&
-                        !canParseIntention(intention)
-                          ? 'error'
-                          : ''
-                      } ${
-                        (isUrlBlurred(intention.id) ||
-                          isLoaded(intention.id)) &&
-                        canParseIntention(intention)
-                          ? 'parseable'
-                          : ''
-                      }`}
-                      value={intention.url}
-                      onChange={e => {
-                        const newIntentions = [...intentions];
-                        newIntentions[i] = {
-                          ...newIntentions[i],
-                          url: e.target.value,
-                        };
-                        setIntentions(newIntentions);
-                      }}
-                      onFocus={() => markUrlFocused(intention.id)}
-                      onBlur={() => markUrlBlurred(intention.id)}
-                      placeholder='Website (e.g., example.com)'
-                    />
-                    <label className='input-label'>Website</label>
-                    {(isUrlBlurred(intention.id) || isLoaded(intention.id)) &&
-                      canParseIntention(intention) && (
-                        <span className='valid-checkmark'>✓</span>
+        <DragDropContext onDragEnd={onDragEnd}>
+          <Droppable droppableId='intentions'>
+            {(provided: import('@hello-pangea/dnd').DroppableProvided) => (
+              <div
+                className='intentions-list'
+                ref={provided.innerRef}
+                {...provided.droppableProps}
+              >
+                {intentions.map((intention, i) => (
+                  <React.Fragment key={intention.id || `new-${i}`}>
+                    <Draggable draggableId={String(intention.id)} index={i}>
+                      {(
+                        providedDr: import('@hello-pangea/dnd').DraggableProvided
+                      ) => (
+                        <div
+                          ref={providedDr.innerRef}
+                          {...providedDr.draggableProps}
+                          className='intention-row'
+                        >
+                          <div
+                            className='drag-handle'
+                            tabIndex={0}
+                            role='button'
+                            aria-label='Reorder intention'
+                            title='Drag to reorder'
+                            {...(providedDr.dragHandleProps as React.HTMLAttributes<HTMLDivElement>)}
+                          />
+                          <div className='intention-item'>
+                            <div className='intention-inputs'>
+                              <div className='url-section'>
+                                <ValidatedTextInput
+                                  inputRef={el => {
+                                    if (el) {
+                                      urlInputRefs.current.set(
+                                        intention.id,
+                                        el
+                                      );
+                                    } else {
+                                      urlInputRefs.current.delete(intention.id);
+                                    }
+                                  }}
+                                  value={intention.url}
+                                  onChange={next => {
+                                    const newIntentions = [...intentions];
+                                    newIntentions[i] = {
+                                      ...newIntentions[i],
+                                      url: next,
+                                    };
+                                    setIntentions(newIntentions);
+                                  }}
+                                  label='Website'
+                                  placeholder='Website (e.g., example.com)'
+                                  className='url-input'
+                                  validate={input =>
+                                    canParseIntention({
+                                      ...intention,
+                                      url: input,
+                                    })
+                                      ? { ok: true }
+                                      : { ok: false }
+                                  }
+                                  errorText='Enter a website like example.com'
+                                  showCheckmarkOnValid={true}
+                                  name={`url-${intention.id}`}
+                                  inputMode='url'
+                                  autoComplete='url'
+                                  forceShowValidation={forceShowValidation.has(
+                                    intention.id
+                                  )}
+                                />
+                              </div>
+
+                              <div className='phrase-section'>
+                                <ValidatedTextInput
+                                  inputRef={el => {}}
+                                  className='phrase-input'
+                                  value={intention.phrase}
+                                  onChange={next => {
+                                    const newIntentions = [...intentions];
+                                    newIntentions[i] = {
+                                      ...newIntentions[i],
+                                      phrase: next,
+                                    };
+                                    setIntentions(newIntentions);
+                                  }}
+                                  onKeyDown={e => handlePhraseKeyDown(e, i)}
+                                  label='Intention'
+                                  placeholder='Write your intention'
+                                  maxLength={150}
+                                  validate={input => {
+                                    const urlOk = canParseIntention(intention);
+                                    if (
+                                      urlOk &&
+                                      isPhraseEmpty(input) &&
+                                      !isEmpty({ ...intention, phrase: input })
+                                    ) {
+                                      return { ok: false };
+                                    }
+                                    return { ok: true };
+                                  }}
+                                  errorText='Please write your intention'
+                                  name={`phrase-${intention.id}`}
+                                  showCheckmarkOnValid={false}
+                                  forceShowValidation={forceShowValidation.has(
+                                    intention.id
+                                  )}
+                                />
+                              </div>
+                            </div>
+
+                            <div className='remove-btn-wrapper'>
+                              <button
+                                className={`remove-btn ${isShiftHeld ? 'shift-held' : ''} ${
+                                  intentions.length === 1 && isEmpty(intention)
+                                    ? 'disabled'
+                                    : ''
+                                }`}
+                                onClick={e => remove(i, isShiftHeld, e)}
+                                title={
+                                  intentions.length === 1 && isEmpty(intention)
+                                    ? 'Cannot delete the last intention'
+                                    : isShiftHeld
+                                      ? 'Remove intention (no confirmation)'
+                                      : 'Remove intention (hold Shift to skip confirmation)'
+                                }
+                                disabled={
+                                  intentions.length === 1 && isEmpty(intention)
+                                }
+                              >
+                                <svg
+                                  xmlns='http://www.w3.org/2000/svg'
+                                  width='16'
+                                  height='16'
+                                  viewBox='0 0 24 24'
+                                  fill='none'
+                                  stroke='currentColor'
+                                  strokeWidth='3'
+                                  strokeLinecap='round'
+                                  strokeLinejoin='round'
+                                  aria-hidden='true'
+                                >
+                                  <line x1='18' y1='6' x2='6' y2='18'></line>
+                                  <line x1='6' y1='6' x2='18' y2='18'></line>
+                                </svg>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
                       )}
-                  </div>
-                </div>
-
-                {(isUrlBlurred(intention.id) || isLoaded(intention.id)) &&
-                  !isEmpty(intention) &&
-                  !canParseIntention(intention) && (
-                    <div className='url-error'>
-                      <div className='error-text show'>
-                        Enter a website like example.com
-                      </div>
-                    </div>
-                  )}
-
-                <div className='phrase-input-group'>
-                  <div className='input-group'>
-                    <input
-                      type='text'
-                      className={`phrase-input ${
-                        isPhraseBlurred(intention.id) &&
-                        !isEmpty(intention) &&
-                        canParseIntention(intention) &&
-                        isPhraseEmpty(intention.phrase)
-                          ? 'error'
-                          : ''
-                      }`}
-                      value={intention.phrase}
-                      onChange={e => {
-                        const newIntentions = [...intentions];
-                        newIntentions[i] = {
-                          ...newIntentions[i],
-                          phrase: e.target.value,
-                        };
-                        setIntentions(newIntentions);
-                      }}
-                      onFocus={() => markPhraseFocused(intention.id)}
-                      onBlur={() => {
-                        markPhraseBlurred(intention.id);
-                        handlePhraseBlur(i);
-                      }}
-                      onKeyDown={e => handlePhraseKeyDown(e, i)}
-                      placeholder='Write your intention'
-                      maxLength={150}
-                    />
-                    <label className='input-label'>Intention</label>
-                  </div>
-                </div>
-
-                {isPhraseBlurred(intention.id) &&
-                  !isEmpty(intention) &&
-                  canParseIntention(intention) &&
-                  isPhraseEmpty(intention.phrase) && (
-                    <div className='phrase-error'>
-                      <div className='error-text show'>
-                        Please write your intention
-                      </div>
-                    </div>
-                  )}
-
-                <div className='remove-btn-wrapper'>
-                  <button
-                    className={`remove-btn ${isShiftHeld ? 'shift-held' : ''} ${
-                      intentions.length === 1 && isEmpty(intention)
-                        ? 'disabled'
-                        : ''
-                    }`}
-                    onClick={() => remove(i, isShiftHeld)}
-                    title={
-                      intentions.length === 1 && isEmpty(intention)
-                        ? 'Cannot delete the last intention'
-                        : isShiftHeld
-                          ? 'Remove intention (no confirmation)'
-                          : 'Remove intention (hold Shift to skip confirmation)'
-                    }
-                    tabIndex={-1}
-                    disabled={intentions.length === 1 && isEmpty(intention)}
-                  >
-                    <svg
-                      xmlns='http://www.w3.org/2000/svg'
-                      width='16'
-                      height='16'
-                      viewBox='0 0 24 24'
-                      fill='none'
-                      stroke='currentColor'
-                      strokeWidth='3'
-                      strokeLinecap='round'
-                      strokeLinejoin='round'
-                      aria-hidden='true'
-                    >
-                      <line x1='18' y1='6' x2='6' y2='18'></line>
-                      <line x1='6' y1='6' x2='18' y2='18'></line>
-                    </svg>
-                  </button>
-                </div>
+                    </Draggable>
+                  </React.Fragment>
+                ))}
+                {provided.placeholder}
               </div>
-            </div>
-          ))}
-        </div>
+            )}
+          </Droppable>
+        </DragDropContext>
 
         {/* 1b. Buttons */}
         <div className='actions'>
@@ -821,7 +870,21 @@ const SettingsTab = memo(
             onClick={addIntention}
             title='Add another intention'
           >
-            Add Intention
+            <svg
+              xmlns='http://www.w3.org/2000/svg'
+              width='16'
+              height='16'
+              viewBox='0 0 24 24'
+              fill='none'
+              stroke='currentColor'
+              strokeWidth='3'
+              strokeLinecap='round'
+              strokeLinejoin='round'
+              aria-hidden='true'
+            >
+              <line x1='12' y1='5' x2='12' y2='19'></line>
+              <line x1='5' y1='12' x2='19' y2='12'></line>
+            </svg>
           </button>
           <button className='save-btn' onClick={update}>
             Save Changes
@@ -1138,7 +1201,7 @@ const SettingsTab = memo(
               </label>
             </div>
 
-            {/* Breath Intensity Slider - moved to bottom */}
+            {/* Breath Intensity Slider */}
             <div className='setting-group'>
               <div className='setting-item'>
                 <div className='setting-header'>
@@ -1354,10 +1417,18 @@ const SettingsTab = memo(
                 cannot be undone.
               </p>
               <div className='confirmation-actions'>
-                <button className='cancel-btn' onClick={cancelDelete}>
+                <button
+                  ref={deleteDialogCancelRef}
+                  className='cancel-btn'
+                  onClick={cancelDelete}
+                >
                   Cancel
                 </button>
-                <button className='confirm-btn' onClick={confirmDelete}>
+                <button
+                  ref={deleteDialogConfirmRef}
+                  className='confirm-btn'
+                  onClick={confirmDelete}
+                >
                   Delete
                 </button>
               </div>
