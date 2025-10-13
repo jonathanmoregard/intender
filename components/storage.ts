@@ -19,6 +19,7 @@ export const storage = {
     canCopyIntentionText?: boolean;
     breathAnimationIntensity?: BreathAnimationIntensity;
     directToSettings?: boolean;
+    debugLogging?: boolean;
   }> {
     const defaults = {
       intentions: [],
@@ -29,6 +30,7 @@ export const storage = {
       canCopyIntentionText: false,
       breathAnimationIntensity: 'minimal' as BreathAnimationIntensity,
       directToSettings: false,
+      debugLogging: false,
     };
 
     const result = await backend.get(defaults);
@@ -47,6 +49,7 @@ export const storage = {
       | { canCopyIntentionText: boolean }
       | { breathAnimationIntensity: BreathAnimationIntensity }
       | { directToSettings: boolean }
+      | { debugLogging: boolean }
   ) {
     await backend.set(data);
   },

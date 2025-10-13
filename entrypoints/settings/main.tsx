@@ -58,6 +58,9 @@ const SettingsTab = memo(
     const [breathIntensity, setBreathIntensity] =
       useState<BreathAnimationIntensity>('minimal');
     const [directToSettings, setDirectToSettings] = useState(false);
+    const [debugLogging, setDebugLogging] = useState(false);
+    const [showDeveloperSettings, setShowDeveloperSettings] = useState(false);
+    const [versionClickCount, setVersionClickCount] = useState(0);
 
     const [blurredUrlIds, setBlurredUrlIds] = useState<Set<string>>(new Set());
     const [blurredPhraseIds, setBlurredPhraseIds] = useState<Set<string>>(
@@ -184,6 +187,10 @@ const SettingsTab = memo(
       await storage.set({ directToSettings: enabled });
     }, []);
 
+    const saveDebugLogging = useCallback(async (enabled: boolean) => {
+      await storage.set({ debugLogging: enabled });
+    }, []);
+
     // Debounced save function
     const debouncedSave = useCallback(
       debounce(async (intentionsToSave: RawIntention[]) => {
@@ -216,6 +223,7 @@ const SettingsTab = memo(
             'minimal'
         );
         setDirectToSettings(data.directToSettings ?? false);
+        setDebugLogging(data.debugLogging ?? false);
 
         // E2E testing hook: allow overriding inactivity timeout via query param
         try {
@@ -1341,6 +1349,36 @@ const SettingsTab = memo(
           </div>
         </div>
 
+        {/* Developer Settings */}
+        {showDeveloperSettings && (
+          <div className='developer-settings'>
+            <h3>Developer Settings</h3>
+            <div className='setting-group'>
+              <label className='setting-label clickable-setting-item'>
+                <input
+                  type='checkbox'
+                  checked={debugLogging}
+                  onChange={e => {
+                    const enabled = e.target.checked;
+                    setDebugLogging(enabled);
+                    saveDebugLogging(enabled);
+                  }}
+                />
+                <span className='setting-text'>
+                  Enable debug logging in service worker
+                </span>
+                <div
+                  className='setting-help'
+                  aria-label='Enables detailed console logging in the background service worker for debugging purposes. Check the browser console for extension service worker logs.'
+                  data-tooltip='Enables detailed console logging in the background service worker for debugging purposes. Check the browser console for extension service worker logs.'
+                >
+                  ?
+                </div>
+              </label>
+            </div>
+          </div>
+        )}
+
         {/* Delete Confirmation Dialog */}
         {deleteConfirm.show && (
           <div className='confirmation-overlay' onClick={cancelDelete}>
@@ -1391,6 +1429,32 @@ const SettingsTab = memo(
             {toast.message}
           </div>
         )}
+
+        {/* Build Footer with click-to-activate developer settings */}
+        <div
+          className='build-footer'
+          title={BUILD_HASH}
+          onClick={() => {
+            const newCount = versionClickCount + 1;
+            setVersionClickCount(newCount);
+            if (newCount >= 5 && !showDeveloperSettings) {
+              setShowDeveloperSettings(true);
+              setToast({
+                show: true,
+                message: 'Developer settings unlocked!',
+                type: 'success',
+              });
+              setTimeout(
+                () => setToast(prev => ({ ...prev, show: false })),
+                3000
+              );
+            } else if (newCount === 1) {
+              navigator.clipboard.writeText(`${BUILD_VERSION} - ${BUILD_HASH}`);
+            }
+          }}
+        >
+          v{BUILD_VERSION}
+        </div>
       </div>
     );
   }
@@ -1493,16 +1557,6 @@ const Options = () => {
           <SettingsTab setActiveTab={setActiveTab} />
         )}
         {activeTab === 'about' && <AboutTab />}
-      </div>
-
-      <div
-        className='build-footer'
-        title={BUILD_HASH}
-        onClick={() => {
-          navigator.clipboard.writeText(`${BUILD_VERSION} - ${BUILD_HASH}`);
-        }}
-      >
-        v{BUILD_VERSION}
       </div>
     </div>
   );
