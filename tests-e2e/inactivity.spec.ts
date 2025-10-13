@@ -837,7 +837,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
 
     // Go to settings and verify intention page intention has errored URL box
     await settingsPage.bringToFront();
-    const firstUrlInput = settingsPage.locator('input.url-input').first();
+    const firstUrlInput = SettingsPage.locators.urlInputs(settingsPage).first();
     await expect(firstUrlInput).toHaveClass(/error/);
 
     await context.close();
