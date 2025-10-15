@@ -44,11 +44,6 @@ const lastActiveTabIdByWindow = new Map<WindowId, TabId>();
 let lastFocusedWindowId: WindowId | null = null;
 const lastRedirectAtByTabId = new Map<TabId, Timestamp>();
 
-// Per-window per-scope grace: allow immediate follow-up navigations (reload/new tab)
-const allowedScopesGraceByWindow = new Map<string, Timestamp>();
-// Per-tab per-scope grace: robustly allow reloads in the same tab
-const allowedScopesGraceByTab = new Map<string, Timestamp>();
-
 // Cross-browser shim for storage.session (Firefox compatibility)
 const sessionStore = chrome?.storage?.session ?? {
   async get() {
@@ -293,57 +288,6 @@ export default defineBackground(async () => {
     if (!matchedIntention) return null;
     return intentionToIntentionScopeId(matchedIntention);
   };
-
-  function makeGraceKey(
-    windowId: WindowId | null,
-    scopeId: IntentionScopeId
-  ): string {
-    return `${(windowId as unknown as number) ?? -1}:${scopeId as unknown as string}`;
-  }
-
-  function setScopeGrace(
-    windowId: WindowId | null,
-    scopeId: IntentionScopeId,
-    tabId?: TabId
-  ): void {
-    const GRACE_MS = 4000; // short, user‑perceivable window for immediate follow-ups
-    const now = createTimestamp();
-    const key = makeGraceKey(windowId, scopeId);
-    allowedScopesGraceByWindow.set(
-      key,
-      ((now as number) + GRACE_MS) as Timestamp
-    );
-    if (tabId) {
-      const tabKey = `${tabId as unknown as number}:${scopeId as unknown as string}`;
-      allowedScopesGraceByTab.set(
-        tabKey,
-        ((now as number) + GRACE_MS) as Timestamp
-      );
-    }
-  }
-
-  function hasScopeGrace(
-    windowId: WindowId | null,
-    scopeId: IntentionScopeId
-  ): boolean {
-    const key = makeGraceKey(windowId, scopeId);
-    const until = allowedScopesGraceByWindow.get(key);
-    if (!until) return false;
-    const now = createTimestamp();
-    if ((now as number) <= (until as unknown as number)) return true;
-    allowedScopesGraceByWindow.delete(key);
-    return false;
-  }
-
-  function hasTabScopeGrace(tabId: TabId, scopeId: IntentionScopeId): boolean {
-    const key = `${tabId as unknown as number}:${scopeId as unknown as string}`;
-    const until = allowedScopesGraceByTab.get(key);
-    if (!until) return false;
-    const now = createTimestamp();
-    if ((now as number) <= (until as unknown as number)) return true;
-    allowedScopesGraceByTab.delete(key);
-    return false;
-  }
 
   // Check if a scope has any audible tabs on-demand
   async function isScopeAudible(scopeId: IntentionScopeId): Promise<boolean> {
@@ -726,16 +670,7 @@ export default defineBackground(async () => {
       // or if a recent redirect happened to avoid loops.
       const cameFromIntentionPage =
         priorUrl?.startsWith(intentionPageUrl) === true;
-
-      // If grace is active for this scope in current window or tab, skip redirect
-      if (
-        hasScopeGrace(lastFocusedWindowId, scopeId) ||
-        hasTabScopeGrace(tabId, scopeId)
-      ) {
-        log(
-          '[Intender] Committed: grace active, skipping post-commit redirect'
-        );
-      } else if (!cameFromIntentionPage) {
+      if (!cameFromIntentionPage) {
         try {
           await redirectToIntentionPage(tabId, details.url, scopeId);
           // redirectToIntentionPage handles cooldown and logging
@@ -998,7 +933,7 @@ export default defineBackground(async () => {
       return;
     }
 
-    // Rule 2: If redirect is initiated from intention page, allow and set grace for the scope
+    // Rule 2: If redirect is initiated from intention page, allow
     if (sourceUrl && sourceUrl.startsWith(intentionPageUrl)) {
       try {
         const targetUrlObj = new URL(targetUrl);
@@ -1008,14 +943,8 @@ export default defineBackground(async () => {
 
         if (intentionCompleted === 'true') {
           log(
-            '[Intender] Rule 2: Intention completion, allowing and setting grace'
+            '[Intender] Rule 2: Origin intention page with completion flag, allowing (initiated from intention page)'
           );
-          // Set a short grace to allow immediate same-scope follow-ups in this window
-          const completedScope = lookupIntentionScopeId(targetUrl);
-          if (completedScope) {
-            const tabId = numberToTabId(details.tabId);
-            setScopeGrace(lastFocusedWindowId, completedScope, tabId);
-          }
           return;
         } else {
           log(
