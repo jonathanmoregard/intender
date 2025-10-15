@@ -289,6 +289,137 @@ export default defineBackground(async () => {
     return intentionToIntentionScopeId(matchedIntention);
   };
 
+  // Unified navigation decision and short-lived cache (to keep decisions monotonic across hooks)
+  type NavigationDecision =
+    | {
+        kind: 'allow';
+        reason:
+          | 'same-scope'
+          | 'intention-completed'
+          | 'active-tab-same-scope'
+          | 'no-match';
+      }
+    | { kind: 'block_redirect'; reason: 'matched-scope'; redirectTo: string };
+
+  const NAV_DECISION_TTL_MS = 3000;
+  const navDecisionCache = new Map<
+    string,
+    { decision: NavigationDecision; until: number }
+  >();
+
+  function cacheKey(tabId: number, targetUrl: string): string {
+    return `${tabId}:${targetUrl}`;
+  }
+
+  function readCachedDecision(
+    tabId: number,
+    targetUrl: string
+  ): NavigationDecision | null {
+    const key = cacheKey(tabId, targetUrl);
+    const entry = navDecisionCache.get(key);
+    if (!entry) return null;
+    const now = Date.now();
+    if (now <= entry.until) return entry.decision;
+    navDecisionCache.delete(key);
+    return null;
+  }
+
+  function writeCachedDecision(
+    tabId: number,
+    targetUrl: string,
+    decision: NavigationDecision
+  ): void {
+    const key = cacheKey(tabId, targetUrl);
+    navDecisionCache.set(key, {
+      decision,
+      until: Date.now() + NAV_DECISION_TTL_MS,
+    });
+  }
+
+  function decideNavigation(args: {
+    tabId: number;
+    sourceUrl: string | null;
+    targetUrl: string;
+    isNavigationTabActive?: boolean;
+    activeTabUrl?: string | null;
+    postCommit?: boolean;
+    cameFromIntentionPage?: boolean;
+  }): NavigationDecision {
+    const {
+      sourceUrl,
+      targetUrl,
+      isNavigationTabActive,
+      activeTabUrl,
+      postCommit,
+      cameFromIntentionPage,
+    } = args;
+
+    // Same-scope allow
+    const sourceScope = sourceUrl ? lookupIntentionScopeId(sourceUrl) : null;
+    const targetScope = lookupIntentionScopeId(targetUrl);
+    if (sourceScope && targetScope && sourceScope === targetScope) {
+      return { kind: 'allow', reason: 'same-scope' };
+    }
+
+    // Intention completion allow (explicit token)
+    try {
+      const tu = new URL(targetUrl);
+      if (
+        tu.searchParams.get('intention_completed_53c5890') === 'true' &&
+        cameFromIntentionPage
+      ) {
+        return { kind: 'allow', reason: 'intention-completed' };
+      }
+    } catch {}
+
+    // Active tab same-scope (background new tab open)
+    const activeScope = activeTabUrl
+      ? lookupIntentionScopeId(activeTabUrl)
+      : null;
+    if (
+      !postCommit &&
+      targetScope &&
+      activeScope &&
+      activeScope === targetScope &&
+      isNavigationTabActive === false
+    ) {
+      return { kind: 'allow', reason: 'active-tab-same-scope' };
+    }
+
+    // Post-commit enforcement for server/client redirects into a scoped target
+    if (postCommit) {
+      const matched =
+        targetScope != null ? lookupIntention(targetUrl, intentionIndex) : null;
+      if (matched && !cameFromIntentionPage) {
+        const toScope = intentionToIntentionScopeId(matched);
+        const redirectTo = browser.runtime.getURL(
+          'intention-page.html?target=' +
+            encodeURIComponent(targetUrl) +
+            '&intentionScopeId=' +
+            encodeURIComponent(toScope as unknown as string)
+        );
+        return { kind: 'block_redirect', reason: 'matched-scope', redirectTo };
+      }
+    }
+
+    // Before-navigate: block when target matches a configured intention
+    if (!postCommit) {
+      const matched = lookupIntention(targetUrl, intentionIndex);
+      if (matched) {
+        const toScope = intentionToIntentionScopeId(matched);
+        const redirectTo = browser.runtime.getURL(
+          'intention-page.html?target=' +
+            encodeURIComponent(targetUrl) +
+            '&intentionScopeId=' +
+            encodeURIComponent(toScope as unknown as string)
+        );
+        return { kind: 'block_redirect', reason: 'matched-scope', redirectTo };
+      }
+    }
+
+    return { kind: 'allow', reason: 'no-match' };
+  }
+
   // Check if a scope has any audible tabs on-demand
   async function isScopeAudible(scopeId: IntentionScopeId): Promise<boolean> {
     try {
@@ -658,36 +789,42 @@ export default defineBackground(async () => {
       url: details.url,
     });
 
-    // If the destination URL matches an intention, record scope and possibly redirect.
+    // Unified decision (post-commit)
+    const cameFromIntentionPage =
+      priorUrl?.startsWith(intentionPageUrl) === true;
+    const cached = readCachedDecision(details.tabId, details.url);
+    const decision =
+      cached ??
+      decideNavigation({
+        tabId: details.tabId,
+        sourceUrl: priorUrl,
+        targetUrl: details.url,
+        postCommit: true,
+        cameFromIntentionPage,
+      });
+    if (!cached) writeCachedDecision(details.tabId, details.url, decision);
+
+    if (decision.kind === 'block_redirect') {
+      try {
+        await browser.tabs.update(details.tabId, { url: decision.redirectTo });
+        return;
+      } catch (e) {
+        log('[Intender] Post-commit redirect attempt failed:', e);
+      }
+    }
+
+    // Align scope mapping
     const matched = lookupIntention(details.url, intentionIndex);
     if (matched) {
       const scopeId = intentionToIntentionScopeId(matched);
       intentionScopePerTabId.set(tabId, scopeId);
       persistSession();
-
-      // If we landed here via a server/client redirect (e.g., faceboo.com -> facebook.com),
-      // enforce the intention gate even post-commit. Skip if coming from intention page
-      // or if a recent redirect happened to avoid loops.
-      const cameFromIntentionPage =
-        priorUrl?.startsWith(intentionPageUrl) === true;
-      if (!cameFromIntentionPage) {
-        try {
-          await redirectToIntentionPage(tabId, details.url, scopeId);
-          // redirectToIntentionPage handles cooldown and logging
-          return;
-        } catch (e) {
-          // If redirect fails, fall through to activity bump
-          log('[Intender] Post-commit redirect attempt failed:', e);
-        }
-      }
-
       updateIntentionScopeActivity(scopeId);
       log('[Intender] Navigation committed to scoped page, set scope:', {
         tabId: details.tabId,
         scopeId,
       });
     } else {
-      // Clear scope mapping when navigating away from scoped pages
       const priorScope = intentionScopePerTabId.get(tabId);
       if (priorScope) {
         intentionScopePerTabId.delete(tabId);
@@ -925,96 +1062,39 @@ export default defineBackground(async () => {
       frameId: details.frameId,
     });
 
-    // Rule 1: If navigating within same intention scope, allow
-    const sourceScope = sourceUrl ? lookupIntentionScopeId(sourceUrl) : null;
-    const targetScope = lookupIntentionScopeId(targetUrl);
-    if (sourceScope && targetScope && sourceScope === targetScope) {
-      log('[Intender] Rule 1: Same intention scope navigation, allowing');
-      return;
-    }
+    // Unified decision path
+    {
+      const cached = readCachedDecision(details.tabId, targetUrl);
+      const decision =
+        cached ??
+        decideNavigation({
+          tabId: details.tabId,
+          sourceUrl,
+          targetUrl,
+          isNavigationTabActive,
+          activeTabUrl,
+          postCommit: false,
+          cameFromIntentionPage:
+            sourceUrl?.startsWith(intentionPageUrl) === true,
+        });
+      if (!cached) writeCachedDecision(details.tabId, targetUrl, decision);
 
-    // Rule 2: If redirect is initiated from intention page, allow
-    if (sourceUrl && sourceUrl.startsWith(intentionPageUrl)) {
-      try {
-        const targetUrlObj = new URL(targetUrl);
-        const intentionCompleted = targetUrlObj.searchParams.get(
-          'intention_completed_53c5890'
-        );
+      if (decision.kind === 'allow') return;
 
-        if (intentionCompleted === 'true') {
-          log(
-            '[Intender] Rule 2: Origin intention page with completion flag, allowing (initiated from intention page)'
-          );
-          return;
-        } else {
-          log(
-            '[Intender] Rule 2b: Origin intention page without completion flag, disallowing (race condition)'
-          );
-          // Keep user on the intention page by setting it again (no-op visually)
-          try {
-            await browser.tabs.update(details.tabId, { url: sourceUrl });
-          } catch (error) {
-            log('[Intender] Rule 2b update failed (tab may be closed):', error);
-          }
-          return;
-        }
-      } catch (error) {
-        log('[Intender] Rule 2: Failed to parse target URL, allowing:', error);
-        return;
-      }
-    }
-
-    // Rule 3: If active tab is on same intention scope as target (and not same tab), allow
-    // This handles cases like:
-    // - Opening new tab from scoped site (active tab is scoped) → navigating to same scope
-    // - Duplicating scoped tab (active tab is scoped) → navigating within same scope
-    // - Middle-click link from scoped site (active tab is scoped) → opening same scope link
-    // The !== check is to avoid allowing everything. Without it,
-    // navigation that is happening in the active tab would always pass
-
-    const activeTabScope = activeTabUrl
-      ? lookupIntentionScopeId(activeTabUrl)
-      : null;
-    if (
-      !isNavigationTabActive &&
-      activeTabScope &&
-      activeTabScope === targetScope
-    ) {
-      log('[Intender] Rule 3: Active tab on same intention scope, allowing');
-      return;
-    }
-
-    // Rule 4: Otherwise, check if we need to block using new matching system
-    const targetIntention = lookupIntention(targetUrl, intentionIndex);
-
-    if (targetIntention) {
-      log(
-        '[Intender] Rule 4: Blocking navigation, showing intention page for:',
-        targetIntention
-      );
-
-      // Track the intention scope for this tab
-      const targetIntentionScopeId =
-        intentionToIntentionScopeId(targetIntention);
+      // Track scope and redirect
+      const matched = lookupIntention(targetUrl, intentionIndex)!;
+      const targetIntentionScopeId = intentionToIntentionScopeId(matched);
       intentionScopePerTabId.set(
         numberToTabId(details.tabId),
         targetIntentionScopeId
       );
       persistSession();
-
-      const redirectUrl = browser.runtime.getURL(
-        'intention-page.html?target=' +
-          encodeURIComponent(targetUrl) +
-          '&intentionScopeId=' +
-          encodeURIComponent(targetIntention.id)
-      );
-
       try {
-        await browser.tabs.update(details.tabId, { url: redirectUrl });
+        await browser.tabs.update(details.tabId, { url: decision.redirectTo });
       } catch (error) {
-        // Tab might be gone, ignore the error
         log('[Intender] Tab update failed, tab may be closed:', error);
       }
+      return;
     }
   });
 
