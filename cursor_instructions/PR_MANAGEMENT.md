@@ -10,7 +10,7 @@
 5. **Approve version**: User confirms AI's version suggestion
 6. **Update version**: Use the `package.json` version field - it's our single source of truth
 7. **Create PR**: `gh pr create --fill --base master --head <insert branch name> --title "<insert title>" --body "<insert description, less than 1000 chars (as short/clear as possible)>" | cat
-8. **Output link**: AI provides clickable PR link
+8. **Output link**: AI provides clickable PR link in chat (e.g., **[https://github.com/jonathanmoregard/intender/pull/48](https://github.com/jonathanmoregard/intender/pull/48)**)
 
 ## Lockfile and CI
 
