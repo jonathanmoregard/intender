@@ -20,18 +20,32 @@ import {
 // Branded type for tab ID
 export type TabId = Brand<number, 'TabId'>;
 
-// Branded type for window ID
-export type WindowId = Brand<number, 'WindowId'>;
-
-// Helper functions for TabId
 function numberToTabId(num: number): TabId {
   return num as TabId;
 }
 
-// Helper functions for WindowId
+function tabIdToNumber(id: TabId): number {
+  return id as unknown as number;
+}
+
+// Branded type for window ID
+export type WindowId = Brand<number, 'WindowId'>;
+
 function numberToWindowId(num: number): WindowId {
   return num as WindowId;
 }
+
+function windowIdToNumber(id: WindowId): number {
+  return id as unknown as number;
+}
+
+const buildIntentionRedirectUrl = (
+  targetUrl: string,
+  scopeId: IntentionScopeId
+): string =>
+  browser.runtime.getURL(
+    `intention-page.html?target=${encodeURIComponent(targetUrl)}&intentionScopeId=${encodeURIComponent(scopeId)}`
+  );
 
 // Tab URL cache to track last-known URLs for each tab
 const tabUrlMap = new Map<TabId, string>();
@@ -92,7 +106,7 @@ const persistSession = () => {
         lastActiveByScope: mapToObject(lastActiveByScope),
         lastActiveTabIdByWindow: mapToObject(lastActiveTabIdByWindow),
         lastFocusedWindowId: lastFocusedWindowId
-          ? (lastFocusedWindowId as unknown as number)
+          ? windowIdToNumber(lastFocusedWindowId)
           : null,
       })
       .catch(error => {
@@ -110,7 +124,7 @@ chrome.runtime.onSuspend.addListener(() => {
       lastActiveByScope: mapToObject(lastActiveByScope),
       lastActiveTabIdByWindow: mapToObject(lastActiveTabIdByWindow),
       lastFocusedWindowId: lastFocusedWindowId
-        ? (lastFocusedWindowId as unknown as number)
+        ? windowIdToNumber(lastFocusedWindowId)
         : null,
     });
   } catch (e) {
@@ -395,12 +409,7 @@ export default defineBackground(async () => {
         targetScope != null ? lookupIntention(targetUrl, intentionIndex) : null;
       if (matched && !cameFromIntentionPage) {
         const toScope = intentionToIntentionScopeId(matched);
-        const redirectTo = browser.runtime.getURL(
-          'intention-page.html?target=' +
-            encodeURIComponent(targetUrl) +
-            '&intentionScopeId=' +
-            encodeURIComponent(toScope as unknown as string)
-        );
+        const redirectTo = buildIntentionRedirectUrl(targetUrl, toScope);
         return { kind: 'block_redirect', reason: 'matched-scope', redirectTo };
       }
     }
@@ -410,12 +419,7 @@ export default defineBackground(async () => {
       const matched = lookupIntention(targetUrl, intentionIndex);
       if (matched) {
         const toScope = intentionToIntentionScopeId(matched);
-        const redirectTo = browser.runtime.getURL(
-          'intention-page.html?target=' +
-            encodeURIComponent(targetUrl) +
-            '&intentionScopeId=' +
-            encodeURIComponent(toScope as unknown as string)
-        );
+        const redirectTo = buildIntentionRedirectUrl(targetUrl, toScope);
         return { kind: 'block_redirect', reason: 'matched-scope', redirectTo };
       }
     }
@@ -537,12 +541,7 @@ export default defineBackground(async () => {
       return false;
     }
 
-    const redirectUrl = browser.runtime.getURL(
-      'intention-page.html?target=' +
-        encodeURIComponent(targetUrl) +
-        '&intentionScopeId=' +
-        encodeURIComponent(toScope)
-    );
+    const redirectUrl = buildIntentionRedirectUrl(targetUrl, toScope);
 
     try {
       await browser.tabs.update(tabId, { url: redirectUrl });
@@ -954,7 +953,7 @@ export default defineBackground(async () => {
       if (willUseFallback) {
         try {
           // WindowId is just a branded number, cast it back to number for the query
-          const prevWindowIdNumber = prevWindowId as unknown as number;
+          const prevWindowIdNumber = windowIdToNumber(prevWindowId);
           log(
             '[Intender] Attempting fallback query for window:',
             prevWindowIdNumber
@@ -1134,7 +1133,7 @@ export default defineBackground(async () => {
                 log(
                   '[Intender] Intentions changed: mapped tab to scope and updated activity',
                   {
-                    tabId: tabId as unknown as number,
+                    tabId: tabIdToNumber(tabId),
                     url,
                     newScope,
                     priorScope: priorScope || null,
@@ -1146,7 +1145,7 @@ export default defineBackground(async () => {
               log(
                 '[Intender] Intentions changed: cleared scope mapping for tab',
                 {
-                  tabId: tabId as unknown as number,
+                  tabId: tabIdToNumber(tabId),
                   url,
                   priorScope,
                 }
