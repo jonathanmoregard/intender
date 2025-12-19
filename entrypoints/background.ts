@@ -118,6 +118,13 @@ const persistSession = () => {
 // Flush session on teardown to prevent data loss
 chrome.runtime.onSuspend.addListener(() => {
   try {
+    // Clean orphaned scopes before persisting
+    const activeScopes = new Set(intentionScopePerTabId.values());
+    for (const scope of lastActiveByScope.keys()) {
+      if (!activeScopes.has(scope)) {
+        lastActiveByScope.delete(scope);
+      }
+    }
     sessionStore.set({
       tabUrlMap: mapToObject(tabUrlMap),
       intentionScopePerTabId: mapToObject(intentionScopePerTabId),
@@ -279,19 +286,27 @@ export default defineBackground(async () => {
 
   // Centralized readiness gate - ensures intentionIndex is ready before processing
   async function ensureReady(): Promise<void> {
-    if (!intentionIndexReady) {
-      log('[Intender] Cold window: waiting for intentionIndex to be ready');
-      while (!intentionIndexReady) {
-        await new Promise(resolve => setTimeout(resolve, 10));
+    if (intentionIndexReady) return;
+    const MAX_WAIT_MS = 5000;
+    const start = Date.now();
+    log('[Intender] Cold window: waiting for intentionIndex to be ready');
+    while (!intentionIndexReady) {
+      if (Date.now() - start > MAX_WAIT_MS) {
+        console.error(
+          '[Intender] Timeout waiting for intentionIndex - proceeding anyway'
+        );
+        return;
       }
-      log('[Intender] Cold window: intentionIndex is now ready, continuing');
+      await new Promise(resolve => setTimeout(resolve, 10));
     }
+    log('[Intender] Cold window: intentionIndex is now ready, continuing');
   }
 
   // Initialize functions that will be used by listeners
   const updateIntentionScopeActivity = (intentionScopeId: IntentionScopeId) => {
     lastActiveByScope.set(intentionScopeId, createTimestamp());
     log('[Intender] Updated activity for intention scope:', intentionScopeId);
+    cleanupNavDecisionCache();
     persistSession();
   };
 
@@ -347,6 +362,13 @@ export default defineBackground(async () => {
       until: Date.now() + NAV_DECISION_TTL_MS,
     });
   }
+
+  const cleanupNavDecisionCache = () => {
+    const now = Date.now();
+    for (const [key, entry] of navDecisionCache) {
+      if (now > entry.until) navDecisionCache.delete(key);
+    }
+  };
 
   function decideNavigation(args: {
     tabId: number;
@@ -1077,7 +1099,11 @@ export default defineBackground(async () => {
       if (decision.kind === 'allow') return;
 
       // Track scope and redirect
-      const matched = lookupIntention(targetUrl, intentionIndex)!;
+      const matched = lookupIntention(targetUrl, intentionIndex);
+      if (!matched) {
+        log('[Intender] Race: intention removed between decision and redirect');
+        return;
+      }
       const targetIntentionScopeId = intentionToIntentionScopeId(matched);
       intentionScopePerTabId.set(
         numberToTabId(details.tabId),
