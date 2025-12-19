@@ -57,8 +57,6 @@ const sessionStore = chrome?.storage?.session ?? {
   },
 };
 
-// Update activity for an intention scope - moved inside defineBackground
-
 // Utility helpers for session persistence
 const mapToObject = <K extends string | number | symbol, V>(
   input: Map<K, V>
@@ -247,7 +245,7 @@ export default defineBackground(async () => {
   let debugLogging = false;
 
   // Debug logging helper - gates logs based on debugLogging flag
-  const log = (...args: any[]) => {
+  const log = (...args: unknown[]) => {
     if (debugLogging) {
       console.log(...args);
     }
@@ -370,7 +368,12 @@ export default defineBackground(async () => {
       ) {
         return { kind: 'allow', reason: 'intention-completed' };
       }
-    } catch {}
+    } catch (error) {
+      log(
+        '[Intender] Failed to parse target URL for intention completion token:',
+        error
+      );
+    }
 
     // Active tab same-scope (background new tab open)
     const activeScope = activeTabUrl
@@ -597,13 +600,6 @@ export default defineBackground(async () => {
       // Bump activity for the scope and update tracking
       updateIntentionScopeActivity(toScope);
       return;
-    } else {
-      log('[Intender] NOT same-scope switch:', {
-        fromScope,
-        toScope,
-        bothPresent: !!(fromScope && toScope),
-        scopesEqual: fromScope === toScope,
-      });
     }
 
     // From bump: update activity for the previous tab's scope
