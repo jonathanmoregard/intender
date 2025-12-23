@@ -103,6 +103,39 @@ function getCurrentTestName(): string | undefined {
   return `test_${workerIndex}_${Date.now()}`;
 }
 
+async function enableDebugLoggingForTests(
+  context: BrowserContext,
+  tee?: winston.Logger | null
+): Promise<void> {
+  if (!process.env.TEST_SW_LOG) return;
+
+  try {
+    const target =
+      context.serviceWorkers()[0] ||
+      (await context
+        .waitForEvent('serviceworker', { timeout: 5000 })
+        .catch(() => null)) ||
+      context.backgroundPages()[0] ||
+      (await context
+        .waitForEvent('backgroundpage', { timeout: 5000 })
+        .catch(() => null));
+
+    if (!target) {
+      tee?.warn('No extension context available for debug logging');
+      return;
+    }
+
+    await target.evaluate(() => {
+      const api =
+        (globalThis as any).chrome?.storage ??
+        (globalThis as any).browser?.storage;
+      (api?.sync ?? api?.local)?.set({ debugLogging: true });
+    });
+  } catch (error) {
+    tee?.warn(`Failed to enable debug logging: ${String(error)}`);
+  }
+}
+
 export async function launchExtension(
   testName?: string
 ): Promise<{ context: BrowserContext }> {
@@ -226,6 +259,10 @@ export async function launchExtension(
   // Setup interception only when logger is active
   if (currentTeeLogger) {
     setupConsoleInterception();
+  }
+
+  if (process.env.TEST_SW_LOG) {
+    await enableDebugLoggingForTests(context, tee);
   }
 
   return { context };
