@@ -35,6 +35,11 @@ const flushLogs = async () => {
   }
 
   flushScheduled = false;
+
+  // If new logs were added during the flush, schedule another flush
+  if (logBuffer.length > 0) {
+    scheduleFlush();
+  }
 };
 
 const scheduleFlush = () => {
