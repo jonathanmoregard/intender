@@ -2,7 +2,7 @@
   "name": "intender",
   "description": "Set intentions before visiting websites to stay focused and mindful of your browsing goals.",
   "private": true,
-  "version": "0.8.6",
+  "version": "0.8.7",
   "type": "module",
   "scripts": {
     "dev": "wxt",
