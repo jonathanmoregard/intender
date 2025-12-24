@@ -1,5 +1,5 @@
 import { test as base, expect } from '@playwright/test';
-import { logSwTestResult } from './utils/extension';
+import { getServiceWorkerLogs, logSwTestResult } from './utils/extension';
 
 const isThrottled = !!process.env.INTENDER_THROTTLE;
 
@@ -49,8 +49,8 @@ base.beforeEach(async ({}, testInfo) => {
   }
 });
 
-// Append PASS/FAIL/TIMEOUT markers to the SW log file for each test
-base.afterEach(async ({}, testInfo) => {
+// Append PASS/FAIL/TIMEOUT markers to the SW log file and attach logs to test results
+base.afterEach(async ({ context }, testInfo) => {
   try {
     const status =
       testInfo.status === 'passed'
@@ -66,5 +66,24 @@ base.afterEach(async ({}, testInfo) => {
       repeatEachIndex: testInfo.repeatEachIndex,
       retry: testInfo.retry,
     });
+
+    // Attach service worker logs to test results for AI debugging
+    // Only attach on failure to keep traces small
+    if (testInfo.status !== 'passed' && process.env.TEST_SW_LOG) {
+      try {
+        const swLogs = await getServiceWorkerLogs(context);
+        if (swLogs && swLogs.trim().length > 0) {
+          await testInfo.attach('service-worker-logs', {
+            body: swLogs,
+            contentType: 'text/plain',
+          });
+        }
+      } catch (error) {
+        // Log attachment is best-effort, don't fail test if it fails
+        console.warn(
+          `[Test] Failed to attach service worker logs: ${String(error)}`
+        );
+      }
+    }
   } catch {}
 });
