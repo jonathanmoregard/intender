@@ -136,6 +136,23 @@ async function enableDebugLoggingForTests(
   }
 }
 
+async function cleanupTestLogs(context: BrowserContext): Promise<void> {
+  try {
+    const sw = context.serviceWorkers()[0];
+    if (sw) {
+      // Disable debug logging via storage flag
+      await sw.evaluate(async () => {
+        const api =
+          (globalThis as any).chrome?.storage ??
+          (globalThis as any).browser?.storage;
+        await (api.sync ?? api.local).set({ debugLogging: false });
+      });
+    }
+  } catch (error) {
+    // Ignore cleanup errors (SW might already be terminated)
+  }
+}
+
 export async function launchExtension(
   testName?: string
 ): Promise<{ context: BrowserContext }> {
@@ -166,68 +183,46 @@ export async function launchExtension(
     ],
   });
 
-  // Simple working approach: Direct service worker console interception
-  const setupConsoleInterception = async () => {
+  // Firefox-compatible approach: Poll storage.local for logs written by background script
+  const setupStorageLogPolling = async () => {
     try {
-      // Wait for service worker
+      // Wait for service worker to be available
       const sw =
         context.serviceWorkers()[0] ||
         (await context.waitForEvent('serviceworker', { timeout: 10000 }));
 
       tee?.info(`Found service worker: ${sw.url()}`);
 
-      // Inject console interceptor
-      await sw.evaluate(() => {
-        const original = {
-          log: console.log,
-          info: console.info,
-          warn: console.warn,
-          error: console.error,
-        };
-
-        // Create global log storage
-        (globalThis as any).__interceptedLogs = [];
-
-        const intercept =
-          (level: string) =>
-          (...args: any[]) => {
-            // Call original
-            (original as any)[level](...args);
-
-            // Store for retrieval
-            const message = args
-              .map(arg =>
-                typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
-              )
-              .join(' ');
-
-            (globalThis as any).__interceptedLogs.push({
-              level,
-              message,
-              timestamp: Date.now(),
-            });
-          };
-
-        console.log = intercept('info');
-        console.info = intercept('info');
-        console.warn = intercept('warn');
-        console.error = intercept('error');
-
-        console.log('Console interception enabled');
+      // Enable debug logging via storage flag (writes to both console and storage)
+      await sw.evaluate(async () => {
+        const api =
+          (globalThis as any).chrome?.storage ??
+          (globalThis as any).browser?.storage;
+        await (api.sync ?? api.local).set({ debugLogging: true });
       });
 
-      tee?.info('Console interception installed');
+      tee?.info('Test logging enabled in service worker');
 
-      // Poll for logs every 50ms
+      // Track the last processed log index to avoid duplicates
+      let lastProcessedIndex = 0;
+
+      // Poll storage.local for logs every 50ms
       const pollLogs = async () => {
         try {
-          const logs = await sw.evaluate(() => {
-            const logs = (globalThis as any).__interceptedLogs || [];
-            (globalThis as any).__interceptedLogs = []; // Clear
-            return logs;
+          // Read logs from storage.local via service worker
+          const logs = await sw.evaluate(async () => {
+            const api =
+              (globalThis as any).chrome?.storage ??
+              (globalThis as any).browser?.storage;
+            const result = await api.local.get('__testLogs');
+            return result.__testLogs || [];
           });
 
-          logs.forEach((log: any) => {
+          // Process only new logs since last poll
+          const newLogs = logs.slice(lastProcessedIndex);
+          lastProcessedIndex = logs.length;
+
+          newLogs.forEach((log: any) => {
             const { level, message } = log;
             switch (level) {
               case 'error':
@@ -252,13 +247,13 @@ export async function launchExtension(
 
       pollLogs();
     } catch (error) {
-      tee?.error(`Failed to setup console interception: ${error}`);
+      tee?.error(`Failed to setup storage log polling: ${error}`);
     }
   };
 
-  // Setup interception only when logger is active
+  // Setup log polling only when logger is active
   if (currentTeeLogger) {
-    setupConsoleInterception();
+    setupStorageLogPolling();
   }
 
   if (process.env.TEST_SW_LOG) {
@@ -335,6 +330,13 @@ export function logSwTestResult(
     meta?.retry !== undefined ? `retry=${meta.retry}` : undefined,
   ].filter(Boolean) as string[];
   currentTeeLogger.info(parts.join(' '));
+}
+
+// Clean up test logging at the end of a test
+export async function cleanupTestLogging(
+  context: BrowserContext
+): Promise<void> {
+  await cleanupTestLogs(context);
 }
 
 export async function getExtensionId(context: BrowserContext): Promise<string> {

@@ -9,6 +9,7 @@ import {
   type IntentionIndex,
   type IntentionScopeId,
 } from '../components/intention';
+import { debugLog, setDebugLogging } from '../components/debugLogging';
 import { storage, type InactivityMode } from '../components/storage';
 import {
   createTimestamp,
@@ -263,14 +264,6 @@ export default defineBackground(async () => {
   // Settings variables
   let inactivityMode: InactivityMode = 'off';
   let inactivityTimeoutMs: TimeoutMs = minutesToMs(30) as TimeoutMs;
-  let debugLogging = false;
-
-  // Debug logging helper - gates logs based on debugLogging flag
-  const log = (...args: unknown[]) => {
-    if (debugLogging) {
-      console.log(...args);
-    }
-  };
 
   console.log('[Intender] Background service worker started');
 
@@ -289,7 +282,7 @@ export default defineBackground(async () => {
     if (intentionIndexReady) return;
     const MAX_WAIT_MS = 5000;
     const start = Date.now();
-    log('[Intender] Cold window: waiting for intentionIndex to be ready');
+    debugLog('[Intender] Cold window: waiting for intentionIndex to be ready');
     while (!intentionIndexReady) {
       if (Date.now() - start > MAX_WAIT_MS) {
         console.error(
@@ -299,13 +292,16 @@ export default defineBackground(async () => {
       }
       await new Promise(resolve => setTimeout(resolve, 10));
     }
-    log('[Intender] Cold window: intentionIndex is now ready, continuing');
+    debugLog('[Intender] Cold window: intentionIndex is now ready, continuing');
   }
 
   // Initialize functions that will be used by listeners
   const updateIntentionScopeActivity = (intentionScopeId: IntentionScopeId) => {
     lastActiveByScope.set(intentionScopeId, createTimestamp());
-    log('[Intender] Updated activity for intention scope:', intentionScopeId);
+    debugLog(
+      '[Intender] Updated activity for intention scope:',
+      intentionScopeId
+    );
     cleanupNavDecisionCache();
     persistSession();
   };
@@ -405,7 +401,7 @@ export default defineBackground(async () => {
         return { kind: 'allow', reason: 'intention-completed' };
       }
     } catch (error) {
-      log(
+      debugLog(
         '[Intender] Failed to parse target URL for intention completion token:',
         error
       );
@@ -482,7 +478,7 @@ export default defineBackground(async () => {
     // 1. intentionScopePerTabId if present
     const mappedScope = intentionScopePerTabId.get(tabId);
     if (mappedScope) {
-      log('[Intender] getScopeForTab: mapped scope', {
+      debugLog('[Intender] getScopeForTab: mapped scope', {
         tabId,
         mappedScope,
       });
@@ -494,7 +490,7 @@ export default defineBackground(async () => {
     const resolvedUrl = url || cachedUrl;
     if (resolvedUrl) {
       const scopeFromUrl = lookupIntentionScopeId(resolvedUrl);
-      log('[Intender] getScopeForTab: from URL', {
+      debugLog('[Intender] getScopeForTab: from URL', {
         tabId,
         url: resolvedUrl,
         scopeFromUrl: scopeFromUrl || null,
@@ -503,7 +499,7 @@ export default defineBackground(async () => {
     }
 
     // 3. otherwise return null
-    log('[Intender] getScopeForTab: unresolved', { tabId });
+    debugLog('[Intender] getScopeForTab: unresolved', { tabId });
     return null;
   };
 
@@ -530,7 +526,7 @@ export default defineBackground(async () => {
     const now = createTimestamp();
     const isInactive = now - lastActive >= (timeoutMs as number);
 
-    log('[Intender] Inactivity check:', {
+    debugLog('[Intender] Inactivity check:', {
       scopeId,
       lastActive,
       now,
@@ -554,7 +550,7 @@ export default defineBackground(async () => {
 
     // Check cooldown
     if (lastRedirect && now - lastRedirect < REDIRECT_COOLDOWN_MS) {
-      log('[Intender] Redirect cooldown active, skipping:', {
+      debugLog('[Intender] Redirect cooldown active, skipping:', {
         tabId,
         lastRedirect,
         now,
@@ -568,14 +564,14 @@ export default defineBackground(async () => {
     try {
       await browser.tabs.update(tabId, { url: redirectUrl });
       lastRedirectAtByTabId.set(tabId, now);
-      log('[Intender] Redirected to intention page:', {
+      debugLog('[Intender] Redirected to intention page:', {
         tabId,
         targetUrl,
         toScope,
       });
       return true;
     } catch (error) {
-      log('[Intender] Failed to redirect to intention page:', error);
+      debugLog('[Intender] Failed to redirect to intention page:', error);
       return false;
     }
   }
@@ -600,7 +596,7 @@ export default defineBackground(async () => {
     const fromScope = fromTabId ? getScopeForTab(fromTabId) : null;
     const toScope = getScopeForTab(toTabId, toUrl);
 
-    log('[Intender] Focus change:', {
+    debugLog('[Intender] Focus change:', {
       windowId,
       fromTabId,
       toTabId,
@@ -612,7 +608,7 @@ export default defineBackground(async () => {
 
     // FAST PATH: Same-scope switch - skip inactivity check entirely
     if (fromScope && toScope && fromScope === toScope) {
-      log('[Intender] Same-scope switch detected, fast path:', {
+      debugLog('[Intender] Same-scope switch detected, fast path:', {
         scope: toScope,
         fromScope,
         toScope,
@@ -629,7 +625,9 @@ export default defineBackground(async () => {
     // Guard: if the target tab URL is already the intention page URL, skip redirect
     const resolvedUrl = toUrl || tabUrlMap.get(toTabId);
     if (resolvedUrl && resolvedUrl.startsWith(intentionPageUrl)) {
-      log('[Intender] Target tab already on intention page, skipping redirect');
+      debugLog(
+        '[Intender] Target tab already on intention page, skipping redirect'
+      );
       return;
     }
 
@@ -641,7 +639,7 @@ export default defineBackground(async () => {
         inactivityTimeoutMs
       )
     ) {
-      log('[Intender] Triggering inactivity redirect for scope:', toScope);
+      debugLog('[Intender] Triggering inactivity redirect for scope:', toScope);
 
       if (resolvedUrl && toScope) {
         await redirectToIntentionPage(toTabId, resolvedUrl, toScope);
@@ -657,7 +655,7 @@ export default defineBackground(async () => {
     try {
       chrome.idle.setDetectionInterval(timeoutSeconds);
     } catch (e) {
-      log('[Intender] Failed to set idle detection interval:', e);
+      debugLog('[Intender] Failed to set idle detection interval:', e);
     }
   }
 
@@ -691,7 +689,9 @@ export default defineBackground(async () => {
         }
 
         if (focusedWindowId === null) {
-          log('[Intender] Inactivity: no focused window at idle, skipping');
+          debugLog(
+            '[Intender] Inactivity: no focused window at idle, skipping'
+          );
           return;
         }
 
@@ -718,7 +718,7 @@ export default defineBackground(async () => {
         // Redirect to intention page
         await redirectToIntentionPage(tabId, url, intentionScopeId);
       } catch (error) {
-        log('[Intender] Inactivity check failed:', error);
+        debugLog('[Intender] Inactivity check failed:', error);
       }
       return;
     }
@@ -759,13 +759,13 @@ export default defineBackground(async () => {
     // Handle audible state changes - update activity when audio starts/stops
     if (changeInfo.audible !== undefined) {
       if (changeInfo.audible) {
-        log('[Intender] Tab became audible, bumping activity:', {
+        debugLog('[Intender] Tab became audible, bumping activity:', {
           tabId,
           intentionScopeId: intentionScopeId || 'unknown',
         });
         if (intentionScopeId) updateIntentionScopeActivity(intentionScopeId);
       } else {
-        log('[Intender] Tab stopped being audible, bumping activity:', {
+        debugLog('[Intender] Tab stopped being audible, bumping activity:', {
           tabId,
           intentionScopeId: intentionScopeId || 'unknown',
         });
@@ -778,7 +778,7 @@ export default defineBackground(async () => {
   browser.tabs.onCreated.addListener(tab => {
     if (tab.id !== undefined && typeof tab.url === 'string') {
       tabUrlMap.set(numberToTabId(tab.id), tab.url);
-      log('[Intender] Tab created, cached URL:', {
+      debugLog('[Intender] Tab created, cached URL:', {
         tabId: tab.id,
         url: tab.url,
       });
@@ -801,7 +801,7 @@ export default defineBackground(async () => {
     tabUrlMap.set(tabId, details.url);
     persistSession();
 
-    log('[Intender] Navigation committed, updated cache:', {
+    debugLog('[Intender] Navigation committed, updated cache:', {
       tabId: details.tabId,
       url: details.url,
     });
@@ -826,7 +826,7 @@ export default defineBackground(async () => {
         await browser.tabs.update(details.tabId, { url: decision.redirectTo });
         return;
       } catch (e) {
-        log('[Intender] Post-commit redirect attempt failed:', e);
+        debugLog('[Intender] Post-commit redirect attempt failed:', e);
       }
     }
 
@@ -837,7 +837,7 @@ export default defineBackground(async () => {
       intentionScopePerTabId.set(tabId, scopeId);
       persistSession();
       updateIntentionScopeActivity(scopeId);
-      log('[Intender] Navigation committed to scoped page, set scope:', {
+      debugLog('[Intender] Navigation committed to scoped page, set scope:', {
         tabId: details.tabId,
         scopeId,
       });
@@ -845,7 +845,7 @@ export default defineBackground(async () => {
       const priorScope = intentionScopePerTabId.get(tabId);
       if (priorScope) {
         intentionScopePerTabId.delete(tabId);
-        log(
+        debugLog(
           '[Intender] Navigation committed away from scoped page, cleared scope:',
           {
             tabId: details.tabId,
@@ -867,7 +867,7 @@ export default defineBackground(async () => {
     lastRedirectAtByTabId.delete(tId);
     persistSession();
 
-    log('[Intender] Tab removed, cleared cache:', { tabId });
+    debugLog('[Intender] Tab removed, cleared cache:', { tabId });
   });
 
   // Handle tab replacement (e.g., prerender activation swaps tab IDs)
@@ -891,7 +891,7 @@ export default defineBackground(async () => {
     lastRedirectAtByTabId.delete(removed);
     persistSession();
 
-    log('[Intender] Tab replaced:', {
+    debugLog('[Intender] Tab replaced:', {
       addedTabId,
       removedTabId,
       migratedUrl: removedUrl || null,
@@ -910,7 +910,7 @@ export default defineBackground(async () => {
       persistSession();
     }
 
-    log('[Intender] Window focus changed:', {
+    debugLog('[Intender] Window focus changed:', {
       prevWindowId,
       newWindowId: windowId,
     });
@@ -921,7 +921,7 @@ export default defineBackground(async () => {
           tabId: t as unknown as number,
         })
       );
-      log(
+      debugLog(
         '[Intender] browser.windows.onFocusChanged - lastFocusedWindowId map snapshot',
         {
           lastFocusedWindowId,
@@ -962,7 +962,7 @@ export default defineBackground(async () => {
       // Determine if fallback is needed: no cached tab OR cached tab has no scope
       const willUseFallback = prevWindowId && (!cachedFromTabId || !fromScope);
 
-      log('[Intender] Window focus fromTabId resolution:', {
+      debugLog('[Intender] Window focus fromTabId resolution:', {
         prevWindowId,
         cachedFromTabId,
         fromScope,
@@ -976,7 +976,7 @@ export default defineBackground(async () => {
         try {
           // WindowId is just a branded number, cast it back to number for the query
           const prevWindowIdNumber = windowIdToNumber(prevWindowId);
-          log(
+          debugLog(
             '[Intender] Attempting fallback query for window:',
             prevWindowIdNumber
           );
@@ -998,7 +998,7 @@ export default defineBackground(async () => {
               // Update cache to keep it warm
               lastActiveTabIdByWindow.set(prevWindowId, fallbackTabId);
 
-              log('[Intender] Fallback from-bump successful:', {
+              debugLog('[Intender] Fallback from-bump successful:', {
                 fallbackTabId,
                 fallbackFromScope,
                 updatedCache: true,
@@ -1007,13 +1007,13 @@ export default defineBackground(async () => {
               // Use the fallback tab for further processing
               fromTabId = fallbackTabId;
             } else {
-              log('[Intender] Fallback tab has no scope');
+              debugLog('[Intender] Fallback tab has no scope');
             }
           } else {
-            log('[Intender] Fallback query found no active tab');
+            debugLog('[Intender] Fallback query found no active tab');
           }
         } catch (fallbackError) {
-          log('[Intender] Fallback query failed:', fallbackError);
+          debugLog('[Intender] Fallback query failed:', fallbackError);
         }
       }
 
@@ -1025,7 +1025,7 @@ export default defineBackground(async () => {
         windowId: currentWindowId,
       });
     } catch (error) {
-      log('[Intender] Failed to handle window focus change:', error);
+      debugLog('[Intender] Failed to handle window focus change:', error);
     }
   });
 
@@ -1041,7 +1041,7 @@ export default defineBackground(async () => {
 
     persistSession();
 
-    log('[Intender] Window removed, cleared tracking:', { windowId });
+    debugLog('[Intender] Window removed, cleared tracking:', { windowId });
   });
 
   browser.webNavigation.onBeforeNavigate.addListener(async details => {
@@ -1068,7 +1068,7 @@ export default defineBackground(async () => {
       : null;
 
     // Development logging
-    log('[Intender] Navigation check:', {
+    debugLog('[Intender] Navigation check:', {
       targetUrl,
       sourceUrl: sourceUrl || 'null',
       sourceTabId: details.tabId,
@@ -1101,7 +1101,9 @@ export default defineBackground(async () => {
       // Track scope and redirect
       const matched = lookupIntention(targetUrl, intentionIndex);
       if (!matched) {
-        log('[Intender] Race: intention removed between decision and redirect');
+        debugLog(
+          '[Intender] Race: intention removed between decision and redirect'
+        );
         return;
       }
       const targetIntentionScopeId = intentionToIntentionScopeId(matched);
@@ -1113,7 +1115,7 @@ export default defineBackground(async () => {
       try {
         await browser.tabs.update(details.tabId, { url: decision.redirectTo });
       } catch (error) {
-        log('[Intender] Tab update failed, tab may be closed:', error);
+        debugLog('[Intender] Tab update failed, tab may be closed:', error);
       }
       return;
     }
@@ -1122,21 +1124,32 @@ export default defineBackground(async () => {
   // E2E only: force the same logic as idle without relying on OS idle in automation.
   // Rationale: In MV3 tests, timers can be suspended and OS idle often doesn't flip.
   // This hook lets tests trigger the same per-scope path from an extension page.
-  browser.runtime.onMessage.addListener(async (message: unknown) => {
-    const msg = message as { type?: string } | null | undefined;
-    if (!msg || typeof msg.type !== 'string') return;
-    if (msg.type === 'e2e:forceInactivityCheck-idle') {
-      e2eDisableOSIdle = true;
-      toggleIdleDetection(inactivityMode);
-      await inactivityChange('idle');
-    } else if (msg.type === 'e2e:setOsIdle') {
-      const m = message as { type: 'e2e:setOsIdle'; enabled?: boolean };
-      const enabled = m.enabled === true;
-      e2eDisableOSIdle = !enabled;
-      log('[Intender] E2E setOsIdle =>', { enabled, e2eDisableOSIdle });
-      toggleIdleDetection(inactivityMode);
+  browser.runtime.onMessage.addListener(
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore - webextension-polyfill types are too strict; returning true|void is valid
+    (
+      message: unknown,
+      _sender: unknown,
+      sendResponse: (response: unknown) => void
+    ) => {
+      const msg = message as { type?: string } | null | undefined;
+      if (!msg || typeof msg.type !== 'string') return;
+
+      if (msg.type === 'e2e:forceInactivityCheck-idle') {
+        e2eDisableOSIdle = true;
+        toggleIdleDetection(inactivityMode);
+        inactivityChange('idle');
+        return;
+      } else if (msg.type === 'e2e:setOsIdle') {
+        const m = message as { type: 'e2e:setOsIdle'; enabled?: boolean };
+        const enabled = m.enabled === true;
+        e2eDisableOSIdle = !enabled;
+        debugLog('[Intender] E2E setOsIdle =>', { enabled, e2eDisableOSIdle });
+        toggleIdleDetection(inactivityMode);
+        return;
+      }
     }
-  });
+  ) as unknown as Parameters<typeof browser.runtime.onMessage.addListener>[0];
 
   // Refresh cached intentions and inactivity settings when storage changes
   browser.storage.onChanged.addListener(async changes => {
@@ -1156,7 +1169,7 @@ export default defineBackground(async () => {
               intentionScopePerTabId.set(tabId, newScope);
               if (priorScope === null || priorScope !== newScope) {
                 updateIntentionScopeActivity(newScope);
-                log(
+                debugLog(
                   '[Intender] Intentions changed: mapped tab to scope and updated activity',
                   {
                     tabId: tabIdToNumber(tabId),
@@ -1168,7 +1181,7 @@ export default defineBackground(async () => {
               }
             } else if (priorScope) {
               intentionScopePerTabId.delete(tabId);
-              log(
+              debugLog(
                 '[Intender] Intentions changed: cleared scope mapping for tab',
                 {
                   tabId: tabIdToNumber(tabId),
@@ -1179,7 +1192,7 @@ export default defineBackground(async () => {
             }
           }
         } catch (e) {
-          log(
+          debugLog(
             '[Intender] Failed to refresh mappings after intentions change:',
             e
           );
@@ -1200,14 +1213,11 @@ export default defineBackground(async () => {
         toggleIdleDetection(inactivityMode);
       }
 
-      // Debug logging updated
+      // Debug logging updated (controls both console and storage logging)
       if (changes.debugLogging) {
         const { debugLogging: newDebugLogging } = await storage.get();
-        debugLogging = newDebugLogging ?? false;
-        console.log(
-          '[Intender] Debug logging:',
-          debugLogging ? 'enabled' : 'disabled'
-        );
+        const enabled = newDebugLogging ?? false;
+        setDebugLogging(enabled);
       }
     } catch (error) {
       console.error('[Intender] Failed handling storage change:', error);
@@ -1223,7 +1233,7 @@ export default defineBackground(async () => {
     const focusedWindow = windows.find(w => w.focused);
     if (focusedWindow && typeof focusedWindow.id === 'number') {
       lastFocusedWindowId = numberToWindowId(focusedWindow.id);
-      log('[Intender] Initialized focused window:', lastFocusedWindowId);
+      debugLog('[Intender] Initialized focused window:', lastFocusedWindowId);
 
       // Seed lastActiveTabIdByWindow for the focused window
       try {
@@ -1234,18 +1244,18 @@ export default defineBackground(async () => {
         if (activeTab && typeof activeTab.id === 'number') {
           const activeTabId = numberToTabId(activeTab.id);
           lastActiveTabIdByWindow.set(lastFocusedWindowId, activeTabId);
-          log('[Intender] Seeded active tab for focused window:', {
+          debugLog('[Intender] Seeded active tab for focused window:', {
             windowId: lastFocusedWindowId,
             tabId: activeTabId,
           });
           persistSession();
         }
       } catch (tabError) {
-        log('[Intender] Failed to seed active tab:', tabError);
+        debugLog('[Intender] Failed to seed active tab:', tabError);
       }
     }
   } catch (error) {
-    log('[Intender] Failed to initialize window focus:', error);
+    debugLog('[Intender] Failed to initialize window focus:', error);
   }
 
   // Load intentions and settings on startup
@@ -1262,7 +1272,7 @@ export default defineBackground(async () => {
 
     inactivityMode = storedInactivityMode as InactivityMode;
     inactivityTimeoutMs = storedInactivityTimeoutMs as TimeoutMs;
-    debugLogging = storedDebugLogging;
+    setDebugLogging(storedDebugLogging);
     updateIdleDetectionInterval(inactivityTimeoutMs);
     toggleIdleDetection(inactivityMode);
 
