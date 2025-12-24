@@ -1127,7 +1127,7 @@ export default defineBackground(async () => {
   browser.runtime.onMessage.addListener(
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore - webextension-polyfill types are too strict; returning true|void is valid
-    (
+    async (
       message: unknown,
       _sender: unknown,
       sendResponse: (response: unknown) => void
@@ -1138,7 +1138,7 @@ export default defineBackground(async () => {
       if (msg.type === 'e2e:forceInactivityCheck-idle') {
         e2eDisableOSIdle = true;
         toggleIdleDetection(inactivityMode);
-        inactivityChange('idle');
+        await inactivityChange('idle');
         return;
       } else if (msg.type === 'e2e:setOsIdle') {
         const m = message as { type: 'e2e:setOsIdle'; enabled?: boolean };
