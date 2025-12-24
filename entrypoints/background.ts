@@ -25,12 +25,6 @@ import {
   type Timestamp,
 } from '../components/time';
 
-// Expose storage logging functions for E2E tests
-(globalThis as any).__enableTestLogging = enableStorageLogging;
-(globalThis as any).__disableTestLogging = disableStorageLogging;
-(globalThis as any).__flushTestLogs = flushStorageLogs;
-(globalThis as any).__clearTestLogs = clearStorageLogs;
-
 // Branded type for tab ID
 export type TabId = Brand<number, 'TabId'>;
 
@@ -1137,21 +1131,50 @@ export default defineBackground(async () => {
   // E2E only: force the same logic as idle without relying on OS idle in automation.
   // Rationale: In MV3 tests, timers can be suspended and OS idle often doesn't flip.
   // This hook lets tests trigger the same per-scope path from an extension page.
-  browser.runtime.onMessage.addListener(async (message: unknown) => {
-    const msg = message as { type?: string } | null | undefined;
-    if (!msg || typeof msg.type !== 'string') return;
-    if (msg.type === 'e2e:forceInactivityCheck-idle') {
-      e2eDisableOSIdle = true;
-      toggleIdleDetection(inactivityMode);
-      await inactivityChange('idle');
-    } else if (msg.type === 'e2e:setOsIdle') {
-      const m = message as { type: 'e2e:setOsIdle'; enabled?: boolean };
-      const enabled = m.enabled === true;
-      e2eDisableOSIdle = !enabled;
-      debugLog('[Intender] E2E setOsIdle =>', { enabled, e2eDisableOSIdle });
-      toggleIdleDetection(inactivityMode);
+  browser.runtime.onMessage.addListener(
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore - webextension-polyfill types are too strict; returning true|void is valid
+    (
+      message: unknown,
+      _sender: unknown,
+      sendResponse: (response: unknown) => void
+    ) => {
+      const msg = message as { type?: string } | null | undefined;
+      if (!msg || typeof msg.type !== 'string') return;
+
+      if (msg.type === 'e2e:forceInactivityCheck-idle') {
+        e2eDisableOSIdle = true;
+        toggleIdleDetection(inactivityMode);
+        inactivityChange('idle');
+        return;
+      } else if (msg.type === 'e2e:setOsIdle') {
+        const m = message as { type: 'e2e:setOsIdle'; enabled?: boolean };
+        const enabled = m.enabled === true;
+        e2eDisableOSIdle = !enabled;
+        debugLog('[Intender] E2E setOsIdle =>', { enabled, e2eDisableOSIdle });
+        toggleIdleDetection(inactivityMode);
+        return;
+      } else if (msg.type === 'e2e:enableStorageLogging') {
+        enableStorageLogging();
+        sendResponse({ success: true });
+        return;
+      } else if (msg.type === 'e2e:disableStorageLogging') {
+        disableStorageLogging();
+        sendResponse({ success: true });
+        return;
+      } else if (msg.type === 'e2e:flushStorageLogs') {
+        flushStorageLogs().then(() => {
+          sendResponse({ success: true });
+        });
+        return true; // Keep channel open for async response
+      } else if (msg.type === 'e2e:clearStorageLogs') {
+        clearStorageLogs().then(() => {
+          sendResponse({ success: true });
+        });
+        return true; // Keep channel open for async response
+      }
     }
-  });
+  ) as unknown as Parameters<typeof browser.runtime.onMessage.addListener>[0];
 
   // Refresh cached intentions and inactivity settings when storage changes
   browser.storage.onChanged.addListener(async changes => {

@@ -1,0 +1,35 @@
+Winston tee logger initialized
+Found service worker: chrome-extension://ccphgnhbcdhicokgbngpfobhfnbnmjad/background.js
+Console interception installed
+Console interception enabled
+[Intender] Cold window: intentionIndex is now ready, continuing
+[Intender] Cold window: intentionIndex is now ready, continuing
+[Intender] Navigation check: {"targetUrl":"about:blank","sourceUrl":"about:blank","sourceTabId":933988462,"navigationTabId":933988462,"activeTabId":933988462,"activeTabUrl":"about:blank","isNavigationTabActive":true,"frameId":0}
+[Intender] Cold window: intentionIndex is now ready, continuing
+[Intender] Navigation committed, updated cache: {"tabId":933988462,"url":"about:blank"}
+[Intender] getScopeForTab: from URL {"tabId":933988462,"url":"about:blank","scopeFromUrl":null}
+[Intender] Navigation committed, updated cache: {"tabId":933988462,"url":"chrome-extension://ccphgnhbcdhicokgbngpfobhfnbnmjad/settings.html"}
+[Intender] getScopeForTab: from URL {"tabId":933988462,"url":"chrome-extension://ccphgnhbcdhicokgbngpfobhfnbnmjad/settings.html","scopeFromUrl":null}
+[Intender] getScopeForTab: from URL {"tabId":933988462,"url":"chrome-extension://ccphgnhbcdhicokgbngpfobhfnbnmjad/settings.html","scopeFromUrl":null}
+[Intender] Tab created, cached URL: {"tabId":933988463,"url":""}
+[Intender] getScopeForTab: from URL {"tabId":933988462,"url":"chrome-extension://ccphgnhbcdhicokgbngpfobhfnbnmjad/settings.html","scopeFromUrl":null}
+[Intender] getScopeForTab: unresolved {"tabId":933988463}
+[Intender] Focus change: {"windowId":933988460,"fromTabId":933988462,"toTabId":933988463,"toUrl":"","fromScope":null,"toScope":null,"scopeComparison":"SAME"}
+[Intender] getScopeForTab: unresolved {"tabId":933988463}
+[Intender] Navigation check: {"targetUrl":"about:blank","sourceUrl":"null","sourceTabId":933988463,"navigationTabId":933988463,"activeTabId":933988463,"activeTabUrl":"null","isNavigationTabActive":true,"frameId":0}
+[Intender] Navigation committed, updated cache: {"tabId":933988463,"url":"about:blank"}
+[Intender] getScopeForTab: from URL {"tabId":933988463,"url":"about:blank","scopeFromUrl":null}
+[Intender] Navigation check: {"targetUrl":"https://google.com/","sourceUrl":"about:blank","sourceTabId":933988463,"navigationTabId":933988463,"activeTabId":933988463,"activeTabUrl":"about:blank","isNavigationTabActive":true,"frameId":0}
+[Intender] getScopeForTab: mapped scope {"tabId":933988463,"mappedScope":"755b616b-5244-4a1b-b294-9c5c484038b4"}
+[Intender] Navigation committed, updated cache: {"tabId":933988463,"url":"chrome-extension://ccphgnhbcdhicokgbngpfobhfnbnmjad/intention-page.html?target=https%3A%2F%2Fgoogle.com%2F&intentionScopeId=755b616b-5244-4a1b-b294-9c5c484038b4"}
+[Intender] Navigation committed away from scoped page, cleared scope: {"tabId":933988463,"priorScope":"755b616b-5244-4a1b-b294-9c5c484038b4"}
+[Intender] getScopeForTab: from URL {"tabId":933988463,"url":"chrome-extension://ccphgnhbcdhicokgbngpfobhfnbnmjad/intention-page.html?target=https%3A%2F%2Fgoogle.com%2F&intentionScopeId=755b616b-5244-4a1b-b294-9c5c484038b4","scopeFromUrl":null}
+[Intender] Navigation check: {"targetUrl":"https://google.com/?intention_completed_53c5890=true","sourceUrl":"chrome-extension://ccphgnhbcdhicokgbngpfobhfnbnmjad/intention-page.html?target=https%3A%2F%2Fgoogle.com%2F&intentionScopeId=755b616b-5244-4a1b-b294-9c5c484038b4","sourceTabId":933988463,"navigationTabId":933988463,"activeTabId":933988463,"activeTabUrl":"chrome-extension://ccphgnhbcdhicokgbngpfobhfnbnmjad/intention-page.html?target=https%3A%2F%2Fgoogle.com%2F&intentionScopeId=755b616b-5244-4a1b-b294-9c5c484038b4","isNavigationTabActive":true,"frameId":0}
+[Intender] getScopeForTab: from URL {"tabId":933988463,"url":"chrome-extension://ccphgnhbcdhicokgbngpfobhfnbnmjad/intention-page.html?target=https%3A%2F%2Fgoogle.com%2F&intentionScopeId=755b616b-5244-4a1b-b294-9c5c484038b4","scopeFromUrl":null}
+[Intender] Navigation committed, updated cache: {"tabId":933988463,"url":"https://www.google.com/?intention_completed_53c5890=true"}
+[Intender] Updated activity for intention scope: 755b616b-5244-4a1b-b294-9c5c484038b4
+[Intender] Navigation committed to scoped page, set scope: {"tabId":933988463,"scopeId":"755b616b-5244-4a1b-b294-9c5c484038b4"}
+[Intender] getScopeForTab: mapped scope {"tabId":933988463,"mappedScope":"755b616b-5244-4a1b-b294-9c5c484038b4"}
+[Intender] getScopeForTab: mapped scope {"tabId":933988463,"mappedScope":"755b616b-5244-4a1b-b294-9c5c484038b4"}
+[RESULT] PASSED testName=test_0_1766504302042 title=test-26: add intention, get intention page, type phrase, and enter repeat=0 retry=0
+[Intender] getScopeForTab: mapped scope {"tabId":933988463,"mappedScope":"755b616b-5244-4a1b-b294-9c5c484038b4"}

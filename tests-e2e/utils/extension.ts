@@ -140,21 +140,27 @@ async function cleanupTestLogs(context: BrowserContext): Promise<void> {
   try {
     const sw = context.serviceWorkers()[0];
     if (sw) {
-      // Flush any remaining logs
+      // Flush any remaining logs via message
       await sw.evaluate(async () => {
-        if (typeof (globalThis as any).__flushTestLogs === 'function') {
-          await (globalThis as any).__flushTestLogs();
-        }
+        const api =
+          (globalThis as any).chrome?.runtime ??
+          (globalThis as any).browser?.runtime;
+        await api.sendMessage({
+          type: 'e2e:flushStorageLogs',
+        });
       });
 
       // Small delay to ensure flush completes
       await new Promise(resolve => setTimeout(resolve, 150));
 
-      // Disable logging
-      await sw.evaluate(() => {
-        if (typeof (globalThis as any).__disableTestLogging === 'function') {
-          (globalThis as any).__disableTestLogging();
-        }
+      // Disable logging via message
+      await sw.evaluate(async () => {
+        const api =
+          (globalThis as any).chrome?.runtime ??
+          (globalThis as any).browser?.runtime;
+        await api.sendMessage({
+          type: 'e2e:disableStorageLogging',
+        });
       });
     }
   } catch (error) {
@@ -202,11 +208,14 @@ export async function launchExtension(
 
       tee?.info(`Found service worker: ${sw.url()}`);
 
-      // Enable test logging in the service worker
-      await sw.evaluate(() => {
-        if (typeof (globalThis as any).__enableTestLogging === 'function') {
-          (globalThis as any).__enableTestLogging();
-        }
+      // Enable storage logging via message (sent from within extension context)
+      await sw.evaluate(async () => {
+        const api =
+          (globalThis as any).chrome?.runtime ??
+          (globalThis as any).browser?.runtime;
+        await api.sendMessage({
+          type: 'e2e:enableStorageLogging',
+        });
       });
 
       tee?.info('Test logging enabled in service worker');
