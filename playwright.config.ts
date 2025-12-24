@@ -20,7 +20,7 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: isThrottled ? 1 : process.env.CI ? 2 : undefined, // Single worker when throttled
-  reporter: [['list']],
+  reporter: [['list'], ['./tests-e2e/ai-reporter.ts']],
   expect: {
     timeout: 15000,
   },

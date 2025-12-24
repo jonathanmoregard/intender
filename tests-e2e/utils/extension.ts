@@ -376,3 +376,78 @@ export async function waitForSyncStorageChange(
   }, keys);
   await page.evaluate(() => window.__waitForStorageChange);
 }
+
+/**
+ * Retrieves service worker logs from storage for attachment to test results.
+ * This works cross-browser by reading from storage.local via the extension context.
+ */
+export async function getServiceWorkerLogs(
+  context: BrowserContext
+): Promise<string> {
+  try {
+    // Try service worker first (Chrome MV3)
+    const sw =
+      context.serviceWorkers()[0] ||
+      (await context
+        .waitForEvent('serviceworker', { timeout: 2000 })
+        .catch(() => null));
+
+    if (sw) {
+      const logs = await sw.evaluate(async () => {
+        const api =
+          (globalThis as any).chrome?.storage ??
+          (globalThis as any).browser?.storage;
+        const result = await api.local.get('__testLogs');
+        return (
+          (result.__testLogs as Array<{
+            level: string;
+            message: string;
+            timestamp: number;
+          }>) || []
+        );
+      });
+
+      // Format logs as timestamped lines
+      return logs
+        .map(
+          log =>
+            `[${new Date(log.timestamp).toISOString()}] [${log.level.toUpperCase()}] ${log.message}`
+        )
+        .join('\n');
+    }
+
+    // Fallback to background page (Firefox MV2)
+    const bgPage =
+      context.backgroundPages()[0] ||
+      (await context
+        .waitForEvent('backgroundpage', { timeout: 2000 })
+        .catch(() => null));
+
+    if (bgPage) {
+      const logs = await bgPage.evaluate(async () => {
+        const api =
+          (globalThis as any).chrome?.storage ??
+          (globalThis as any).browser?.storage;
+        const result = await api.local.get('__testLogs');
+        return (
+          (result.__testLogs as Array<{
+            level: string;
+            message: string;
+            timestamp: number;
+          }>) || []
+        );
+      });
+
+      return logs
+        .map(
+          log =>
+            `[${new Date(log.timestamp).toISOString()}] [${log.level.toUpperCase()}] ${log.message}`
+        )
+        .join('\n');
+    }
+
+    return '(Could not access extension context to retrieve logs)';
+  } catch (error) {
+    return `(Error retrieving logs: ${String(error)})`;
+  }
+}
