@@ -9,14 +9,7 @@ import {
   type IntentionIndex,
   type IntentionScopeId,
 } from '../components/intention';
-import {
-  debugLog,
-  setConsoleLogging,
-  enableStorageLogging,
-  disableStorageLogging,
-  flushStorageLogs,
-  clearStorageLogs,
-} from '../components/logging';
+import { debugLog, setDebugLogging } from '../components/debugLogging';
 import { storage, type InactivityMode } from '../components/storage';
 import {
   createTimestamp,
@@ -1154,24 +1147,6 @@ export default defineBackground(async () => {
         debugLog('[Intender] E2E setOsIdle =>', { enabled, e2eDisableOSIdle });
         toggleIdleDetection(inactivityMode);
         return;
-      } else if (msg.type === 'e2e:enableStorageLogging') {
-        enableStorageLogging();
-        sendResponse({ success: true });
-        return;
-      } else if (msg.type === 'e2e:disableStorageLogging') {
-        disableStorageLogging();
-        sendResponse({ success: true });
-        return;
-      } else if (msg.type === 'e2e:flushStorageLogs') {
-        flushStorageLogs().then(() => {
-          sendResponse({ success: true });
-        });
-        return true; // Keep channel open for async response
-      } else if (msg.type === 'e2e:clearStorageLogs') {
-        clearStorageLogs().then(() => {
-          sendResponse({ success: true });
-        });
-        return true; // Keep channel open for async response
       }
     }
   ) as unknown as Parameters<typeof browser.runtime.onMessage.addListener>[0];
@@ -1238,15 +1213,11 @@ export default defineBackground(async () => {
         toggleIdleDetection(inactivityMode);
       }
 
-      // Debug logging updated
+      // Debug logging updated (controls both console and storage logging)
       if (changes.debugLogging) {
         const { debugLogging: newDebugLogging } = await storage.get();
         const enabled = newDebugLogging ?? false;
-        setConsoleLogging(enabled);
-        console.log(
-          '[Intender] Debug logging:',
-          enabled ? 'enabled' : 'disabled'
-        );
+        setDebugLogging(enabled);
       }
     } catch (error) {
       console.error('[Intender] Failed handling storage change:', error);
@@ -1301,7 +1272,7 @@ export default defineBackground(async () => {
 
     inactivityMode = storedInactivityMode as InactivityMode;
     inactivityTimeoutMs = storedInactivityTimeoutMs as TimeoutMs;
-    setConsoleLogging(storedDebugLogging);
+    setDebugLogging(storedDebugLogging);
     updateIdleDetectionInterval(inactivityTimeoutMs);
     toggleIdleDetection(inactivityMode);
 
