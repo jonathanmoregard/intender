@@ -203,8 +203,9 @@ export async function launchExtension(
 
       tee?.info('Test logging enabled in service worker');
 
-      // Track the last processed log index to avoid duplicates
-      let lastProcessedIndex = 0;
+      // Track the last processed log timestamp to avoid duplicates
+      // Using timestamp instead of index handles truncation correctly
+      let lastProcessedTimestamp = 0;
 
       // Poll storage.local for logs every 50ms
       const pollLogs = async () => {
@@ -218,24 +219,28 @@ export async function launchExtension(
             return result.__testLogs || [];
           });
 
-          // Process only new logs since last poll
-          const newLogs = logs.slice(lastProcessedIndex);
-          lastProcessedIndex = logs.length;
-
-          newLogs.forEach((log: any) => {
-            const { level, message } = log;
-            switch (level) {
-              case 'error':
-                tee?.error(message);
-                break;
-              case 'warn':
-                tee?.warn(message);
-                break;
-              default:
-                tee?.info(message);
-                break;
+          // Process only logs with timestamp greater than last processed
+          // This handles truncation correctly - we only process new logs regardless of array position
+          // Single pass: process logs and track max timestamp simultaneously
+          let maxTimestamp = lastProcessedTimestamp;
+          for (const log of logs) {
+            if (log.timestamp > lastProcessedTimestamp) {
+              maxTimestamp = Math.max(maxTimestamp, log.timestamp);
+              const { level, message } = log;
+              switch (level) {
+                case 'error':
+                  tee?.error(message);
+                  break;
+                case 'warn':
+                  tee?.warn(message);
+                  break;
+                default:
+                  tee?.info(message);
+                  break;
+              }
             }
-          });
+          }
+          lastProcessedTimestamp = maxTimestamp;
         } catch (e) {
           // SW might be gone, stop polling
           return;
