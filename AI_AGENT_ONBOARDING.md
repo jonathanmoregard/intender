@@ -41,7 +41,6 @@ Read this text for future reference:
 Location: `tests-e2e/utils/extension.ts`
 
 - Enable via env: `TEST_SW_LOG=true` (disabled by default)
-- One log file per test with a sanitized name; files stored in `.test-results/logs/`
 - Automatic cleanup of logs older than 2 days
 - Service worker console is intercepted and teed into the per‑test file
 - Use with robustness checks to capture intermittent failures:
