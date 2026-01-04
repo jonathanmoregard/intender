@@ -1,4 +1,4 @@
-import browser from 'webextension-polyfill';
+import { storage } from './storage';
 
 // Single debug logging state - when enabled, writes to both console and storage
 let debugLoggingEnabled = false;
@@ -23,13 +23,13 @@ const flushLogs = async () => {
 
   try {
     // Read existing logs
-    const result = await browser.storage.local.get('__testLogs');
+    const result = await storage.local.get('__testLogs');
     const existing = (result.__testLogs as typeof logsToWrite) || [];
 
     // Append new logs (keep last 1000 to avoid storage limits)
     const combined = [...existing, ...logsToWrite].slice(-1000);
 
-    await browser.storage.local.set({ __testLogs: combined });
+    await storage.local.set({ __testLogs: combined });
   } catch (error) {
     console.error('[Intender] Failed to write logs to storage:', error);
   }

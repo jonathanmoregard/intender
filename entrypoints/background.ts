@@ -59,19 +59,6 @@ const lastActiveTabIdByWindow = new Map<WindowId, TabId>();
 let lastFocusedWindowId: WindowId | null = null;
 const lastRedirectAtByTabId = new Map<TabId, Timestamp>();
 
-// Cross-browser shim for storage.session (Firefox compatibility)
-const sessionStore = chrome?.storage?.session ?? {
-  async get() {
-    return {};
-  },
-  async set() {
-    /* no-op */
-  },
-  async remove() {
-    /* no-op */
-  },
-};
-
 // Utility helpers for session persistence
 const mapToObject = <K extends string | number | symbol, V>(
   input: Map<K, V>
@@ -100,7 +87,7 @@ const persistSession = () => {
   persistSessionScheduled = true;
   queueMicrotask(() => {
     persistSessionScheduled = false;
-    sessionStore
+    storage.session
       .set({
         tabUrlMap: mapToObject(tabUrlMap),
         intentionScopePerTabId: mapToObject(intentionScopePerTabId),
@@ -116,33 +103,49 @@ const persistSession = () => {
   });
 };
 
-// Flush session on teardown to prevent data loss
-chrome.runtime.onSuspend.addListener(() => {
-  try {
-    // Clean orphaned scopes before persisting
-    const activeScopes = new Set(intentionScopePerTabId.values());
-    for (const scope of lastActiveByScope.keys()) {
-      if (!activeScopes.has(scope)) {
-        lastActiveByScope.delete(scope);
-      }
+// Flush session on teardown to prevent data loss (Chrome-only API)
+if (
+  typeof (
+    globalThis as {
+      chrome?: {
+        runtime?: { onSuspend?: { addListener?: (cb: () => void) => void } };
+      };
     }
-    sessionStore.set({
-      tabUrlMap: mapToObject(tabUrlMap),
-      intentionScopePerTabId: mapToObject(intentionScopePerTabId),
-      lastActiveByScope: mapToObject(lastActiveByScope),
-      lastActiveTabIdByWindow: mapToObject(lastActiveTabIdByWindow),
-      lastFocusedWindowId: lastFocusedWindowId
-        ? windowIdToNumber(lastFocusedWindowId)
-        : null,
-    });
-  } catch (e) {
-    console.log('[Intender] onSuspend persist failed:', e);
-  }
-});
+  ).chrome?.runtime?.onSuspend?.addListener === 'function'
+) {
+  (
+    globalThis as {
+      chrome: {
+        runtime: { onSuspend: { addListener: (cb: () => void) => void } };
+      };
+    }
+  ).chrome.runtime.onSuspend.addListener(() => {
+    try {
+      // Clean orphaned scopes before persisting
+      const activeScopes = new Set(intentionScopePerTabId.values());
+      for (const scope of lastActiveByScope.keys()) {
+        if (!activeScopes.has(scope)) {
+          lastActiveByScope.delete(scope);
+        }
+      }
+      storage.session.set({
+        tabUrlMap: mapToObject(tabUrlMap),
+        intentionScopePerTabId: mapToObject(intentionScopePerTabId),
+        lastActiveByScope: mapToObject(lastActiveByScope),
+        lastActiveTabIdByWindow: mapToObject(lastActiveTabIdByWindow),
+        lastFocusedWindowId: lastFocusedWindowId
+          ? windowIdToNumber(lastFocusedWindowId)
+          : null,
+      });
+    } catch (e) {
+      console.log('[Intender] onSuspend persist failed:', e);
+    }
+  });
+}
 
 const hydrateSessionState = async () => {
   try {
-    const sessionValues = await sessionStore.get([
+    const sessionValues = await storage.session.get([
       'tabUrlMap',
       'intentionScopePerTabId',
       'lastActiveByScope',
@@ -653,22 +656,30 @@ export default defineBackground(async () => {
   function updateIdleDetectionInterval(timeoutMs: TimeoutMs): void {
     const timeoutSeconds = Math.max(15, Math.floor(timeoutMs / 1000));
     try {
-      chrome.idle.setDetectionInterval(timeoutSeconds);
+      if (
+        browser.idle &&
+        typeof browser.idle.setDetectionInterval === 'function'
+      ) {
+        browser.idle.setDetectionInterval(timeoutSeconds);
+      }
     } catch (e) {
       debugLog('[Intender] Failed to set idle detection interval:', e);
     }
   }
 
   function toggleIdleDetection(mode: InactivityMode): void {
+    if (!browser.idle || typeof browser.idle.onStateChanged === 'undefined') {
+      return;
+    }
     if (mode === 'off' || e2eDisableOSIdle) {
-      chrome.idle.onStateChanged.removeListener(inactivityChange);
+      browser.idle.onStateChanged.removeListener(inactivityChange);
     } else {
-      chrome.idle.onStateChanged.addListener(inactivityChange);
+      browser.idle.onStateChanged.addListener(inactivityChange);
     }
   }
 
   async function inactivityChange(
-    newState: chrome.idle.IdleState
+    newState: 'active' | 'idle' | 'locked'
   ): Promise<void> {
     if (newState === 'idle') {
       try {

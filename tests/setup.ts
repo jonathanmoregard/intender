@@ -23,10 +23,29 @@ global.browser = {
   },
   runtime: {
     getURL: (path: string) => `chrome-extension://test/${path}`,
+    getBrowserInfo: undefined, // Not Firefox in tests
+  },
+  idle: {
+    setDetectionInterval: () => {},
+    onStateChanged: {
+      addListener: () => {},
+      removeListener: () => {},
+    },
   },
   tabs: {
     query: () => Promise.resolve([]),
     create: () => Promise.resolve({} as any),
     update: () => Promise.resolve({} as any),
+  },
+};
+
+// Mock chrome.storage.session for Chrome (used in storage.ts detection)
+(
+  globalThis as {
+    chrome?: { storage?: { session?: typeof global.browser.storage.local } };
+  }
+).chrome = {
+  storage: {
+    session: global.browser.storage.local,
   },
 };
