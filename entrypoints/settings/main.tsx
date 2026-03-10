@@ -1417,9 +1417,9 @@ const SettingsTab = memo(
                 </div>
               </label>
             </div>
-            <div className='setting-group'>
+            <div className='setting-group' style={{ marginTop: '1rem' }}>
               <button
-                className='dropdown-item'
+                className='cancel-btn'
                 data-testid='export-logs-btn'
                 onClick={exportLogs}
               >
