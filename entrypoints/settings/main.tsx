@@ -526,6 +526,47 @@ const SettingsTab = memo(
       }
     };
 
+    const exportLogs = async () => {
+      try {
+        const result = await browser.storage.local.get('__testLogs');
+        const logs =
+          (result.__testLogs as Array<{
+            level: string;
+            message: string;
+            timestamp: number;
+          }>) || [];
+
+        const lines = logs.map(
+          log =>
+            `[${new Date(log.timestamp).toISOString()}] [${log.level.toUpperCase()}] ${log.message}`
+        );
+        const text = lines.join('\n');
+
+        const dataBlob = new Blob([text], { type: 'text/plain' });
+        const url = URL.createObjectURL(dataBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `intender-logs-${Date.now()}.txt`;
+        link.click();
+        URL.revokeObjectURL(url);
+
+        setToast({
+          show: true,
+          message: `Logs Exported (${logs.length} entries)`,
+          type: 'success',
+        });
+        setTimeout(() => setToast(prev => ({ ...prev, show: false })), 3000);
+      } catch (error) {
+        console.error('Log export failed:', error);
+        setToast({
+          show: true,
+          message: 'Failed to export logs',
+          type: 'error',
+        });
+        setTimeout(() => setToast(prev => ({ ...prev, show: false })), 3000);
+      }
+    };
+
     const importSettings = () => {
       const input = document.createElement('input');
       input.type = 'file';
@@ -1375,6 +1416,15 @@ const SettingsTab = memo(
                   ?
                 </div>
               </label>
+            </div>
+            <div className='setting-group' style={{ marginTop: '1rem' }}>
+              <button
+                className='cancel-btn'
+                data-testid='export-logs-btn'
+                onClick={exportLogs}
+              >
+                Export Logs
+              </button>
             </div>
           </div>
         )}
