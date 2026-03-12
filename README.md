@@ -4,6 +4,14 @@
 
 A browser extension that helps you pause and reflect before visiting certain websites. It gives you an opportunity to reflect and write down an intention before you enter the page.
 
+**[Download Latest Version](https://github.com/jonathanmoregard/intender/releases/latest/download/intender-chrome.zip)** | **[Installation Guide](./INSTALL_GUIDE.md)**
+
+## Use Cases
+
+- **Productivity**: Add gentle friction to distracting websites like social media
+- **Mindfulness**: Encourage intentional browsing habits through reflection
+- **Focus**: Create moments of pause before visiting time-wasting sites
+
 ## Overview
 
 Intender is designed to help you be more mindful about your web browsing habits. When you try to visit a configured website, the extension gives you an opportunity to reflect and write down an intention before you enter the page.
@@ -49,22 +57,3 @@ Found a bug? Please use our [Bug Report Template](./BUG_REPORT_TEMPLATE.md) to r
 Want to contribute? See our [Contributing Guide](./CONTRIBUTING.md) for details.
 
 _Built with [Cursor](https://cursor.sh) - the AI-first code editor._
-
-## Use Cases
-
-- **Productivity**: Add gentle friction to distracting websites like social media
-- **Mindfulness**: Encourage intentional browsing habits through reflection
-- **Focus**: Create moments of pause before visiting time-wasting sites
-
-## Getting Started
-
-### For Testers
-
-Download and install the extension for testing:
-
-- **[Download Latest Version](https://github.com/jonathanmoregard/intender/releases/latest/download/intender-chrome.zip)**
-- **[Installation Guide](./INSTALL_GUIDE.md)** - Step-by-step instructions
-
-### For Developers
-
-For development setup and technical details, see our [Contributing Guide](./CONTRIBUTING.md).
