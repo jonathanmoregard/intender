@@ -359,6 +359,24 @@ export default defineBackground(async () => {
     });
   }
 
+  function getActiveTabSnapshot(navigationTabId: number): {
+    isNavigationTabActive: boolean;
+    activeTabUrl: string | null;
+  } {
+    const focusedWindowId = lastFocusedWindowId;
+    const activeTabId = focusedWindowId
+      ? (lastActiveTabIdByWindow.get(focusedWindowId) as unknown as
+          | number
+          | undefined)
+      : undefined;
+    const isNavigationTabActive =
+      activeTabId === navigationTabId && focusedWindowId != null;
+    const activeTabUrl = activeTabId
+      ? tabUrlMap.get(numberToTabId(activeTabId)) || null
+      : null;
+    return { isNavigationTabActive, activeTabUrl };
+  }
+
   const cleanupNavDecisionCache = () => {
     const now = Date.now();
     for (const [key, entry] of navDecisionCache) {
@@ -370,19 +388,12 @@ export default defineBackground(async () => {
     tabId: number;
     sourceUrl: string | null;
     targetUrl: string;
-    isNavigationTabActive?: boolean;
-    activeTabUrl?: string | null;
     postCommit?: boolean;
     cameFromIntentionPage?: boolean;
   }): NavigationDecision {
-    const {
-      sourceUrl,
-      targetUrl,
-      isNavigationTabActive,
-      activeTabUrl,
-      postCommit,
-      cameFromIntentionPage,
-    } = args;
+    const { tabId, sourceUrl, targetUrl, postCommit, cameFromIntentionPage } =
+      args;
+    const { isNavigationTabActive, activeTabUrl } = getActiveTabSnapshot(tabId);
 
     // Same-scope allow
     const sourceScope = sourceUrl ? lookupIntentionScopeId(sourceUrl) : null;
@@ -407,12 +418,11 @@ export default defineBackground(async () => {
       );
     }
 
-    // Active tab same-scope (background new tab open)
+    // Active tab same-scope (background new tab open, also covers server redirects)
     const activeScope = activeTabUrl
       ? lookupIntentionScopeId(activeTabUrl)
       : null;
     if (
-      !postCommit &&
       targetScope &&
       activeScope &&
       activeScope === targetScope &&
@@ -826,7 +836,14 @@ export default defineBackground(async () => {
         await browser.tabs.update(details.tabId, { url: decision.redirectTo });
         return;
       } catch (e) {
-        debugLog('[Intender] Post-commit redirect attempt failed:', e);
+        debugLog('[Intender] Post-commit redirect failed, closing tab:', e);
+        try {
+          await browser.tabs.remove(details.tabId);
+          return;
+        } catch {
+          debugLog('[Intender] Tab removal also failed (tab likely gone)');
+          return;
+        }
       }
     }
 
@@ -1053,29 +1070,11 @@ export default defineBackground(async () => {
     const targetUrl = details.url;
     const sourceUrl = tabUrlMap.get(numberToTabId(details.tabId)) || null; // last committed URL
 
-    // Determine active tab snapshot without querying (race-safe)
-    const navigationTabId = details.tabId;
-    const focusedWindowId = lastFocusedWindowId;
-    const activeTabId = focusedWindowId
-      ? (lastActiveTabIdByWindow.get(focusedWindowId) as unknown as
-          | number
-          | undefined)
-      : undefined;
-    const isNavigationTabActive =
-      activeTabId === navigationTabId && focusedWindowId != null;
-    const activeTabUrl = activeTabId
-      ? tabUrlMap.get(numberToTabId(activeTabId)) || null
-      : null;
-
     // Development logging
     debugLog('[Intender] Navigation check:', {
       targetUrl,
       sourceUrl: sourceUrl || 'null',
-      sourceTabId: details.tabId,
-      navigationTabId,
-      activeTabId,
-      activeTabUrl: activeTabUrl || 'null',
-      isNavigationTabActive,
+      tabId: details.tabId,
       frameId: details.frameId,
     });
 
@@ -1088,8 +1087,6 @@ export default defineBackground(async () => {
           tabId: details.tabId,
           sourceUrl,
           targetUrl,
-          isNavigationTabActive,
-          activeTabUrl,
           postCommit: false,
           cameFromIntentionPage:
             sourceUrl?.startsWith(intentionPageUrl) === true,
@@ -1107,15 +1104,20 @@ export default defineBackground(async () => {
         return;
       }
       const targetIntentionScopeId = intentionToIntentionScopeId(matched);
-      intentionScopePerTabId.set(
-        numberToTabId(details.tabId),
-        targetIntentionScopeId
-      );
-      persistSession();
       try {
         await browser.tabs.update(details.tabId, { url: decision.redirectTo });
+        intentionScopePerTabId.set(
+          numberToTabId(details.tabId),
+          targetIntentionScopeId
+        );
+        persistSession();
       } catch (error) {
-        debugLog('[Intender] Tab update failed, tab may be closed:', error);
+        debugLog('[Intender] Pre-commit redirect failed, closing tab:', error);
+        try {
+          await browser.tabs.remove(details.tabId);
+        } catch {
+          debugLog('[Intender] Tab removal also failed (tab likely gone)');
+        }
       }
       return;
     }
