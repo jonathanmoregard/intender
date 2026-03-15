@@ -32,3 +32,6 @@ web-ext.config.ts
 
 test-results/
 .test-results/
+
+# Store assets (generated screenshots)
+store-assets/
