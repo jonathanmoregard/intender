@@ -29,30 +29,32 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Build extension
-        run: pnpm build
-
-      - name: Create distribution package
-        run: |
-          mkdir -p temp/intender-chrome/chrome-mv3
-          cp -r .output/chrome-mv3/* temp/intender-chrome/chrome-mv3/
-          cd temp
-          zip -r ../.output/intender-chrome.zip intender-chrome/
-          cd ..
-          rm -rf temp
-
       - name: Get version from package.json
         id: version
         run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
+      - name: Build and zip extension
+        run: pnpm zip
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: v${{ steps.version.outputs.version }}
-          files: .output/intender-chrome.zip
+          files: .output/intender-${{ steps.version.outputs.version }}-chrome.zip
           generate_release_notes: true
           draft: false
           prerelease: false
           name: Release v${{ steps.version.outputs.version }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload to Chrome Web Store
+        if: ${{ secrets.CHROME_EXTENSION_ID != '' }}
+        uses: mnao305/chrome-extension-upload@v5
+        with:
+          file-path: .output/intender-${{ steps.version.outputs.version }}-chrome.zip
+          extension-id: ${{ secrets.CHROME_EXTENSION_ID }}
+          client-id: ${{ secrets.CHROME_CLIENT_ID }}
+          client-secret: ${{ secrets.CHROME_CLIENT_SECRET }}
+          refresh-token: ${{ secrets.CHROME_REFRESH_TOKEN }}
+          publish: true
