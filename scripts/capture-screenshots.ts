@@ -48,17 +48,17 @@ async function main() {
         {
           id: 'demo-1',
           url: 'reddit.com',
-          phrase: 'Check the weekly programming thread',
+          phrase: 'Only read programming subreddits',
         },
         {
           id: 'demo-2',
           url: 'youtube.com',
-          phrase: 'Watch the Rust tutorial part 3',
+          phrase: 'Learn, not scroll',
         },
         {
           id: 'demo-3',
           url: 'twitter.com',
-          phrase: 'Reply to the team announcement',
+          phrase: 'Post, then close the tab',
         },
       ],
       fuzzyMatching: true,
@@ -90,8 +90,8 @@ async function main() {
   }
 
   // Wait for intention page to load
-  await intentionPage.waitForURL(
-    /chrome-extension:\/\/.+\/intention-page\.html/,
+  await intentionPage.waitForFunction(
+    () => /intention-page\.html/.test(window.location.href),
     { timeout: 10000 }
   );
   await intentionPage.waitForTimeout(1000); // Let animations settle
@@ -103,7 +103,7 @@ async function main() {
   console.log('Captured: 01-intention-page.png');
 
   // --- Screenshot 2: Intention page with partial input ---
-  await intentionPage.locator('#phrase').fill('Check the weekly');
+  await intentionPage.locator('#phrase').fill('Only read program');
   await intentionPage.waitForTimeout(300);
 
   await intentionPage.screenshot({
