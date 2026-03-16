@@ -472,16 +472,22 @@
         opacity: 1;
       }
 
-      .intender-logo {
+      .support-link {
         position: fixed;
-        bottom: 20px;
-        left: 20px;
-        font-size: 0.8rem;
-        color: rgba(var(--white-rgb), 0.2);
+        bottom: 8px;
+        left: 12px;
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.35);
         font-family: 'Inter', sans-serif;
-        font-weight: 300;
+        font-weight: 400;
         letter-spacing: 0.5px;
-        z-index: 15;
+        z-index: 2000;
+        text-decoration: none;
+        transition: all 0.2s ease;
+      }
+
+      .support-link:hover {
+        color: rgba(255, 255, 255, 0.7);
       }
 
       #particles-canvas {
@@ -529,7 +535,13 @@
         <button id="go" class="enter-btn" disabled>Continue</button>
       </div>
     </div>
-    <div class="intender-logo">Intender</div>
+    <a
+      class="support-link"
+      href="https://ko-fi.com/jonathanmore"
+      target="_blank"
+      rel="noopener noreferrer"
+      >Donate</a
+    >
     <div id="build-footer" class="build-footer inverse" title="">
       <!-- version filled by script -->
     </div>
