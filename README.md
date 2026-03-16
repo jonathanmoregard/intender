@@ -5,6 +5,7 @@
 A browser extension that helps you pause and reflect before visiting certain websites. It gives you an opportunity to reflect and write down an intention before you enter the page.
 
 **[Download Latest Version](https://github.com/jonathanmoregard/intender/releases/latest/download/intender-chrome.zip)** | **[Installation Guide](./INSTALL_GUIDE.md)**
+  
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/U7U31W3J4Z)
 
