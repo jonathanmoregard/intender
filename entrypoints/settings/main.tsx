@@ -1539,6 +1539,19 @@ const AboutTab = memo(() => {
           <li>Simple, distraction-free interface</li>
         </ul>
 
+        <h3>Enjoying Intender?</h3>
+        <p>
+          This project is free and open-source. Donate{' '}
+          <a
+            href='https://ko-fi.com/jonathanmore'
+            target='_blank'
+            rel='noopener noreferrer'
+          >
+            here
+          </a>
+          .
+        </p>
+
         <div className='version-info'>
           <p>
             <strong>Version:</strong> {packageJson.version}
