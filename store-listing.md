@@ -20,17 +20,17 @@ Productivity
 
 Intender helps you browse the web with intention. Instead of blocking websites, it creates a gentle moment of pause — asking you to reflect and type your reason for visiting before you enter.
 
-**How it works:**
+🧭 How it works:
 
 1. Add websites you want to be more mindful about (social media, news, streaming, etc.)
 2. Set a personal intention phrase for each site — your reason for visiting
 3. When you navigate to that site, Intender shows a calm reflection page where you type your intention before continuing
 
-**Why Intender instead of a website blocker?**
+🌿 Why Intender instead of a website blocker?
 
 Traditional blockers create frustration. Intender takes a different approach inspired by mindfulness practices: it doesn't prevent you from visiting any site. Instead, it adds a brief pause that helps you check in with yourself. Many users find this gentle friction is enough to break autopilot browsing habits.
 
-**Features:**
+✨ Features:
 
 - Mindful intention pages with a clean, calming design
 - Flexible URL matching — works with domains, subdomains, and specific paths
@@ -41,11 +41,11 @@ Traditional blockers create frustration. Intender takes a different approach ins
 - Inactivity timeout — re-prompts your intention after periods away from the tab
 - Works entirely offline — no account, no signup, no servers
 
-**Privacy first:**
+🔒 Privacy first:
 
 Intender stores everything locally on your device. No data is collected, no analytics are sent, no accounts are required. Your browsing intentions are yours alone.
 
-**Open source:**
+💛 Open source:
 
 Intender is free and open source under the AGPL-3.0 license. View the full source code, report bugs, or contribute at: https://github.com/jonathanmoregard/intender
 
