@@ -11,8 +11,8 @@
     "skipLibCheck": true,
     "types": ["webextension-polyfill", "jest", "chrome-types"],
     "paths": {
-      "@theme": ["./entrypoints/shared/theme.css"]
+      "@theme": ["./src/entrypoints/shared/theme.css"]
     }
   },
-  "include": ["src", "entrypoints", "components", "tests", "types"]
+  "include": ["src", "tests"]
 }

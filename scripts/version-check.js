@@ -9,10 +9,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 function getCurrentVersion() {
-  const packageJson = JSON.parse(
-    readFileSync(join(__dirname, '../package.json'), 'utf8')
-  );
-  return packageJson.version;
+  return readFileSync(join(__dirname, '../version.txt'), 'utf8').trim();
 }
 
 function getLatestMasterVersion() {
@@ -20,12 +17,10 @@ function getLatestMasterVersion() {
     // Fetch latest from remote
     execSync('git fetch origin master', { stdio: 'ignore' });
 
-    // Get the version from master's package.json
-    const masterPackageJson = execSync('git show origin/master:package.json', {
+    // Get the version from master's version.txt
+    return execSync('git show origin/master:version.txt', {
       encoding: 'utf8',
-    });
-    const masterVersion = JSON.parse(masterPackageJson).version;
-    return masterVersion;
+    }).trim();
   } catch (error) {
     console.log(
       'Could not fetch latest master version, assuming first version'

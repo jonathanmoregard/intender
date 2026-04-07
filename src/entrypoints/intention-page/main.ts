@@ -1,7 +1,6 @@
 import '@theme';
 import { fuzzyMatch, fuzzyPartialMatch } from '../../components/fuzzy-matching';
 import { storage } from '../../components/storage';
-import packageJson from '../../package.json';
 
 // Particles animation setup
 const canvas = document.getElementById('particles-canvas') as HTMLCanvasElement;
@@ -122,7 +121,7 @@ requestAnimationFrame(() => {
 declare const __VERSION__: string | undefined;
 declare const __GIT_HASH__: string | undefined;
 
-const BUILD_VERSION: string = __VERSION__ ?? packageJson.version;
+const BUILD_VERSION: string = __VERSION__ ?? '0.0.0';
 const BUILD_HASH: string = __GIT_HASH__ ?? 'dev';
 
 requestAnimationFrame(() => {

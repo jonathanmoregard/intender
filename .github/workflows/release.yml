@@ -3,6 +3,10 @@ name: Build and Release Extension
 on:
   push:
     branches: [main, master]
+    paths:
+      - 'src/**'
+      - 'wxt.config.ts'
+      - 'pnpm-lock.yaml'
   workflow_dispatch:
 
 jobs:
@@ -29,9 +33,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Get version from package.json
+      - name: Get version from version.txt
         id: version
-        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+        run: echo "version=$(cat version.txt)" >> $GITHUB_OUTPUT
 
       - name: Build and zip extension
         run: pnpm zip
