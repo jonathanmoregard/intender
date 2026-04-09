@@ -4,7 +4,7 @@ import { resolve } from 'path';
 import { defineConfig } from 'wxt';
 
 const packageJson = JSON.parse(readFileSync('./package.json', 'utf8'));
-const version = readFileSync('./version.txt', 'utf8').trim();
+const version = packageJson.version;
 let gitHash = 'dev';
 try {
   gitHash = execSync('git rev-parse --short HEAD', {
@@ -18,6 +18,7 @@ try {
 
 export default defineConfig({
   srcDir: 'src',
+  publicDir: 'src/public',
   vite: ({ mode }) => ({
     define: {
       __IS_DEV__: mode === 'development',
