@@ -33,9 +33,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Get version from version.txt
+      - name: Get version from package.json
         id: version
-        run: echo "version=$(cat version.txt)" >> $GITHUB_OUTPUT
+        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
 
       - name: Build and zip extension
         run: pnpm zip

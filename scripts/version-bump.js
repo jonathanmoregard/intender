@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Bumps version.txt by one patch level.
+ * Bumps the version in package.json by one patch level.
  *
  * Usage: pnpm bump
  */
@@ -12,15 +12,17 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const versionFile = join(__dirname, '../version.txt');
+const pkgFile = join(__dirname, '../package.json');
 
-const current = readFileSync(versionFile, 'utf8').trim();
+const pkg = JSON.parse(readFileSync(pkgFile, 'utf8'));
+const current = pkg.version;
 const parts = current.split('.').map(Number);
 if (parts.length !== 3 || parts.some(Number.isNaN)) {
-  console.error(`Invalid version in version.txt: ${current}`);
+  console.error(`Invalid version in package.json: ${current}`);
   process.exit(1);
 }
 parts[2] += 1;
 const next = parts.join('.');
-writeFileSync(versionFile, `${next}\n`);
+pkg.version = next;
+writeFileSync(pkgFile, JSON.stringify(pkg, null, 2) + '\n');
 console.log(`${current} -> ${next}`);
