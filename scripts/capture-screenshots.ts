@@ -10,7 +10,7 @@
  */
 
 import { chromium, type BrowserContext, type Page } from '@playwright/test';
-import { mkdtemp, mkdir, readFile } from 'fs/promises';
+import { mkdtemp, mkdir } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join, resolve } from 'path';
 
@@ -113,105 +113,8 @@ async function createFramedScreenshot(
   await page.close();
 }
 
-async function captureHero(outputPath: string) {
-  const iconPath = resolve(
-    process.cwd(),
-    '.output/chrome-mv3-dev/icon/intender-128.png'
-  );
-  const iconData = await readFile(iconPath);
-  const iconBase64 = `data:image/png;base64,${iconData.toString('base64')}`;
-
-  const browser = await chromium.launch();
-  const page = await browser.newPage({ viewport: VIEWPORT });
-
-  await page.setContent(
-    `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-
-        body {
-          width: 1280px;
-          height: 800px;
-          font-family: 'Inter', system-ui, sans-serif;
-          background: linear-gradient(135deg, #f5f0e8 0%, #e8dfd0 50%, #d4c9b0 100%);
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          overflow: hidden;
-        }
-
-        .icon {
-          width: 160px;
-          height: 160px;
-          margin-bottom: 36px;
-        }
-
-        .title {
-          font-size: 88px;
-          font-weight: 700;
-          color: #5a4a2a;
-          letter-spacing: -2px;
-          margin-bottom: 20px;
-        }
-
-        .tagline {
-          font-size: 34px;
-          font-weight: 400;
-          color: #7a6a4a;
-          text-align: center;
-          max-width: 640px;
-          line-height: 1.4;
-        }
-
-        .prompt-preview {
-          margin-top: 44px;
-          background: rgba(255, 255, 255, 0.9);
-          border: 2px solid #b0a070;
-          border-radius: 14px;
-          padding: 20px 52px;
-          font-size: 28px;
-          color: #5a4a2a;
-          font-style: italic;
-        }
-
-        .cursor {
-          display: inline-block;
-          width: 2px;
-          height: 28px;
-          background: #5a4a2a;
-          vertical-align: text-bottom;
-          margin-left: 2px;
-        }
-      </style>
-    </head>
-    <body>
-      <img class="icon" src="${iconBase64}" />
-      <div class="title">Intender</div>
-      <div class="tagline">Browse with intention</div>
-      <div class="prompt-preview">I know why I enter<span class="cursor"></span></div>
-    </body>
-    </html>
-  `,
-    { waitUntil: 'networkidle' }
-  );
-
-  await page.waitForTimeout(1500);
-  await page.screenshot({ path: outputPath, type: 'png' });
-  await browser.close();
-}
-
 async function main() {
   await mkdir(OUTPUT_DIR, { recursive: true });
-
-  // --- Hero image (no extension needed) ---
-  await captureHero(join(OUTPUT_DIR, '00-hero.png'));
-  console.log('Captured: 00-hero.png');
 
   const userDataDir = await mkdtemp(join(tmpdir(), 'intender-screenshots-'));
 
