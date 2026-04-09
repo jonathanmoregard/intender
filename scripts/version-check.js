@@ -30,12 +30,19 @@ function getLatestMasterVersion() {
   }
 }
 
-function hasSrcChangesVsMaster() {
+function hasReleaseChangesVsMaster() {
   try {
     const result = execSync('git diff origin/master...HEAD --name-only', {
       encoding: 'utf8',
     });
-    return result.split('\n').some(f => f.startsWith('src/'));
+    return result
+      .split('\n')
+      .some(
+        f =>
+          f.startsWith('src/') ||
+          f === 'wxt.config.ts' ||
+          f === 'pnpm-lock.yaml'
+      );
   } catch {
     return true; // assume changes if we can't check
   }
@@ -56,11 +63,11 @@ function main() {
   const currentVersion = getCurrentVersion();
   const latestVersion = getLatestMasterVersion();
   const comparison = compareVersions(currentVersion, latestVersion);
-  const srcChanged = hasSrcChangesVsMaster();
+  const releaseChanged = hasReleaseChangesVsMaster();
 
   console.log(`Current version: ${currentVersion}`);
   console.log(`Latest master version: ${latestVersion}`);
-  console.log(`src/ changes vs master: ${srcChanged}`);
+  console.log(`Release-relevant changes vs master: ${releaseChanged}`);
 
   if (comparison === 'lower') {
     console.log('\n❌ ERROR: Your version is lower than master!');
@@ -68,9 +75,9 @@ function main() {
     process.exit(1);
   }
 
-  if (comparison === 'same' && srcChanged) {
+  if (comparison === 'same' && releaseChanged) {
     console.log(
-      '\n❌ ERROR: src/ has changes but version is the same as master!'
+      '\n❌ ERROR: Release-relevant files changed but version is the same as master!'
     );
     console.log('Please bump your version before creating a PR.');
     process.exit(1);
