@@ -1,12 +1,13 @@
 /**
  * Generates Chrome Web Store promo tiles:
+ *   - Hero screenshot: 1280x800 (00-hero.png)
  *   - Small promo tile: 440x280
  *   - Marquee promo tile: 1400x560
  *
  * Usage:
  *   pnpm build && npx tsx scripts/capture-promo-tiles.ts
  *
- * Output: store-assets/promo-tile-440x280.png, store-assets/promo-marquee-1400x560.png
+ * Output: store-assets/00-hero.png, store-assets/promo-tile-440x280.png, store-assets/promo-marquee-1400x560.png
  */
 
 import { chromium } from 'playwright';
@@ -28,6 +29,14 @@ async function main() {
   const iconData = await readFile(iconPath);
   const iconBase64 = `data:image/png;base64,${iconData.toString('base64')}`;
 
+  // High-res keyhole glyph for the hero (1280x800), where 128px would upscale and blur
+  const heroIconPath = resolve(
+    process.cwd(),
+    'public/icon/intender-keyhole.png'
+  );
+  const heroIconData = await readFile(heroIconPath);
+  const heroIconBase64 = `data:image/png;base64,${heroIconData.toString('base64')}`;
+
   const bgPath = resolve(process.cwd(), 'public/assets/misty-1280.jpg');
   const bgData = await readFile(bgPath);
   const bgBase64 = `data:image/jpeg;base64,${bgData.toString('base64')}`;
@@ -38,6 +47,102 @@ async function main() {
   );
   const screenshotData = await readFile(screenshotPath);
   const screenshotBase64 = `data:image/png;base64,${screenshotData.toString('base64')}`;
+
+  // --- Hero (1280x800) — same design as small promo tile, scaled up ---
+  {
+    const page = await browser.newPage({
+      viewport: { width: 1280, height: 800 },
+    });
+
+    await page.setContent(
+      `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+
+          body {
+            width: 1280px;
+            height: 800px;
+            font-family: 'Inter', system-ui, sans-serif;
+            background-image: url('${bgBase64}');
+            background-size: cover;
+            background-position: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+          }
+
+          body::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: rgba(245, 240, 232, 0.45);
+            z-index: 1;
+          }
+
+          .content {
+            position: relative;
+            z-index: 2;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+          }
+
+          .icon {
+            height: 260px;
+            width: auto;
+            margin-bottom: 40px;
+            filter: drop-shadow(0 4px 20px rgba(0,0,0,0.15));
+          }
+
+          .title {
+            font-size: 110px;
+            font-weight: 700;
+            color: #2a1e0a;
+            letter-spacing: -1.5px;
+            margin-bottom: 28px;
+            text-shadow: 0 4px 20px rgba(255,255,255,0.8);
+          }
+
+          .tagline {
+            font-size: 55px;
+            font-weight: 600;
+            color: #3a2e14;
+            text-align: center;
+            letter-spacing: 1px;
+            text-shadow: 0 4px 16px rgba(255,255,255,0.7);
+          }
+        </style>
+      </head>
+      <body>
+        <div class="content">
+          <img class="icon" src="${heroIconBase64}" />
+          <div class="title">Intender</div>
+          <div class="tagline">Browse with intention.</div>
+        </div>
+      </body>
+      </html>
+    `,
+      { waitUntil: 'networkidle' }
+    );
+
+    await page.waitForTimeout(1500);
+
+    await page.screenshot({
+      path: join(OUTPUT_DIR, '00-hero.png'),
+      type: 'png',
+    });
+    console.log('Captured: 00-hero.png');
+    await page.close();
+  }
 
   // --- Small Promo Tile (440x280) ---
   {
