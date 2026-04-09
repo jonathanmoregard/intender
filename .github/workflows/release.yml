@@ -49,7 +49,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload to Chrome Web Store
-        if: false # TEMP: re-enabled on master in the src-refactor branch
+        if: ${{ secrets.CHROME_EXTENSION_ID != '' }}
         uses: mnao305/chrome-extension-upload@v5
         with:
           file-path: .output/intender-${{ steps.version.outputs.version }}-chrome.zip
