@@ -8,17 +8,17 @@ Copy these into the Chrome Web Store developer dashboard.
 
 Intender: Mindful Browsing & Intention Setter
 
-## Short Description (132 chars max)
+## Summary (132 chars max)
 
-The mindful alternative to website blockers. Set an intention before opening Twitter, TikTok, or Reddit. Reflect before you enter.
+Sourced from `package.json` → `description` (propagated into `manifest.json` at build time). Chrome Web Store displays this field as "Summary" in the dashboard. It appears in search results and is auto-prepended to the detailed description on the listing page, so the detailed description below is written to flow from it.
 
-## Category
+Current value:
 
-Productivity
+> The mindful alternative to website blockers. Set an intention before opening Twitter, TikTok, or Reddit. Reflect before you enter.
 
-## Detailed Description
-
-Ever opened Twitter, blinked, and lost twenty minutes? Intender is a mindful alternative to website blockers. Instead of fighting you, it lets you set an intention for each site: giving you a moment to reflect before you enter.
+[Concatenated to...]
+Description:
+Ever opened a tab, blinked, and lost twenty minutes? That's autopilot browsing. Intender helps you enter with purpose.
 
 🧭 How it works:
 
