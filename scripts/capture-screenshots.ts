@@ -4,19 +4,19 @@
  * - Bottom 80%: screenshot scaled to ~85% with drop shadow
  *
  * Usage:
- *   pnpm build && npx tsx scripts/capture-screenshots.ts
+ *   pnpm wxt build --mode development && npx tsx scripts/capture-screenshots.ts
  *
  * Output: store-assets/*.png
  */
 
 import { chromium, type BrowserContext, type Page } from '@playwright/test';
-import { mkdtemp, mkdir, readFile } from 'fs/promises';
+import { mkdtemp, mkdir } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join, resolve } from 'path';
 
 const VIEWPORT = { width: 1280, height: 800 };
 const OUTPUT_DIR = resolve(process.cwd(), 'store-assets');
-const EXT_PATH = resolve(process.cwd(), '.output/chrome-mv3');
+const EXT_PATH = resolve(process.cwd(), '.output/chrome-mv3-dev');
 
 /** Capture a raw screenshot as a base64 PNG data URL */
 async function captureRaw(page: Page): Promise<string> {
@@ -140,7 +140,7 @@ async function main() {
   // --- Seed intentions via storage ---
   await sw.evaluate(async () => {
     const api = (globalThis as any).chrome?.storage;
-    await api.sync.set({
+    await api.local.set({
       intentions: [
         {
           id: 'demo-1',
@@ -170,19 +170,11 @@ async function main() {
   const intentionPage = await context.newPage();
   await intentionPage.setViewportSize(VIEWPORT);
 
-  try {
-    await intentionPage.goto('https://reddit.com', {
-      waitUntil: 'domcontentloaded',
-      timeout: 10000,
-    });
-  } catch {
-    // Expected: navigation intercepted by extension
-  }
-
-  await intentionPage.waitForFunction(
-    () => /intention-page\.html/.test(window.location.href),
-    { timeout: 10000 }
-  );
+  const intentionUrl =
+    `chrome-extension://${extensionId}/intention-page.html` +
+    `?target=${encodeURIComponent('https://reddit.com')}` +
+    `&intentionScopeId=demo-1`;
+  await intentionPage.goto(intentionUrl, { waitUntil: 'domcontentloaded' });
   await intentionPage.waitForTimeout(1000);
 
   await intentionPage.locator('#phrase').fill("I'm only going to read prog");
