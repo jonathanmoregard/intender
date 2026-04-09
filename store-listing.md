@@ -30,6 +30,10 @@ Ever opened a tab, blinked, and lost twenty minutes? That's autopilot browsing. 
 
 Blockers get frustrating fast. You want to check something, the extension says no, you disable it. Intender doesn't fight you: it reminds you of your purpose. You decide if you want to follow it.
 
+🔒 Privacy first:
+
+Everything stays on your device. No data leaves, no analytics, no accounts. What you're trying to do online is your business.
+
 ✨ Features:
 
 - Clean, unhurried intention pages: designed for focus, not friction
@@ -40,10 +44,6 @@ Blockers get frustrating fast. You want to check something, the extension says n
 - Import/export for backup or sharing
 - Optional re-prompting when you come back after a break, so old tabs don't become new rabbit holes
 - Fully offline — no account, no signup, no servers
-
-🔒 Privacy first:
-
-Everything stays on your device. No data leaves, no analytics, no accounts. What you're trying to do online is your business.
 
 💛 Open source:
 
