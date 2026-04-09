@@ -3,6 +3,10 @@ name: Build and Release Extension
 on:
   push:
     branches: [main, master]
+    paths:
+      - 'src/**'
+      - 'wxt.config.ts'
+      - 'pnpm-lock.yaml'
   workflow_dispatch:
 
 jobs:
@@ -48,7 +52,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Uncomment to re-enable automatic Chrome Web Store publishing
       # - name: Upload to Chrome Web Store
       #   if: ${{ secrets.CHROME_EXTENSION_ID != '' }}
       #   uses: mnao305/chrome-extension-upload@v5

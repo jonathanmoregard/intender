@@ -17,15 +17,13 @@ import {
 } from '../../components/storage';
 import { minutesToMs, msToMinutes } from '../../components/time';
 import { generateUUID } from '../../components/uuid';
-import packageJson from '../../package.json';
-
 type Tab = 'settings' | 'about';
 
 // Build info fallbacks for environments where Vite define isn't injected
 declare const __VERSION__: string | undefined;
 declare const __GIT_HASH__: string | undefined;
 
-const BUILD_VERSION: string = __VERSION__ ?? packageJson.version;
+const BUILD_VERSION: string = __VERSION__ ?? '0.0.0';
 const BUILD_HASH: string = __GIT_HASH__ ?? 'dev';
 
 const SettingsTab = memo(
@@ -1554,7 +1552,7 @@ const AboutTab = memo(() => {
 
         <div className='version-info'>
           <p>
-            <strong>Version:</strong> {packageJson.version}
+            <strong>Version:</strong> {BUILD_VERSION}
           </p>
           <p>
             <strong>Made with:</strong> React, TypeScript, WXT

@@ -9,28 +9,42 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 function getCurrentVersion() {
-  const packageJson = JSON.parse(
+  const pkg = JSON.parse(
     readFileSync(join(__dirname, '../package.json'), 'utf8')
   );
-  return packageJson.version;
+  return pkg.version;
 }
 
 function getLatestMasterVersion() {
   try {
-    // Fetch latest from remote
     execSync('git fetch origin master', { stdio: 'ignore' });
-
-    // Get the version from master's package.json
-    const masterPackageJson = execSync('git show origin/master:package.json', {
-      encoding: 'utf8',
-    });
-    const masterVersion = JSON.parse(masterPackageJson).version;
-    return masterVersion;
+    const pkg = JSON.parse(
+      execSync('git show origin/master:package.json', { encoding: 'utf8' })
+    );
+    return pkg.version;
   } catch (error) {
     console.log(
       'Could not fetch latest master version, assuming first version'
     );
     return '0.0.0';
+  }
+}
+
+function hasReleaseChangesVsMaster() {
+  try {
+    const result = execSync('git diff origin/master...HEAD --name-only', {
+      encoding: 'utf8',
+    });
+    return result
+      .split('\n')
+      .some(
+        f =>
+          f.startsWith('src/') ||
+          f === 'wxt.config.ts' ||
+          f === 'pnpm-lock.yaml'
+      );
+  } catch {
+    return true; // assume changes if we can't check
   }
 }
 
@@ -49,22 +63,28 @@ function main() {
   const currentVersion = getCurrentVersion();
   const latestVersion = getLatestMasterVersion();
   const comparison = compareVersions(currentVersion, latestVersion);
+  const releaseChanged = hasReleaseChangesVsMaster();
 
   console.log(`Current version: ${currentVersion}`);
   console.log(`Latest master version: ${latestVersion}`);
+  console.log(`Release-relevant changes vs master: ${releaseChanged}`);
 
   if (comparison === 'lower') {
     console.log('\n❌ ERROR: Your version is lower than master!');
     console.log('Please bump your version before creating a PR.');
     process.exit(1);
-  } else if (comparison === 'same') {
-    console.log('\n❌ ERROR: Your version is the same as master!');
+  }
+
+  if (comparison === 'same' && releaseChanged) {
+    console.log(
+      '\n❌ ERROR: Release-relevant files changed but version is the same as master!'
+    );
     console.log('Please bump your version before creating a PR.');
     process.exit(1);
-  } else {
-    console.log('\n✅ Version is higher than master. Good to go!');
-    process.exit(0);
   }
+
+  console.log('\n✅ Version check passed. Good to go!');
+  process.exit(0);
 }
 
 main();

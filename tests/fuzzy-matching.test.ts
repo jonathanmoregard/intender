@@ -1,7 +1,10 @@
 import { faker } from '@faker-js/faker';
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { fuzzyMatch, fuzzyPartialMatch } from '../components/fuzzy-matching';
+import {
+  fuzzyMatch,
+  fuzzyPartialMatch,
+} from '../src/components/fuzzy-matching';
 
 describe('fuzzyMatch', () => {
   const expected = 'I want to check my email';

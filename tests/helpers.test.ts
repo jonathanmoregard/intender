@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 import { describe, it } from 'vitest';
-import { fromNulls, mapNulls } from '../components/helpers';
+import { fromNulls, mapNulls } from '../src/components/helpers';
 
 describe('helpers', () => {
   describe('fromNulls', () => {

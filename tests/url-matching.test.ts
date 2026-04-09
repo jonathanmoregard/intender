@@ -6,9 +6,9 @@ import {
   matchesIntentionScopeIgnoringDomain,
   parseUrlToScope,
   type Intention,
-} from '../components/intention';
-import { normalizeUrl } from '../components/normalized-url';
-import { generateUUID } from '../components/uuid';
+} from '../src/components/intention';
+import { normalizeUrl } from '../src/components/normalized-url';
+import { generateUUID } from '../src/components/uuid';
 
 describe('Intender URL Matching - Test Specification', () => {
   // Test data generators

@@ -4,6 +4,7 @@ import { resolve } from 'path';
 import { defineConfig } from 'wxt';
 
 const packageJson = JSON.parse(readFileSync('./package.json', 'utf8'));
+const version = packageJson.version;
 let gitHash = 'dev';
 try {
   gitHash = execSync('git rev-parse --short HEAD', {
@@ -16,33 +17,27 @@ try {
 }
 
 export default defineConfig({
+  srcDir: 'src',
+  publicDir: 'src/public',
   vite: ({ mode }) => ({
     define: {
       __IS_DEV__: mode === 'development',
-      __VERSION__: JSON.stringify(packageJson.version),
+      __VERSION__: JSON.stringify(version),
       __GIT_HASH__: JSON.stringify(gitHash),
     },
     resolve: {
       alias: {
-        '@theme': resolve(__dirname, 'entrypoints/shared/theme.css'),
+        '@theme': resolve(__dirname, 'src/entrypoints/shared/theme.css'),
       },
     },
   }),
   manifest: {
     name: 'Intender',
     description: packageJson.description,
-    version: packageJson.version,
+    version,
     manifest_version: 3,
     permissions: ['storage', 'webNavigation', 'tabs', 'idle'],
     optional_host_permissions: [],
-    background: {
-      service_worker: 'entrypoints/background.ts',
-      type: 'module',
-    },
-
-    action: {
-      default_popup: 'entrypoints/popup/index.html',
-    },
     icons: {
       16: 'icon/intender-16.png',
       32: 'icon/intender-32.png',
