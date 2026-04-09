@@ -2,7 +2,7 @@
   "name": "intender",
   "description": "The mindful alternative to website blockers. Set an intention before opening Twitter, TikTok, or Reddit. Reflect before you enter.",
   "private": true,
-  "version": "0.9.4",
+  "version": "0.9.5",
   "type": "module",
   "scripts": {
     "dev": "wxt",
