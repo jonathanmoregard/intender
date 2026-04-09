@@ -1,8 +1,8 @@
 {
   "name": "intender",
-  "description": "Set intentions before visiting websites to stay focused and mindful of your browsing goals.",
+  "description": "The mindful alternative to website blockers. Set an intention before opening Twitter, TikTok, or Reddit. Reflect before you enter.",
   "private": true,
-  "version": "0.9.2",
+  "version": "0.9.4",
   "type": "module",
   "scripts": {
     "dev": "wxt",
