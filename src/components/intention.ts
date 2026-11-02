@@ -128,6 +128,40 @@ export function extractLanguageFromPath(path: string): {
 }
 
 // ============================================================================
+// PATH SCOPE
+// ============================================================================
+
+/**
+ * What an intention's path claims about which URLs it covers.
+ *
+ * These are two different claims and must not share a representation. An
+ * intention with no path covers the whole site; an intention with a path
+ * covers that prefix. The empty string used to express both - directly, as
+ * "no path", and indirectly, because `startsWith('')` is true of every URL -
+ * so a path that stripped down to nothing silently became site-wide.
+ */
+export type PathScope =
+  | { kind: 'whole-site' }
+  | { kind: 'prefixes'; prefixes: [string, ...string[]] };
+
+/**
+ * Reads an intention's path as the claim it makes.
+ *
+ * A path is matched both literally and with a leading locale removed, so
+ * `/en/news` and `/news` are the same page in two languages. A path that is
+ * *only* a locale has nothing left once the locale is removed, and an empty
+ * prefix is not a narrower claim - it is every URL on the site. The
+ * non-empty constraint on `prefixes` is what makes that unrepresentable.
+ */
+export function pathScopeOf(path: string): PathScope {
+  if (!path) return { kind: 'whole-site' };
+  const { remainingPath } = extractLanguageFromPath(path);
+  const prefixes: [string, ...string[]] =
+    remainingPath && remainingPath !== path ? [path, remainingPath] : [path];
+  return { kind: 'prefixes', prefixes };
+}
+
+// ============================================================================
 // INTENTION PARSING
 // ============================================================================
 
@@ -309,21 +343,16 @@ export function matchesIntentionScopeIgnoringDomain(
   }
 
   // Step 3: Path Match
-  if (!intentionScope.path) {
-    // If intentionScope.path is empty, match any path
-    return true;
-  }
+  const pathScope = pathScopeOf(intentionScope.path);
+  if (pathScope.kind === 'whole-site') return true;
 
   // Compare original and language-free paths on both sides. Keeping originals
   // preserves literal path-prefix matching when a segment is also a locale.
   const { remainingPath: targetPath } = extractLanguageFromPath(
     targetParts.path
   );
-  const { remainingPath: intentionPath } = extractLanguageFromPath(
-    intentionScope.path
-  );
   return [targetParts.path, targetPath].some(target =>
-    [intentionScope.path, intentionPath].some(scope => target.startsWith(scope))
+    pathScope.prefixes.some(prefix => target.startsWith(prefix))
   );
 }
 

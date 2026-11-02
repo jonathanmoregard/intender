@@ -89,3 +89,27 @@ describe('language path scope', () => {
     }
   );
 });
+
+describe('a path-scoped intention stays path-scoped', () => {
+  // A path whose only segment is a locale used to have an empty
+  // language-stripped form, and an empty prefix matches every URL - so the
+  // intention silently became site-wide. That reading is unreachable now:
+  // "the whole site" and "this prefix" are separate cases of PathScope.
+  it.each([
+    ['example.com/en', 'https://example.com/admin/billing'],
+    ['example.com/my', 'https://example.com/admin/billing'],
+    ['example.com/it', 'https://example.com/careers'],
+    ['example.com/no', 'https://example.com/'],
+  ])('%s does not capture %s', (scope, target) => {
+    expect(matches(scope, target)).toBe(false);
+  });
+
+  it.each([
+    ['example.com/en', 'https://example.com/en/news'],
+    ['example.com/en/news', 'https://example.com/news/story'],
+    ['example.com/en/news', 'https://example.com/en/news/story'],
+    ['example.com', 'https://example.com/admin/billing'],
+  ])('%s still captures %s', (scope, target) => {
+    expect(matches(scope, target)).toBe(true);
+  });
+});
