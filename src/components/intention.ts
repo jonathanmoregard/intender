@@ -83,7 +83,7 @@ export function isLanguageCode(code: string): boolean {
   }
 
   // Check if it's a language-country combination (e.g., 'en-us', 'fr-fr')
-  if (lowerCode.includes('-')) {
+  if (/^[a-z]{2}-[a-z]{2}$/.test(lowerCode)) {
     const [lang, country] = lowerCode.split('-');
     return ISO6391.validate(lang) && countries.isValid(country.toUpperCase());
   }
@@ -314,26 +314,17 @@ export function matchesIntentionScopeIgnoringDomain(
     return true;
   }
 
-  // Try matching with original path first
-  if (targetParts.path.startsWith(intentionScope.path)) {
-    return true;
-  }
-
-  // If that fails, try stripping language from target path
-  const { remainingPath } = extractLanguageFromPath(targetParts.path);
-  if (remainingPath.startsWith(intentionScope.path)) {
-    return true;
-  }
-
-  // If that fails, try stripping language from intention path
-  const { remainingPath: intentionRemainingPath } = extractLanguageFromPath(
+  // Compare original and language-free paths on both sides. Keeping originals
+  // preserves literal path-prefix matching when a segment is also a locale.
+  const { remainingPath: targetPath } = extractLanguageFromPath(
+    targetParts.path
+  );
+  const { remainingPath: intentionPath } = extractLanguageFromPath(
     intentionScope.path
   );
-  if (targetParts.path.startsWith(intentionRemainingPath)) {
-    return true;
-  }
-
-  return false;
+  return [targetParts.path, targetPath].some(target =>
+    [intentionScope.path, intentionPath].some(scope => target.startsWith(scope))
+  );
 }
 
 /**

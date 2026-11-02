@@ -1,4 +1,9 @@
-import { chromium, type BrowserContext, type Page } from '@playwright/test';
+import {
+  chromium,
+  type BrowserContext,
+  type Page,
+  type CDPSession,
+} from '@playwright/test';
 import { mkdir, mkdtemp, readdir, stat, unlink } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -166,7 +171,8 @@ export async function launchExtension(
   currentTeeTestName = actualTestName;
 
   const context = await chromium.launchPersistentContext(userDataDir, {
-    headless: false,
+    headless: process.env.PLAYWRIGHT_HEADLESS === '1',
+    executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
     args: [
       `--disable-extensions-except=${pathToExtension}`,
       `--load-extension=${pathToExtension}`,
@@ -270,48 +276,141 @@ export async function launchExtension(
 
 // Get the extension ID by checking loaded extensions
 
+type WorkerVersion = {
+  scriptURL: string;
+  runningStatus: string;
+  versionId: string;
+};
+
 /**
- * Stops the service worker associated with the extension using Chrome DevTools Protocol.
- * This is more reliable than the previous globalThis.close() approach.
- *
- * @param {BrowserContext} context Browser context
+ * Follow the extension worker's lifecycle through the browser's own reports.
+ * Playwright keeps one Worker object per extension registration: it emits
+ * neither "close" on termination nor a second "serviceworker" on restart, so
+ * its events cannot show that a worker really stopped and hydrated again.
+ */
+async function watchExtensionWorker(
+  context: BrowserContext,
+  scriptURL: string
+) {
+  const page = context.pages()[0];
+  if (!page) {
+    throw new Error('A page is required to observe the extension worker');
+  }
+  const client = await context.newCDPSession(page);
+  const onVersions = (event: { versions: WorkerVersion[] }) => {
+    for (const version of event.versions) {
+      if (version.scriptURL !== scriptURL) continue;
+      latest = version;
+      for (const listener of [...listeners]) listener(version);
+    }
+  };
+  let latest: WorkerVersion | null = null;
+  const listeners = new Set<(version: WorkerVersion) => void>();
+  client.on(
+    'ServiceWorker.workerVersionUpdated',
+    onVersions as Parameters<CDPSession['on']>[1]
+  );
+  // Enabling reports the current versions, so a status reached before this
+  // call still resolves a wait for it.
+  await client.send('ServiceWorker.enable');
+
+  return {
+    /** Resolve once the worker reports `runningStatus`, now or later. */
+    waitFor(runningStatus: string, timeoutMs = 10000): Promise<WorkerVersion> {
+      if (latest?.runningStatus === runningStatus) {
+        return Promise.resolve(latest);
+      }
+      return new Promise<WorkerVersion>((resolve, reject) => {
+        const listener = (version: WorkerVersion) => {
+          if (version.runningStatus !== runningStatus) return;
+          clearTimeout(timer);
+          listeners.delete(listener);
+          resolve(version);
+        };
+        const timer = setTimeout(() => {
+          listeners.delete(listener);
+          reject(
+            new Error(
+              `Extension worker never reported "${runningStatus}" (last reported: ${
+                latest?.runningStatus ?? 'nothing'
+              })`
+            )
+          );
+        }, timeoutMs);
+        listeners.add(listener);
+      });
+    },
+    stop(versionId: string): Promise<unknown> {
+      return client.send('ServiceWorker.stopWorker', { versionId });
+    },
+    async dispose(): Promise<void> {
+      listeners.clear();
+      client.removeListener(
+        'ServiceWorker.workerVersionUpdated',
+        onVersions as Parameters<CDPSession['on']>[1]
+      );
+      await client.detach();
+    },
+  };
+}
+
+function extensionWorkerUrl(context: BrowserContext): string {
+  const worker = context
+    .serviceWorkers()
+    .find(candidate => candidate.url().startsWith('chrome-extension://'));
+  if (!worker) {
+    throw new Error('A running extension worker is required');
+  }
+  return worker.url();
+}
+
+/**
+ * Stop the actual MV3 worker and require the browser to report its termination.
+ * A successful CDP request alone does not prove that hydration will be tested.
  */
 export async function stopServiceWorker(
   context: BrowserContext
 ): Promise<void> {
+  const watcher = await watchExtensionWorker(
+    context,
+    extensionWorkerUrl(context)
+  );
   try {
-    const extensionId = await getExtensionId(context);
-    const host = `chrome-extension://${extensionId}`;
-
-    // Get service workers from context
-    const serviceWorkers = context.serviceWorkers();
-    const targetWorker = serviceWorkers.find(sw => sw.url().startsWith(host));
-
-    if (targetWorker) {
-      // Service worker will be terminated when we close the context or use CDP
-      console.log(
-        `[Test] Service worker found for extension ${extensionId}, will be terminated`
-      );
-      // Force termination by sending a message to close
-      try {
-        await targetWorker.evaluate(() => {
-          // @ts-ignore
-          if (typeof globalThis.close === 'function') {
-            // @ts-ignore
-            globalThis.close();
-          }
-        });
-      } catch (e) {
-        // Worker might already be terminated
-      }
-    } else {
-      console.log(
-        `[Test] No service worker found for extension ${extensionId}`
+    const running = await watcher.waitFor('running');
+    // Arm the wait before asking for the stop: an idle worker can be restarted
+    // by the next extension event, and "stopped" is reported only once.
+    const stopped = watcher.waitFor('stopped');
+    await watcher.stop(running.versionId);
+    try {
+      await stopped;
+    } catch (error) {
+      throw new Error(
+        `Extension worker termination was not observed: ${
+          error instanceof Error ? error.message : String(error)
+        }`
       );
     }
-  } catch (error) {
-    console.log(`[Test] Failed to stop service worker: ${error}`);
-    // Don't throw - this is best effort
+  } finally {
+    await watcher.dispose();
+  }
+}
+
+/**
+ * Require the extension worker to be running again. Paired with a preceding
+ * stopServiceWorker, this is evidence of a real restart rather than a worker
+ * that was never terminated.
+ */
+export async function waitForServiceWorkerRunning(
+  context: BrowserContext
+): Promise<void> {
+  const watcher = await watchExtensionWorker(
+    context,
+    extensionWorkerUrl(context)
+  );
+  try {
+    await watcher.waitFor('running');
+  } finally {
+    await watcher.dispose();
   }
 }
 
@@ -356,7 +455,7 @@ export async function waitForSyncStorageChange(
   keys: string[]
 ): Promise<void> {
   await page.evaluate((watchedKeys: string[]) => {
-    window.__waitForStorageChange = new Promise<void>(resolve => {
+    return new Promise<void>(resolve => {
       const handler = (changes: Record<string, unknown>, area: string) => {
         if (
           area === 'sync' &&
@@ -379,7 +478,6 @@ export async function waitForSyncStorageChange(
       );
     });
   }, keys);
-  await page.evaluate(() => window.__waitForStorageChange);
 }
 
 /**

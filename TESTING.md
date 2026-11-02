@@ -1,5 +1,34 @@
 # Intender Testing Guide
 
+## Automated regression checks
+
+1. Run `npm test` for matching, import/storage, and background lifecycle tests.
+   Background tests run the real event handlers with browser APIs replaced at
+   their boundary, including navigation, focus loss, hydration, and rule edits.
+2. Run `npm run compile` and `npx tsc --noEmit -p tests-e2e/tsconfig.json` for
+   application and browser-test type checks. `npm run test:coverage -- --run`
+   includes settings TSX; browser tests are not included in this coverage report.
+3. Run `npm run test:e2e` for both browser projects. Failures in either project
+   propagate to the command's exit status, including repeated/throttled runs.
+4. For the import and navigation regressions without live websites, run
+   `npm run build` followed by
+   `npx playwright test tests-e2e/import-export.spec.ts tests-e2e/navigation-regressions.spec.ts --project=e2e-parallel`.
+   These tests use real extension pages, downloads, storage, and worker shutdown;
+   navigation responses are fulfilled locally by Playwright. One exception:
+   Chromium follows a redirect produced by `route.fulfill` without handing the
+   follow-up request back to Playwright, so the server-redirect test does resolve
+   and request `example.com`. It fails on a host whose resolver does not answer
+   for that name.
+
+Install Playwright Chromium before browser tests. A Chrome build from the
+distribution will not do: Chrome removed `--load-extension`, so the extension
+never loads and every test waits for a service worker that never appears. When
+using another Chrome for Testing build, set
+`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to its executable. The
+fixture-based regressions can use `PLAYWRIGHT_HEADLESS=1`; desktop focus/audio
+tests should run headed (the default, using Xvfb in CI). A browser launch failure
+does not verify an extension behavior and must be reported separately.
+
 For installation and distribution instructions, see [SHARING_GUIDE.md](./SHARING_GUIDE.md).
 
 For bug reporting, use our [Bug Report Template](./BUG_REPORT_TEMPLATE.md).

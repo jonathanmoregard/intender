@@ -14,13 +14,15 @@ export function fuzzyMatch(
 ): boolean {
   if (!input.trim() || !expected.trim()) return false;
 
-  const distance = damerauLevenshtein(input, expected);
+  // Compare Unicode code points so a non-BMP character is one edit, just as
+  // an ordinary letter is, in both complete and partial phrase matching.
+  const distance = damerauLevenshtein(Array.from(input), Array.from(expected));
   return distance <= maxDistance;
 }
 
 /**
- * Fuzzy matches an input string against a truncated portion of an expected string
- * This ensures monotonicity: adding correct characters should never make the match worse
+ * Fuzzy matches input against any prefix of the expected phrase. Insertions
+ * and deletions can shift the prefix boundary away from the input's length.
  * @param input - The input string to match
  * @param expected - The full expected string
  * @param maxDistance - Maximum allowed edit distance for partial matches
@@ -33,7 +35,25 @@ export function fuzzyPartialMatch(
 ): boolean {
   if (!input.trim() || !expected.trim()) return false;
 
-  const prefix = expected.slice(0, input.length);
-  const distance = damerauLevenshtein(input, prefix);
-  return distance <= maxDistance;
+  if (!(maxDistance >= 0)) return false;
+  if (expected.startsWith(input)) return true;
+
+  const inputCharacters = Array.from(input);
+  const expectedCharacters = Array.from(expected);
+  const budget = Math.floor(maxDistance);
+  // Length difference alone rules out all prefixes outside this window.
+  const first = Math.max(0, inputCharacters.length - budget);
+  const last = Math.min(
+    expectedCharacters.length,
+    inputCharacters.length + budget
+  );
+
+  for (let length = first; length <= last; length++) {
+    const distance = damerauLevenshtein(
+      inputCharacters,
+      expectedCharacters.slice(0, length)
+    );
+    if (distance <= maxDistance) return true;
+  }
+  return false;
 }

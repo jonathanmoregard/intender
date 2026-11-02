@@ -1,4 +1,3 @@
-import { faker } from '@faker-js/faker';
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import {
@@ -64,121 +63,39 @@ describe('fuzzyMatch', () => {
 describe('fuzzyPartialMatch', () => {
   const maxDistance = 2;
 
-  // Function to inject typos into a string
-  function withTypos(str: string, typoRate = 0.2): string {
-    const chars = str.split('');
-    const result: string[] = [];
+  const phraseArb = fc
+    .array(fc.constantFrom('a', 'b', 'c', 'd'), {
+      minLength: 3,
+      maxLength: 40,
+    })
+    .map(characters => characters.join(''));
 
-    for (let i = 0; i < chars.length; i++) {
-      if (Math.random() < typoRate) {
-        const typoType = Math.floor(Math.random() * 4);
-        switch (typoType) {
-          case 0: // swap with next
-            if (i < chars.length - 1) {
-              result.push(chars[i + 1], chars[i]);
-              i++; // skip next since we already used it
-            } else {
-              result.push(chars[i]);
-            }
-            break;
-          case 1: // delete character
-            // skip pushing this character
-            break;
-          case 2: // duplicate character
-            result.push(chars[i], chars[i]);
-            break;
-          case 3: // replace with random letter
-            const randChar = String.fromCharCode(
-              97 + Math.floor(Math.random() * 26)
-            );
-            result.push(randChar);
-            break;
-        }
-      } else {
-        result.push(chars[i]);
-      }
-    }
-
-    return result.join('');
-  }
-
-  it('should pass property: if n chars match, n+1 chars should match if next char is from expected', () => {
-    // Property: adding a correct character should never turn from valid to invalid
-    // Base lorem ipsum text
-    const loremIpsum = faker.lorem.sentence();
-
-    // Arbitrary that generates the same base text with typos
-    const loremIpsumTyposArb = fc
-      .constant(null)
-      .map(() => withTypos(loremIpsum, 0.05)); // Much lower typo rate
-
+  it('keeps matching when correct characters follow inserted or deleted characters', () => {
     fc.assert(
-      fc.property(loremIpsumTyposArb, inputWithTypos => {
-        // Test the property: if input substring length works, then adding the next expected char should work
-        const maxLength = Math.min(loremIpsum.length, inputWithTypos.length);
-
-        for (let length = 3; length < maxLength; length++) {
-          const currentInput = inputWithTypos.substring(0, length);
-          const nextExpectedChar = loremIpsum.charAt(length);
-          const nextInput = currentInput + nextExpectedChar; // Add next expected char to current input
-
-          const currentMatches = fuzzyPartialMatch(
-            currentInput,
-            loremIpsum,
-            maxDistance
-          );
-          const nextMatches = fuzzyPartialMatch(
-            nextInput,
-            loremIpsum,
-            maxDistance
-          );
-
-          // If current matches, then adding the next expected char should also match
-          if (currentMatches) {
-            if (!nextMatches) {
-              console.log(
-                `Property violation: ${length} chars match but adding next expected char doesn't match`
-              );
-              console.log(`Expected: "${loremIpsum}"`);
-              console.log(`Input with typos: "${inputWithTypos}"`);
-              console.log(`Current input: "${currentInput}"`);
-              console.log(`Next input (with expected char): "${nextInput}"`);
-              console.log(`Next expected char: "${nextExpectedChar}"`);
-              return false;
-            }
-          }
+      fc.property(phraseArb, fc.nat(), (expected, position) => {
+        const end = 3 + (position % (expected.length - 2));
+        const prefix = expected.slice(0, end);
+        const nextCharacter = expected.slice(end, end + 1);
+        // Track the expected boundary, not the typo-shifted input length.
+        for (const input of [`xx${prefix}`, prefix.slice(2)]) {
+          expect(fuzzyPartialMatch(input, expected, maxDistance)).toBe(true);
+          expect(
+            fuzzyPartialMatch(input + nextCharacter, expected, maxDistance)
+          ).toBe(true);
         }
-
-        return true;
       }),
       { numRuns: 100 }
     );
   });
 
-  it('should handle exact prefixes correctly', () => {
-    // Base lorem ipsum text
-    const loremIpsum = faker.lorem.sentence();
-
+  it('matches every nonempty exact prefix without consuming the edit budget', () => {
     fc.assert(
-      fc.property(fc.constant(loremIpsum), expected => {
-        // Test that exact prefixes always match
-        for (
-          let length = 3;
-          length <= Math.min(10, expected.length);
-          length++
-        ) {
-          const exactPrefix = expected.substring(0, length);
-          const matches = fuzzyPartialMatch(exactPrefix, expected, maxDistance);
-
-          if (!matches) {
-            console.log(
-              `Exact prefix failed: "${exactPrefix}" for "${expected}"`
-            );
-            return false;
-          }
+      fc.property(phraseArb, expected => {
+        for (let length = 1; length <= expected.length; length++) {
+          expect(
+            fuzzyPartialMatch(expected.slice(0, length), expected, 0)
+          ).toBe(true);
         }
-
-        return true;
       }),
       { numRuns: 50 }
     );
@@ -194,10 +111,6 @@ describe('fuzzyPartialMatch', () => {
     const result1 = fuzzyPartialMatch(input1, expected, maxDistance);
     const result2 = fuzzyPartialMatch(input2, expected, maxDistance);
 
-    console.log(`Testing: "${input1}" -> ${result1}`);
-    console.log(`Testing: "${input2}" -> ${result2}`);
-
-    // This should fail with current config
     expect(result1).toBe(true);
     expect(result2).toBe(true);
   });

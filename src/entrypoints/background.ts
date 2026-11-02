@@ -50,6 +50,17 @@ const buildIntentionRedirectUrl = (
 
 // Tab URL cache to track last-known URLs for each tab
 const tabUrlMap = new Map<TabId, string>();
+const audibleTabIds = new Set<TabId>();
+
+const isTabAudible = (tab: Pick<browser.Tabs.Tab, 'audible' | 'mutedInfo'>) =>
+  tab.audible === true && tab.mutedInfo?.muted !== true;
+
+const trackTabAudibility = (tab: browser.Tabs.Tab) => {
+  if (tab.id == null) return;
+  const tabId = numberToTabId(tab.id);
+  if (isTabAudible(tab)) audibleTabIds.add(tabId);
+  else audibleTabIds.delete(tabId);
+};
 
 // Inactivity tracking
 const lastActiveByScope = new Map<IntentionScopeId, Timestamp>();
@@ -198,11 +209,13 @@ const reconcileStateWithBrowser = async (
   try {
     const allTabs = await browser.tabs.query({});
     const seenTabIds = new Set<TabId>();
+    audibleTabIds.clear();
 
     for (const tab of allTabs) {
       if (tab.id == null) continue;
       const tabId = numberToTabId(tab.id);
       seenTabIds.add(tabId);
+      trackTabAudibility(tab);
 
       const url = typeof tab.url === 'string' ? tab.url : undefined;
       if (url) {
@@ -220,6 +233,8 @@ const reconcileStateWithBrowser = async (
         if (!lastActiveByScope.has(scope) && updateActivity) {
           updateActivity(scope);
         }
+      } else {
+        intentionScopePerTabId.delete(tabId);
       }
 
       if (tab.active && typeof tab.windowId === 'number') {
@@ -302,7 +317,6 @@ export default defineBackground(async () => {
       '[Intender] Updated activity for intention scope:',
       intentionScopeId
     );
-    cleanupNavDecisionCache();
     persistSession();
   };
 
@@ -312,7 +326,7 @@ export default defineBackground(async () => {
     return intentionToIntentionScopeId(matchedIntention);
   };
 
-  // Unified navigation decision and short-lived cache (to keep decisions monotonic across hooks)
+  // The same policy applies to full-document and same-document navigation.
   type NavigationDecision =
     | {
         kind: 'allow';
@@ -324,40 +338,17 @@ export default defineBackground(async () => {
       }
     | { kind: 'block_redirect'; reason: 'matched-scope'; redirectTo: string };
 
-  const NAV_DECISION_TTL_MS = 3000;
-  const navDecisionCache = new Map<
-    string,
-    { decision: NavigationDecision; until: number }
+  // A decision belongs to one navigation, never to a reusable tab/URL pair.
+  // Keep its source until commit so server redirects are checked from the page
+  // that initiated the navigation. A newer before-event supersedes this entry.
+  const pendingNavigations = new Map<
+    number,
+    {
+      sourceUrl: string | null;
+      targetUrl: string;
+      decision: NavigationDecision;
+    }
   >();
-
-  function cacheKey(tabId: number, targetUrl: string): string {
-    return `${tabId}:${targetUrl}`;
-  }
-
-  function readCachedDecision(
-    tabId: number,
-    targetUrl: string
-  ): NavigationDecision | null {
-    const key = cacheKey(tabId, targetUrl);
-    const entry = navDecisionCache.get(key);
-    if (!entry) return null;
-    const now = Date.now();
-    if (now <= entry.until) return entry.decision;
-    navDecisionCache.delete(key);
-    return null;
-  }
-
-  function writeCachedDecision(
-    tabId: number,
-    targetUrl: string,
-    decision: NavigationDecision
-  ): void {
-    const key = cacheKey(tabId, targetUrl);
-    navDecisionCache.set(key, {
-      decision,
-      until: Date.now() + NAV_DECISION_TTL_MS,
-    });
-  }
 
   function getActiveTabSnapshot(navigationTabId: number): {
     isNavigationTabActive: boolean;
@@ -377,22 +368,13 @@ export default defineBackground(async () => {
     return { isNavigationTabActive, activeTabUrl };
   }
 
-  const cleanupNavDecisionCache = () => {
-    const now = Date.now();
-    for (const [key, entry] of navDecisionCache) {
-      if (now > entry.until) navDecisionCache.delete(key);
-    }
-  };
-
   function decideNavigation(args: {
     tabId: number;
     sourceUrl: string | null;
     targetUrl: string;
-    postCommit?: boolean;
     cameFromIntentionPage?: boolean;
   }): NavigationDecision {
-    const { tabId, sourceUrl, targetUrl, postCommit, cameFromIntentionPage } =
-      args;
+    const { tabId, sourceUrl, targetUrl, cameFromIntentionPage } = args;
     const { isNavigationTabActive, activeTabUrl } = getActiveTabSnapshot(tabId);
 
     // Same-scope allow
@@ -431,25 +413,12 @@ export default defineBackground(async () => {
       return { kind: 'allow', reason: 'active-tab-same-scope' };
     }
 
-    // Post-commit enforcement for server/client redirects into a scoped target
-    if (postCommit) {
-      const matched =
-        targetScope != null ? lookupIntention(targetUrl, intentionIndex) : null;
-      if (matched && !cameFromIntentionPage) {
-        const toScope = intentionToIntentionScopeId(matched);
-        const redirectTo = buildIntentionRedirectUrl(targetUrl, toScope);
-        return { kind: 'block_redirect', reason: 'matched-scope', redirectTo };
-      }
-    }
-
-    // Before-navigate: block when target matches a configured intention
-    if (!postCommit) {
-      const matched = lookupIntention(targetUrl, intentionIndex);
-      if (matched) {
-        const toScope = intentionToIntentionScopeId(matched);
-        const redirectTo = buildIntentionRedirectUrl(targetUrl, toScope);
-        return { kind: 'block_redirect', reason: 'matched-scope', redirectTo };
-      }
+    if (targetScope) {
+      return {
+        kind: 'block_redirect',
+        reason: 'matched-scope',
+        redirectTo: buildIntentionRedirectUrl(targetUrl, targetScope),
+      };
     }
 
     return { kind: 'allow', reason: 'no-match' };
@@ -471,7 +440,7 @@ export default defineBackground(async () => {
         tab =>
           tab.id != null &&
           scopeTabIds.has(tab.id as TabId) &&
-          tab.mutedInfo?.muted !== true
+          isTabAudible(tab)
       );
     } catch (error) {
       console.error('[Intender] Failed to check scope audibility:', error);
@@ -739,11 +708,20 @@ export default defineBackground(async () => {
     const windowId = numberToWindowId(activeInfo.windowId);
     const toTabId = numberToTabId(activeInfo.tabId);
 
+    // Track previous active per window (from tab handling). Read it before
+    // hydration: a restarted worker reconciles from the browser, where this
+    // activation already happened, and would see the tab as its own precursor.
+    const fromTabId = lastActiveTabIdByWindow.get(windowId);
+
     // Cold window guard - wait for intentionIndex to be ready
     await ensureReady();
 
-    // Track previous active per window (from tab handling)
-    const fromTabId = lastActiveTabIdByWindow.get(windowId);
+    // Activation in an unfocused window is bookkeeping, not user activity.
+    if (lastFocusedWindowId !== windowId) {
+      lastActiveTabIdByWindow.set(windowId, toTabId);
+      persistSession();
+      return;
+    }
 
     // Skip if same tab (spurious re-activation)
     if (fromTabId && fromTabId === toTabId) return;
@@ -761,31 +739,30 @@ export default defineBackground(async () => {
   });
 
   // Handle audio state changes
-  browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     const tId = numberToTabId(tabId);
-
     const intentionScopeId = getScopeForTab(tId);
+    const audioChanged =
+      changeInfo.audible !== undefined || changeInfo.mutedInfo !== undefined;
+    if (!audioChanged) return;
 
-    // Handle audible state changes - update activity when audio starts/stops
-    if (changeInfo.audible !== undefined) {
-      if (changeInfo.audible) {
-        debugLog('[Intender] Tab became audible, bumping activity:', {
-          tabId,
-          intentionScopeId: intentionScopeId || 'unknown',
-        });
-        if (intentionScopeId) updateIntentionScopeActivity(intentionScopeId);
-      } else {
-        debugLog('[Intender] Tab stopped being audible, bumping activity:', {
-          tabId,
-          intentionScopeId: intentionScopeId || 'unknown',
-        });
-        if (intentionScopeId) updateIntentionScopeActivity(intentionScopeId);
-      }
+    // Track effective playback, not the presence of an update field: mutedInfo
+    // also contains metadata that can change without changing audibility.
+    const wasAudible = audibleTabIds.has(tId);
+    trackTabAudibility(tab);
+    if (!intentionScopeId) return;
+    if (
+      getActiveTabSnapshot(tabId).isNavigationTabActive ||
+      (inactivityMode === 'all-except-audio' &&
+        wasAudible !== isTabAudible(tab))
+    ) {
+      updateIntentionScopeActivity(intentionScopeId);
     }
   });
 
   // Track new tabs to initialize cache
   browser.tabs.onCreated.addListener(tab => {
+    trackTabAudibility(tab);
     if (tab.id !== undefined && typeof tab.url === 'string') {
       tabUrlMap.set(numberToTabId(tab.id), tab.url);
       debugLog('[Intender] Tab created, cached URL:', {
@@ -797,7 +774,10 @@ export default defineBackground(async () => {
   });
 
   // Update cache when navigation is committed (reliable source of truth)
-  browser.webNavigation.onCommitted.addListener(async details => {
+  async function handleCommittedNavigation(
+    details: { tabId: number; frameId: number; url: string },
+    sameDocument = false
+  ): Promise<void> {
     // Only track main frame navigation
     if (details.frameId !== 0) {
       return;
@@ -807,9 +787,13 @@ export default defineBackground(async () => {
     await ensureReady();
 
     const tabId = numberToTabId(details.tabId);
-    const priorUrl = tabUrlMap.get(tabId) || null;
-    tabUrlMap.set(tabId, details.url);
-    persistSession();
+    const pending = sameDocument
+      ? undefined
+      : pendingNavigations.get(details.tabId);
+    pendingNavigations.delete(details.tabId);
+    const priorUrl = pending
+      ? pending.sourceUrl
+      : (tabUrlMap.get(tabId) ?? null);
 
     debugLog('[Intender] Navigation committed, updated cache:', {
       tabId: details.tabId,
@@ -819,17 +803,28 @@ export default defineBackground(async () => {
     // Unified decision (post-commit)
     const cameFromIntentionPage =
       priorUrl?.startsWith(intentionPageUrl) === true;
-    const cached = readCachedDecision(details.tabId, details.url);
+    // Completion may redirect within its authorized scope (e.g. stripping the
+    // token). It does not authorize a different intention's destination.
+    const completedScope =
+      pending?.decision.kind === 'allow' &&
+      pending.decision.reason === 'intention-completed'
+        ? lookupIntentionScopeId(pending.targetUrl)
+        : null;
+    const reusePending =
+      pending &&
+      (pending.targetUrl === details.url ||
+        (completedScope !== null &&
+          completedScope === lookupIntentionScopeId(details.url)));
     const decision =
-      cached ??
+      (reusePending ? pending.decision : null) ??
       decideNavigation({
         tabId: details.tabId,
         sourceUrl: priorUrl,
         targetUrl: details.url,
-        postCommit: true,
         cameFromIntentionPage,
       });
-    if (!cached) writeCachedDecision(details.tabId, details.url, decision);
+    tabUrlMap.set(tabId, details.url);
+    persistSession();
 
     if (decision.kind === 'block_redirect') {
       try {
@@ -853,7 +848,11 @@ export default defineBackground(async () => {
       const scopeId = intentionToIntentionScopeId(matched);
       intentionScopePerTabId.set(tabId, scopeId);
       persistSession();
-      updateIntentionScopeActivity(scopeId);
+      // A page can reload or update history on a timer. Only navigation in the
+      // foreground tab is evidence of user activity; audio has its own handler.
+      if (getActiveTabSnapshot(details.tabId).isNavigationTabActive) {
+        updateIntentionScopeActivity(scopeId);
+      }
       debugLog('[Intender] Navigation committed to scoped page, set scope:', {
         tabId: details.tabId,
         scopeId,
@@ -872,7 +871,17 @@ export default defineBackground(async () => {
         persistSession();
       }
     }
-  });
+  }
+
+  browser.webNavigation.onCommitted.addListener(details =>
+    handleCommittedNavigation(details)
+  );
+  browser.webNavigation.onHistoryStateUpdated.addListener(details =>
+    handleCommittedNavigation(details, true)
+  );
+  browser.webNavigation.onReferenceFragmentUpdated.addListener(details =>
+    handleCommittedNavigation(details, true)
+  );
 
   // Clean up cache when tabs are removed
   browser.tabs.onRemoved.addListener(tabId => {
@@ -880,15 +889,20 @@ export default defineBackground(async () => {
 
     // Clean up all tracking maps
     tabUrlMap.delete(tId);
+    audibleTabIds.delete(tId);
     intentionScopePerTabId.delete(tId);
     lastRedirectAtByTabId.delete(tId);
+    pendingNavigations.delete(tabId);
+    for (const [windowId, activeTabId] of lastActiveTabIdByWindow) {
+      if (activeTabId === tId) lastActiveTabIdByWindow.delete(windowId);
+    }
     persistSession();
 
     debugLog('[Intender] Tab removed, cleared cache:', { tabId });
   });
 
   // Handle tab replacement (e.g., prerender activation swaps tab IDs)
-  browser.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
+  browser.tabs.onReplaced.addListener(async (addedTabId, removedTabId) => {
     const added = numberToTabId(addedTabId);
     const removed = numberToTabId(removedTabId);
 
@@ -906,6 +920,12 @@ export default defineBackground(async () => {
     }
 
     lastRedirectAtByTabId.delete(removed);
+    audibleTabIds.delete(removed);
+    pendingNavigations.delete(removedTabId);
+    pendingNavigations.delete(addedTabId);
+    for (const [windowId, activeTabId] of lastActiveTabIdByWindow) {
+      if (activeTabId === removed) lastActiveTabIdByWindow.set(windowId, added);
+    }
     persistSession();
 
     debugLog('[Intender] Tab replaced:', {
@@ -914,6 +934,12 @@ export default defineBackground(async () => {
       migratedUrl: removedUrl || null,
       migratedScope: removedScope || null,
     });
+    try {
+      trackTabAudibility(await browser.tabs.get(addedTabId));
+    } catch {
+      // A replacement may itself close before its snapshot can be read.
+      audibleTabIds.delete(added);
+    }
   });
 
   // Handle window focus changes
@@ -922,10 +948,13 @@ export default defineBackground(async () => {
     await ensureReady();
     // Update tracking: record previous focused window
     const prevWindowId = lastFocusedWindowId;
-    if (windowId !== -1) {
-      lastFocusedWindowId = numberToWindowId(windowId);
-      persistSession();
+    lastFocusedWindowId = windowId === -1 ? null : numberToWindowId(windowId);
+    if (windowId === -1 && prevWindowId !== null) {
+      const departingTab = lastActiveTabIdByWindow.get(prevWindowId);
+      const departingScope = departingTab ? getScopeForTab(departingTab) : null;
+      if (departingScope) updateIntentionScopeActivity(departingScope);
     }
+    persistSession();
 
     debugLog('[Intender] Window focus changed:', {
       prevWindowId,
@@ -1080,18 +1109,13 @@ export default defineBackground(async () => {
 
     // Unified decision path
     {
-      const cached = readCachedDecision(details.tabId, targetUrl);
-      const decision =
-        cached ??
-        decideNavigation({
-          tabId: details.tabId,
-          sourceUrl,
-          targetUrl,
-          postCommit: false,
-          cameFromIntentionPage:
-            sourceUrl?.startsWith(intentionPageUrl) === true,
-        });
-      if (!cached) writeCachedDecision(details.tabId, targetUrl, decision);
+      const decision = decideNavigation({
+        tabId: details.tabId,
+        sourceUrl,
+        targetUrl,
+        cameFromIntentionPage: sourceUrl?.startsWith(intentionPageUrl) === true,
+      });
+      pendingNavigations.set(details.tabId, { sourceUrl, targetUrl, decision });
 
       if (decision.kind === 'allow') return;
 
@@ -1161,6 +1185,7 @@ export default defineBackground(async () => {
         const { intentions } = await storage.get();
         const parsedIntentions = mapNulls(parseIntention, intentions);
         intentionIndex = createIntentionIndex(parsedIntentions);
+        pendingNavigations.clear();
 
         // Refresh tab → scope mappings and bump activity for newly scoped tabs
         try {

@@ -1,195 +1,343 @@
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
+import { readFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import type { Page } from '@playwright/test';
 import { SettingsPage } from './fixtures/page/settings';
 import { expect, test } from './test-setup';
 import { launchExtension } from './utils/extension';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const __dirname = dirname(fileURLToPath(import.meta.url));
+type DelayedImportWindow = Window & { releaseImportWrite?: () => void };
+
+async function importPayload(page: Page, payload: unknown) {
+  if (!(await page.getByTestId('more-options-dropdown').isVisible())) {
+    await SettingsPage.openMoreOptions(page);
+  }
+  const chooser = page.waitForEvent('filechooser');
+  await page.getByTestId('import-settings-btn').click();
+  await (
+    await chooser
+  ).setFiles({
+    name: 'settings.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(payload)),
+  });
+}
+
+async function savedSettings(page: Page) {
+  return page.evaluate(() => chrome.storage.sync.get());
+}
+
+function normalize(settings: any) {
+  const { version, ...rest } = settings;
+  return {
+    ...rest,
+    intentions: rest.intentions.map(({ id, ...row }: any) => row),
+  };
+}
 
 test.describe('Import/Export', () => {
-  test('should handle malformed import data gracefully', async () => {
+  test('a slow import prevents edits and tab changes until its write finishes', async () => {
     const { context } = await launchExtension();
-    const settingsPage = await SettingsPage.openSettingsPage(context);
-    await settingsPage.waitForLoadState('networkidle');
-
-    // Open the more options dropdown
-    await SettingsPage.openMoreOptions(settingsPage);
-
-    // Import malformed JSON via page model
-    await SettingsPage.importFromFile(
-      settingsPage,
-      join(__dirname, 'fixtures/malformed-intentions.json')
-    );
-
-    // Wait for import attempt
-    await settingsPage.waitForTimeout(2000);
-
-    // Should handle gracefully without crashing - just check that the page is still responsive
-    // The malformed file is actually valid JSON with invalid structure, so import might succeed
-    // but we just want to ensure the page doesn't crash
-    await expect(settingsPage.locator('body')).toBeVisible();
-
-    await context.close();
-  });
-
-  test('should regenerate GUIDs for duplicate IDs on import', async () => {
-    const { context } = await launchExtension();
-    const settingsPage = await SettingsPage.openSettingsPage(context);
-    await settingsPage.waitForLoadState('networkidle');
-
-    // Open the more options dropdown
-    await SettingsPage.openMoreOptions(settingsPage);
-
-    // Import duplicate GUIDs via page model
-    await SettingsPage.importFromFile(
-      settingsPage,
-      join(__dirname, 'fixtures/duplicate-guids-intentions.json')
-    );
-
-    // Wait for import to complete
-    await settingsPage.waitForTimeout(2000);
-
-    // Verify all three intentions were imported
-    const urlInputs = SettingsPage.locators.urlInputs(settingsPage);
-    const phraseInputs = SettingsPage.locators.phraseInputs(settingsPage);
-
-    await expect(urlInputs).toHaveCount(3);
-
-    // Check that all intentions have the expected content
-    await expect(urlInputs.nth(0)).toHaveValue('example1.com');
-    await expect(phraseInputs.nth(0)).toHaveValue(
-      'First intention with duplicate ID'
-    );
-
-    await expect(urlInputs.nth(1)).toHaveValue('example2.com');
-    await expect(phraseInputs.nth(1)).toHaveValue(
-      'Second intention with same duplicate ID'
-    );
-
-    await expect(urlInputs.nth(2)).toHaveValue('example3.com');
-    await expect(phraseInputs.nth(2)).toHaveValue(
-      'Third intention with same duplicate ID'
-    );
-
-    const exportedData = await SettingsPage.exportToMemory(settingsPage);
-
-    // Verify export data has unique GUIDs
-    expect(exportedData).toBeTruthy();
-    const exportedSettings = JSON.parse(exportedData);
-
-    // Should be new format with all settings
-    expect(exportedSettings).toHaveProperty('intentions');
-    expect(exportedSettings.intentions).toHaveLength(3);
-
-    // Extract all IDs and verify they are unique
-    const exportedIds = exportedSettings.intentions.map(
-      (intention: any) => intention.id
-    );
-    const uniqueIds = new Set(exportedIds);
-
-    expect(uniqueIds.size).toBe(3); // All IDs should be unique
-    expect(exportedIds).not.toContain('9fd9cc7d-2af2-4162-8a0e-c8bbf47b728d'); // Original duplicate ID should not exist
-
-    // Verify all IDs are valid UUIDs
-    const uuidRegex =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    exportedIds.forEach((id: string) => {
-      expect(id).toMatch(uuidRegex);
-    });
-
-    await context.close();
-  });
-
-  test('golden test: import-export-import roundtrip should preserve all settings', async () => {
-    const { context } = await launchExtension();
-    const settingsPage = await SettingsPage.openSettingsPage(context);
-    await settingsPage.waitForLoadState('networkidle');
-
-    // First, import the golden settings file
-    await SettingsPage.openMoreOptions(settingsPage);
-    await SettingsPage.importFromFile(
-      settingsPage,
-      join(__dirname, 'fixtures/golden-settings.json')
-    );
-
-    // Wait for import to complete
-    await settingsPage.waitForTimeout(2000);
-
-    // Export the settings
-    const exportedData = await SettingsPage.exportToMemory(settingsPage);
-    expect(exportedData).toBeTruthy();
-
-    const exportedSettings = JSON.parse(exportedData!);
-
-    // Load the golden file to compare (excluding version and IDs)
-    const fs = await import('fs/promises');
-    const goldenFilePath = join(__dirname, 'fixtures/golden-settings.json');
-    const goldenFileContent = await fs.readFile(goldenFilePath, 'utf-8');
-    const goldenData = JSON.parse(goldenFileContent);
-
-    // Compare all settings except version and intention IDs (which get regenerated)
-    const compareSettings = (exported: any, golden: any) => {
-      // Normalize both objects by setting version and intention IDs to empty strings
-      const normalize = (obj: any) => {
-        const normalized = JSON.parse(JSON.stringify(obj)); // Deep clone
-        normalized.version = '';
-        if (normalized.intentions) {
-          normalized.intentions.forEach((intention: any) => {
-            intention.id = '';
-          });
-        }
-        return normalized;
-      };
-
-      // Use JSON.stringify with sorted keys for consistent comparison
-      const stringifySorted = (obj: any) => {
-        return JSON.stringify(obj, Object.keys(obj).sort());
-      };
-
-      if (
-        stringifySorted(normalize(exported)) !==
-        stringifySorted(normalize(golden))
-      ) {
-        throw new Error(
-          'Settings mismatch after normalization (version and IDs set to empty strings)'
-        );
-      }
-
-      // Verify that IDs were actually regenerated (not the same as golden)
-      if (exported.intentions && golden.intentions) {
-        for (let i = 0; i < exported.intentions.length; i++) {
-          if (exported.intentions[i].id === golden.intentions[i].id) {
-            throw new Error(
-              `Intention ${i} ID should be regenerated but wasn't`
-            );
-          }
-        }
-      }
-    };
-
     try {
-      compareSettings(exportedSettings, goldenData);
-      console.log(
-        '✅ Golden test passed: import-export-import roundtrip preserved all settings'
+      const page = await SettingsPage.openSettingsPage(context);
+      await SettingsPage.addIntention(page, {
+        url: 'existing.example',
+        phrase: 'Previous intention',
+      });
+      // Delay only the browser storage adapter. The picker, parser, editor,
+      // debounce and eventual storage write all remain real.
+      await page.evaluate(() => {
+        const originalSet = chrome.storage.sync.set.bind(chrome.storage.sync);
+        const boundary = window as DelayedImportWindow;
+        chrome.storage.sync.set = ((
+          items: Record<string, unknown>,
+          callback?: () => void
+        ) => {
+          chrome.storage.sync.set = originalSet;
+          return new Promise<void>(resolve => {
+            boundary.releaseImportWrite = () => {
+              if (callback) {
+                originalSet(items, () => {
+                  callback();
+                  resolve();
+                });
+              } else {
+                resolve(originalSet(items));
+              }
+            };
+          });
+        }) as typeof chrome.storage.sync.set;
+      });
+      await importPayload(page, [
+        { url: 'imported.example', phrase: 'Imported intention' },
+      ]);
+      await expect
+        .poll(() =>
+          page.evaluate(() =>
+            Boolean((window as DelayedImportWindow).releaseImportWrite)
+          )
+        )
+        .toBe(true);
+      await expect(page.locator('.options-container')).toHaveAttribute('inert');
+      await expect(page.getByRole('status')).toHaveText('Importing settings…');
+      // Attempt real pointer/keyboard input while persistence is in flight.
+      const box = await SettingsPage.locators.phraseInputs(page).boundingBox();
+      await page.mouse.click(box!.x + 10, box!.y + 10);
+      await page.keyboard.type('Must not overwrite import');
+      await expect(SettingsPage.locators.phraseInputs(page)).toHaveValue(
+        'Previous intention'
       );
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      console.error('❌ Golden test failed:', errorMessage);
-      console.error(
-        'If this is due to new settings being added, update the golden file:'
+      const about = await page
+        .locator('.tab-btn')
+        .filter({ hasText: 'About' })
+        .boundingBox();
+      await page.mouse.click(about!.x + 10, about!.y + 10);
+      await expect(page.locator('.settings-tab')).toBeVisible();
+      await expect(page.locator('.about-tab')).toHaveCount(0);
+      await page.evaluate(() =>
+        (window as DelayedImportWindow).releaseImportWrite!()
       );
-      console.error('1. Run the export manually');
-      console.error(
-        '2. Update tests-e2e/fixtures/golden-settings.json with the new structure'
+      await expect(page.locator('.toast.success')).toContainText('Imported');
+      await expect(page.locator('.options-container')).not.toHaveAttribute(
+        'inert'
       );
-      console.error(
-        '3. Ensure all new settings are included in the golden file'
+      await expect(SettingsPage.locators.urlInputs(page)).toHaveValue(
+        'imported.example'
       );
-      throw error;
+      await page.reload();
+      await expect(SettingsPage.locators.urlInputs(page)).toHaveValue(
+        'imported.example'
+      );
+    } finally {
+      await context.close();
     }
+  });
 
-    await context.close();
+  test('switching to About immediately after an edit preserves the pending draft', async () => {
+    const { context } = await launchExtension();
+    try {
+      const page = await SettingsPage.openSettingsPage(context);
+      await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
+      // Reload before editing so every application timer uses the installed clock.
+      await page.reload();
+      await expect(SettingsPage.locators.urlInputs(page)).toHaveCount(1);
+      await SettingsPage.addIntention(page, {
+        url: 'example.com',
+        phrase: 'Old phrase',
+      });
+      // Freeze the debounce timer: tab switching must save without waiting for it.
+      await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
+      await SettingsPage.locators.phraseInputs(page).fill('Latest draft');
+      await page.getByRole('button', { name: 'About', exact: true }).click();
+      await expect(
+        page.getByRole('heading', { name: 'About Intender', exact: true })
+      ).toBeVisible();
+      await page.getByRole('button', { name: 'Settings', exact: true }).click();
+      await expect(SettingsPage.locators.phraseInputs(page)).toHaveValue(
+        'Latest draft'
+      );
+      expect((await savedSettings(page)).intentions).toEqual([
+        { id: expect.any(String), url: 'example.com', phrase: 'Latest draft' },
+      ]);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('manual timeout entries keep the form and storage within the supported range', async () => {
+    const { context } = await launchExtension();
+    try {
+      const page = await SettingsPage.openSettingsPage(context);
+      await importPayload(page, {
+        intentions: [],
+        inactivityMode: 'all',
+        showAdvancedSettings: true,
+      });
+      const input = page.getByTestId('inactivity-timeout-minutes');
+      await expect(input).toBeEnabled();
+      await input.fill('-10');
+      await expect(input).toHaveValue('1');
+      await expect
+        .poll(async () => (await savedSettings(page)).inactivityTimeoutMs)
+        .toBe(60000);
+      await input.fill('900');
+      await expect(input).toHaveValue('480');
+      await expect
+        .poll(async () => (await savedSettings(page)).inactivityTimeoutMs)
+        .toBe(28800000);
+      await page.reload();
+      await expect(page.getByTestId('inactivity-timeout-minutes')).toHaveValue(
+        '480'
+      );
+    } finally {
+      await context.close();
+    }
+  });
+
+  for (const [label, payload] of [
+    ['unrecognized object', { invalid: 'json' }],
+    ['numeric URL', [{ url: 123, phrase: 'test' }]],
+    ['non-string phrase', [{ url: 'example.com', phrase: null }]],
+    ['invalid boolean', { intentions: [], fuzzyMatching: 'false' }],
+    ['invalid timeout', { intentions: [], inactivityTimeoutMs: -1 }],
+  ] as const) {
+    test(`rejects ${label} without replacing existing settings`, async () => {
+      const { context } = await launchExtension();
+      try {
+        const page = await SettingsPage.openSettingsPage(context);
+        await expect(SettingsPage.locators.urlInputs(page)).toHaveCount(1);
+        await SettingsPage.addIntention(page, {
+          url: 'existing.example',
+          phrase: 'Keep this intention',
+        });
+        const before = await savedSettings(page);
+        await importPayload(page, payload);
+        await expect(page.locator('.toast.error')).toBeVisible();
+        await expect(SettingsPage.locators.urlInputs(page)).toHaveValue(
+          'existing.example'
+        );
+        await expect(SettingsPage.locators.phraseInputs(page)).toHaveValue(
+          'Keep this intention'
+        );
+        expect(await savedSettings(page)).toEqual(before);
+      } finally {
+        await context.close();
+      }
+    });
+  }
+
+  test('does not change the form when sync storage rejects an oversized import', async () => {
+    const { context } = await launchExtension();
+    try {
+      const page = await SettingsPage.openSettingsPage(context);
+      await expect(SettingsPage.locators.urlInputs(page)).toHaveCount(1);
+      await SettingsPage.addIntention(page, {
+        url: 'existing.example',
+        phrase: 'Keep this intention',
+      });
+      const before = await savedSettings(page);
+      // Chrome sync has an 8192-byte per-item quota: exercise the real failure boundary.
+      await importPayload(page, [
+        { url: 'oversized.example', phrase: 'x'.repeat(10000) },
+      ]);
+      await expect(page.locator('.toast.error')).toBeVisible();
+      await expect(SettingsPage.locators.urlInputs(page)).toHaveValue(
+        'existing.example'
+      );
+      expect(await savedSettings(page)).toEqual(before);
+      await expect(page.locator('.options-container')).not.toHaveAttribute(
+        'inert'
+      );
+      await SettingsPage.locators
+        .phraseInputs(page)
+        .fill('Editable after failure');
+      await expect
+        .poll(async () => (await savedSettings(page)).intentions[0].phrase)
+        .toBe('Editable after failure');
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('import supersedes pending autosave and allows an empty settings list', async () => {
+    const { context } = await launchExtension();
+    try {
+      const page = await SettingsPage.openSettingsPage(context);
+      await expect(SettingsPage.locators.urlInputs(page)).toHaveCount(1);
+      await SettingsPage.locators.urlInputs(page).fill('stale.example');
+      await SettingsPage.locators.phraseInputs(page).fill('Do not restore');
+      // Let the URL validation message render first: it appears on blur and
+      // moves the action row down, which otherwise swallows the mouse-up of
+      // the click that opens the menu. The autosave stays pending either way.
+      await SettingsPage.locators.urlInputs(page).blur();
+      await expect(page.locator('.url-error')).toBeVisible();
+      await importPayload(page, []);
+      await expect(page.locator('.toast.success')).toContainText('Imported');
+      await expect(SettingsPage.locators.urlInputs(page)).toHaveCount(1);
+      await expect(SettingsPage.locators.urlInputs(page)).toHaveValue('');
+      // Observe past the one-second autosave deadline to catch a stale write.
+      await page.waitForTimeout(1200);
+      expect((await savedSettings(page)).intentions).toEqual([]);
+      await page.reload();
+      await expect(SettingsPage.locators.urlInputs(page)).toHaveValue('');
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('regenerates duplicate IDs without losing nested intention data', async () => {
+    const { context } = await launchExtension();
+    try {
+      const page = await SettingsPage.openSettingsPage(context);
+      const source = JSON.parse(
+        await readFile(
+          join(__dirname, 'fixtures/duplicate-guids-intentions.json'),
+          'utf8'
+        )
+      );
+      await importPayload(page, source);
+      await expect(page.locator('.toast.success')).toContainText('Imported');
+      const exported = JSON.parse(await SettingsPage.exportToMemory(page));
+      const ids = exported.intentions.map((row: any) => row.id);
+      expect(new Set(ids).size).toBe(source.length);
+      expect(
+        ids.every((id: string) => !source.some((row: any) => row.id === id))
+      ).toBe(true);
+      expect(normalize(exported).intentions).toEqual(
+        source.map(({ id, ...row }: any) => row)
+      );
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('golden import-export-import roundtrip preserves every setting and nested field', async () => {
+    const { context } = await launchExtension();
+    try {
+      const page = await SettingsPage.openSettingsPage(context);
+      const golden = JSON.parse(
+        await readFile(join(__dirname, 'fixtures/golden-settings.json'), 'utf8')
+      );
+      // Exercise non-default values, including fields previously omitted from UI updates.
+      const source = {
+        ...golden,
+        fuzzyMatching: false,
+        inactivityMode: 'all',
+        inactivityTimeoutMs: 120000,
+        showAdvancedSettings: true,
+        canCopyIntentionText: true,
+        breathAnimationIntensity: 'heavy',
+        directToSettings: true,
+        debugLogging: !(await savedSettings(page)).debugLogging,
+      };
+      await importPayload(page, source);
+      await expect(page.locator('.toast.success')).toContainText('Imported');
+      await expect(page.locator('input[type="range"]')).toHaveValue('3');
+      await page.locator('.build-footer').click({ clickCount: 5 });
+      await expect(
+        page.getByRole('checkbox', { name: /Enable debug logging/ })
+      ).toBeChecked({ checked: source.debugLogging });
+      const first = JSON.parse(await SettingsPage.exportToMemory(page));
+      expect(normalize(first)).toEqual(normalize(source));
+      await importPayload(page, []);
+      await expect(SettingsPage.locators.urlInputs(page)).toHaveValue('');
+      await importPayload(page, first);
+      await expect(SettingsPage.locators.urlInputs(page)).toHaveCount(
+        source.intentions.length
+      );
+      const second = JSON.parse(await SettingsPage.exportToMemory(page));
+      expect(normalize(second)).toEqual(normalize(source));
+      expect(second.intentions.map((row: any) => row.id)).not.toEqual(
+        first.intentions.map((row: any) => row.id)
+      );
+      await page.reload();
+      await expect(SettingsPage.locators.urlInputs(page).nth(0)).toHaveValue(
+        'example.com'
+      );
+      expect(normalize(await savedSettings(page))).toEqual(normalize(source));
+    } finally {
+      await context.close();
+    }
   });
 });

@@ -6,8 +6,8 @@ export default defineConfig({
     include: ['tests/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'json', 'html'],
-      include: ['src/components/**/*.ts', 'src/entrypoints/**/*.ts'],
+      reporter: ['text', 'json', 'html', 'lcov'],
+      include: ['src/components/**/*.ts', 'src/entrypoints/**/*.{ts,tsx}'],
       exclude: ['**/*.d.ts', 'tests/**'],
     },
   },
