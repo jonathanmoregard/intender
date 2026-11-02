@@ -24,7 +24,51 @@ export const SettingsPage = {
     }
     const settingsPage = await context.newPage();
     await settingsPage.goto(url.toString());
+    await this.settleAutoFocus(settingsPage);
     return settingsPage;
+  },
+
+  /**
+   * Wait out the page's own focus timers before touching a field.
+   *
+   * Settings focuses the first empty website field 100ms after the initial
+   * load, and a newly added row's field 50ms after the click. Playwright's
+   * fill() inserts into whatever is focused at insertion time, so a timer
+   * landing mid-helper drops the text into the previous field and resets the
+   * blur-driven validation state. Both reproduce only when the machine is
+   * loaded enough for the timer to outlast the next helper call.
+   */
+  async settleAutoFocus(page: Page, index?: number): Promise<void> {
+    const urlInputs = this.locators.urlInputs(page);
+    await expect(urlInputs.first()).toBeAttached();
+    const target = index ?? (await this.firstEmptyRowIndex(page));
+    if (target === -1) return;
+    await expect(urlInputs.nth(target)).toBeFocused();
+  },
+
+  async firstEmptyRowIndex(page: Page): Promise<number> {
+    return page.evaluate(() => {
+      const value = (input: HTMLInputElement | undefined) =>
+        (input?.value ?? '').trim();
+      const urls = Array.from(
+        document.querySelectorAll<HTMLInputElement>('input.url-input')
+      );
+      const phrases = Array.from(
+        document.querySelectorAll<HTMLInputElement>('input.phrase-input')
+      );
+      return urls.findIndex(
+        (url, index) => value(url) === '' && value(phrases[index]) === ''
+      );
+    });
+  },
+
+  /** Add an empty intention row and wait for its website field to be focused. */
+  async addIntentionRow(page: Page): Promise<void> {
+    const urlInputs = this.locators.urlInputs(page);
+    const before = await urlInputs.count();
+    await page.getByRole('button', { name: 'Add Intention' }).click();
+    await expect(urlInputs).toHaveCount(before + 1);
+    await this.settleAutoFocus(page, before);
   },
 
   async openMoreOptions(page: Page): Promise<void> {

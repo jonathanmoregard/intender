@@ -202,6 +202,45 @@ const hydrateSessionState = async () => {
   }
 };
 
+/**
+ * The window Chrome reports as focused right now, or null when Chrome itself
+ * is in the background. Ask this before concluding that the user is away:
+ * `lastFocusedWindowId` is only as current as the last focus event, and a
+ * worker that restarted while Chrome was in the background never heard the
+ * focus come back.
+ */
+const readFocusedWindowId = async (): Promise<WindowId | null> => {
+  try {
+    const windows = await browser.windows.getAll();
+    const focusedWindow = windows.find(w => w.focused);
+    return focusedWindow?.id ? numberToWindowId(focusedWindow.id) : null;
+  } catch (windowError) {
+    console.log('[Intender] Failed to read focused window:', windowError);
+    return null;
+  }
+};
+
+/**
+ * Which window the user was last in, as far as the browser will say.
+ *
+ * Used where a missing answer would be read as "the user is nowhere": on a
+ * cold start, no window is reported focused while Chrome is in the background,
+ * and a worker that believed that would treat every later tab switch as
+ * bookkeeping. The last focused window is still the one they were in; an
+ * actual loss of focus is reported separately, as onFocusChanged(-1).
+ */
+const resolveFocusedWindowId = async (): Promise<WindowId | null> => {
+  const focused = await readFocusedWindowId();
+  if (focused) return focused;
+  try {
+    const lastFocused = await browser.windows.getLastFocused();
+    return lastFocused?.id ? numberToWindowId(lastFocused.id) : null;
+  } catch (windowError) {
+    console.log('[Intender] Failed to resolve focused window:', windowError);
+    return null;
+  }
+};
+
 const reconcileStateWithBrowser = async (
   intentionIndex: IntentionIndex,
   updateActivity?: (scopeId: IntentionScopeId) => void
@@ -237,8 +276,15 @@ const reconcileStateWithBrowser = async (
         intentionScopePerTabId.delete(tabId);
       }
 
+      // Seed only what the session did not already carry. The browser's view
+      // is "which tab is active now", which on a restart is the tab whose
+      // activation woke the worker - overwriting with it would make that tab
+      // its own predecessor and silence the check it just asked for.
       if (tab.active && typeof tab.windowId === 'number') {
-        lastActiveTabIdByWindow.set(numberToWindowId(tab.windowId), tabId);
+        const windowId = numberToWindowId(tab.windowId);
+        if (!lastActiveTabIdByWindow.has(windowId)) {
+          lastActiveTabIdByWindow.set(windowId, tabId);
+        }
       }
     }
 
@@ -256,16 +302,8 @@ const reconcileStateWithBrowser = async (
       }
     }
 
-    try {
-      const windows = await browser.windows.getAll();
-      const focusedWindow = windows.find(w => w.focused);
-      lastFocusedWindowId = focusedWindow?.id
-        ? numberToWindowId(focusedWindow.id)
-        : null;
-    } catch (windowError) {
-      lastFocusedWindowId = null;
-      console.log('[Intender] Failed window reconciliation:', windowError);
-    }
+    const resolvedWindowId = await resolveFocusedWindowId();
+    if (resolvedWindowId) lastFocusedWindowId = resolvedWindowId;
 
     persistSession();
   } catch (error) {
@@ -651,10 +689,12 @@ export default defineBackground(async () => {
   ): Promise<void> {
     if (newState === 'idle') {
       try {
-        if (inactivityMode === 'off') return;
-
-        // Cold window guard - wait for intentionIndex to be ready
+        // Cold window guard - wait for settings and intentionIndex to be ready.
+        // A restarted worker still holds the default mode, and reading it first
+        // would silently skip the check that woke the worker.
         await ensureReady();
+
+        if (inactivityMode === 'off') return;
 
         // Strictly check for a currently focused window at idle time
         let focusedWindowId: number | null = null;
@@ -708,13 +748,19 @@ export default defineBackground(async () => {
     const windowId = numberToWindowId(activeInfo.windowId);
     const toTabId = numberToTabId(activeInfo.tabId);
 
-    // Track previous active per window (from tab handling). Read it before
-    // hydration: a restarted worker reconciles from the browser, where this
-    // activation already happened, and would see the tab as its own precursor.
-    const fromTabId = lastActiveTabIdByWindow.get(windowId);
-
     // Cold window guard - wait for intentionIndex to be ready
     await ensureReady();
+
+    // Track previous active per window (from tab handling). Safe to read after
+    // the gate: reconciliation only fills gaps, so a restarted worker still
+    // sees the tab the session recorded rather than this activation's own tab.
+    const fromTabId = lastActiveTabIdByWindow.get(windowId);
+
+    // Refresh from the browser before judging: a focus event that arrived
+    // while the worker was dead is simply never delivered, and the stale null
+    // it leaves behind would dismiss every later switch as bookkeeping.
+    const focusedNow = await readFocusedWindowId();
+    if (focusedNow) lastFocusedWindowId = focusedNow;
 
     // Activation in an unfocused window is bookkeeping, not user activity.
     if (lastFocusedWindowId !== windowId) {
@@ -1161,6 +1207,10 @@ export default defineBackground(async () => {
       const msg = message as { type?: string } | null | undefined;
       if (!msg || typeof msg.type !== 'string') return;
 
+      // Both branches read the stored mode, which a restarted worker has not
+      // loaded yet.
+      await ensureReady();
+
       if (msg.type === 'e2e:forceInactivityCheck-idle') {
         e2eDisableOSIdle = true;
         toggleIdleDetection(inactivityMode);
@@ -1255,34 +1305,36 @@ export default defineBackground(async () => {
   await hydrateSessionState();
 
   // Initialize window focus tracking
-  try {
-    const windows = await browser.windows.getAll();
-    const focusedWindow = windows.find(w => w.focused);
-    if (focusedWindow && typeof focusedWindow.id === 'number') {
-      lastFocusedWindowId = numberToWindowId(focusedWindow.id);
-      debugLog('[Intender] Initialized focused window:', lastFocusedWindowId);
+  const initialWindowId = await resolveFocusedWindowId();
+  if (initialWindowId) {
+    lastFocusedWindowId = initialWindowId;
+    debugLog('[Intender] Initialized focused window:', lastFocusedWindowId);
 
-      // Seed lastActiveTabIdByWindow for the focused window
-      try {
-        const [activeTab] = await browser.tabs.query({
-          active: true,
-          windowId: focusedWindow.id,
+    // Seed lastActiveTabIdByWindow for the focused window
+    try {
+      const [activeTab] = await browser.tabs.query({
+        active: true,
+        windowId: windowIdToNumber(initialWindowId),
+      });
+      // Seed, do not overwrite: the session already knows which tab the
+      // user came from, while the browser only knows which tab is active
+      // now - on a restart, the one whose activation woke the worker.
+      if (
+        activeTab &&
+        typeof activeTab.id === 'number' &&
+        !lastActiveTabIdByWindow.has(initialWindowId)
+      ) {
+        const activeTabId = numberToTabId(activeTab.id);
+        lastActiveTabIdByWindow.set(initialWindowId, activeTabId);
+        debugLog('[Intender] Seeded active tab for focused window:', {
+          windowId: initialWindowId,
+          tabId: activeTabId,
         });
-        if (activeTab && typeof activeTab.id === 'number') {
-          const activeTabId = numberToTabId(activeTab.id);
-          lastActiveTabIdByWindow.set(lastFocusedWindowId, activeTabId);
-          debugLog('[Intender] Seeded active tab for focused window:', {
-            windowId: lastFocusedWindowId,
-            tabId: activeTabId,
-          });
-          persistSession();
-        }
-      } catch (tabError) {
-        debugLog('[Intender] Failed to seed active tab:', tabError);
+        persistSession();
       }
+    } catch (tabError) {
+      debugLog('[Intender] Failed to seed active tab:', tabError);
     }
-  } catch (error) {
-    debugLog('[Intender] Failed to initialize window focus:', error);
   }
 
   // Load intentions and settings on startup
@@ -1295,7 +1347,6 @@ export default defineBackground(async () => {
     } = await storage.get();
     const parsedIntentions = mapNulls(parseIntention, intentions);
     intentionIndex = createIntentionIndex(parsedIntentions);
-    intentionIndexReady = true;
 
     inactivityMode = storedInactivityMode as InactivityMode;
     inactivityTimeoutMs = storedInactivityTimeoutMs as TimeoutMs;
@@ -1310,5 +1361,11 @@ export default defineBackground(async () => {
     );
   } catch (error) {
     console.error('[Intender] Failed to load intentions on startup:', error);
+  } finally {
+    // Open the gate only here: a handler released between the settings load
+    // and this point would decide against a half-reconciled snapshot. The
+    // finally also covers a failed startup, which must not leave every
+    // handler waiting out the gate's timeout.
+    intentionIndexReady = true;
   }
 });

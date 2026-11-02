@@ -28,6 +28,16 @@ export async function startBackground(
     mode?: InactivityMode;
     extraTabs?: TestTab[];
     session?: Record<string, unknown>;
+    /**
+     * Hold the settings read open, as a restarted worker does while an event
+     * that woke it is already being delivered. Release it with releaseSettings.
+     */
+    deferSettings?: boolean;
+    /**
+     * Report every window as unfocused, as Chrome does whenever it is not the
+     * foreground application.
+     */
+    browserUnfocused?: boolean;
   } = {}
 ) {
   vi.resetModules();
@@ -44,7 +54,7 @@ export async function startBackground(
   ];
   const windows = [...new Set(tabs.map(tab => tab.windowId))].map(id => ({
     id,
-    focused: id === 1,
+    focused: !options.browserUnfocused && id === 1,
   }));
   const settings = {
     intentions: [
@@ -55,6 +65,12 @@ export async function startBackground(
   };
   const session = { ...options.session };
   const redirects: { tabId: number; url: string }[] = [];
+  let releaseSettings = () => {};
+  const settingsGate = options.deferSettings
+    ? new Promise<void>(resolve => {
+        releaseSettings = resolve;
+      })
+    : Promise.resolve();
   const browser = {
     runtime: {
       getURL: (path: string) => `chrome-extension://test/${path}`,
@@ -63,7 +79,10 @@ export async function startBackground(
     },
     storage: {
       sync: {
-        get: async (defaults: object) => ({ ...defaults, ...settings }),
+        get: async (defaults: object) => {
+          await settingsGate;
+          return { ...defaults, ...settings };
+        },
         set: async (data: object) => Object.assign(settings, data),
       },
       local: { get: async () => ({}), set: async () => {} },
@@ -104,6 +123,7 @@ export async function startBackground(
     },
     windows: {
       getAll: async () => windows,
+      getLastFocused: async () => windows[0],
       onFocusChanged: event(),
       onRemoved: event(),
     },
@@ -121,7 +141,8 @@ export async function startBackground(
   vi.stubGlobal('__IS_DEV__', false);
   vi.stubGlobal('defineBackground', (init: () => Promise<void>) => init);
   const init = (await import('../../src/entrypoints/background')).default;
-  await init();
+  const started = init();
+  if (!options.deferSettings) await started;
   const before = (url: string, tabId = 1) =>
     browser.webNavigation.onBeforeNavigate.emit({ tabId, frameId: 0, url });
   const commit = async (url: string, tabId = 1) => {
@@ -162,6 +183,8 @@ export async function startBackground(
     settings,
     session,
     redirects,
+    started,
+    releaseSettings,
     before,
     commit,
     navigate,

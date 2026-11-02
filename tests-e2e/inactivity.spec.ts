@@ -730,8 +730,9 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     const newTab = await context.newPage();
     await gotoRobust(newTab, 'https://google.com');
 
-    // Wait over inactivity
-    await settingsPage.waitForTimeout(1500);
+    // Wait past the inactivity timeout. It has to exceed the configured
+    // timeout on its own: the worker stop that follows is not a wait.
+    await settingsPage.waitForTimeout(2500);
     await stopServiceWorker(context);
 
     await mainTab.bringToFront();
@@ -781,8 +782,9 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     const newTab = await context.newPage();
     await gotoRobust(newTab, 'https://google.com');
 
-    // Wait over inactivity
-    await settingsPage.waitForTimeout(1500);
+    // Wait past the inactivity timeout. It has to exceed the configured
+    // timeout on its own: the worker stop that follows is not a wait.
+    await settingsPage.waitForTimeout(2500);
     await stopServiceWorker(context);
 
     await mainTab.bringToFront();
@@ -822,7 +824,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     });
 
     // Add another intention for google using helper at index 1
-    await settingsPage.getByRole('button', { name: 'Add Intention' }).click();
+    await SettingsPage.addIntentionRow(settingsPage);
     await SettingsPage.addIntentionAt(settingsPage, 1, {
       url: 'google.com',
       phrase: 'Google intention',
@@ -1099,8 +1101,9 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
     // Switch to a'
     await tabAPrime.bringToFront();
 
-    // Wait 6s (total 2.2s > 2s timeout)
-    await settingsPage.waitForTimeout(1200);
+    // Switching to a' above refreshed the scope, so this wait alone has to
+    // exceed the 2s timeout.
+    await settingsPage.waitForTimeout(2500);
     await stopServiceWorker(context);
 
     // Force idle check since this is a sub-15s timeout test

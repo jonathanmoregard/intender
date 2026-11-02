@@ -488,6 +488,91 @@ describe('lifecycle boundaries', () => {
     expect(h.redirects).toEqual([]);
   });
 
+  it('an inactivity check that beats the settings load still prompts', async () => {
+    const h = await startBackground({
+      url: protectedUrl,
+      mode: 'all',
+      deferSettings: true,
+      session: {
+        tabUrlMap: { 1: protectedUrl },
+        intentionScopePerTabId: { 1: 'rule-1' },
+        lastActiveByScope: { 'rule-1': 90000 },
+        lastActiveTabIdByWindow: { 1: 1 },
+        lastFocusedWindowId: 1,
+      },
+    });
+    vi.setSystemTime(102000);
+    // The restarted worker is still holding the default mode here.
+    const checked = h.browser.runtime.onMessage.emit(
+      { type: 'e2e:forceInactivityCheck-idle' },
+      {},
+      () => {}
+    );
+    h.releaseSettings();
+    await h.started;
+    await checked;
+    expectPrompt(h);
+  });
+
+  it('a restarted worker keeps the predecessor the session recorded', async () => {
+    const h = await startBackground({
+      url: protectedUrl,
+      mode: 'all',
+      extraTabs: [{ id: 2, windowId: 1, active: false, url: outsideUrl }],
+      session: {
+        tabUrlMap: { 1: protectedUrl, 2: outsideUrl },
+        intentionScopePerTabId: { 1: 'rule-1' },
+        lastActiveByScope: { 'rule-1': 90000 },
+        lastActiveTabIdByWindow: { 1: 2 },
+        lastFocusedWindowId: 1,
+      },
+    });
+    vi.setSystemTime(102000);
+    // The browser already reports tab 1 active - it is the activation that
+    // woke the worker, not the tab the user came from.
+    await h.browser.tabs.onActivated.emit({ tabId: 1, windowId: 1 });
+    expectPrompt(h);
+  });
+
+  it('a focus event missed while the worker was dead does not mute the check', async () => {
+    const h = await startBackground({
+      url: protectedUrl,
+      mode: 'all',
+      extraTabs: [{ id: 2, windowId: 1, active: false, url: outsideUrl }],
+      session: {
+        tabUrlMap: { 1: protectedUrl, 2: outsideUrl },
+        intentionScopePerTabId: { 1: 'rule-1' },
+        lastActiveByScope: { 'rule-1': 90000 },
+        lastActiveTabIdByWindow: { 1: 2 },
+      },
+    });
+    await h.focus(-1);
+    // Chrome regains focus while nobody is listening, so no event arrives.
+    h.windows[0].focused = true;
+    vi.setSystemTime(102000);
+    await h.browser.tabs.onActivated.emit({ tabId: 1, windowId: 1 });
+    expectPrompt(h);
+  });
+
+  it('a restarted worker keeps the focused window Chrome stops reporting', async () => {
+    const h = await startBackground({
+      url: protectedUrl,
+      mode: 'all',
+      browserUnfocused: true,
+      extraTabs: [{ id: 2, windowId: 1, active: false, url: outsideUrl }],
+      session: {
+        tabUrlMap: { 1: protectedUrl, 2: outsideUrl },
+        intentionScopePerTabId: { 1: 'rule-1' },
+        lastActiveByScope: { 'rule-1': 90000 },
+        lastActiveTabIdByWindow: { 1: 2 },
+        lastFocusedWindowId: 1,
+      },
+    });
+    vi.setSystemTime(102000);
+    await h.browser.tabs.onActivated.emit({ tabId: 1, windowId: 1 });
+    expectPrompt(h);
+  });
+
   it('a replacement active tab remains the source for a same-scope background tab', async () => {
     const h = await startBackground({
       url: protectedUrl,
