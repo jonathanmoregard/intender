@@ -481,17 +481,22 @@ export default defineBackground(async () => {
     isNavigationTabActive: boolean;
     activeTabUrl: string | null;
   } {
+    // Absence is tested the same way throughout: a window or tab id is a
+    // number, and asking whether we have one is not the same question as
+    // asking whether it is non-zero.
     const focusedWindowId = lastFocusedWindowId;
-    const activeTabId = focusedWindowId
-      ? (lastActiveTabIdByWindow.get(focusedWindowId) as unknown as
-          | number
-          | undefined)
-      : undefined;
+    const activeTabId =
+      focusedWindowId != null
+        ? (lastActiveTabIdByWindow.get(focusedWindowId) as unknown as
+            | number
+            | undefined)
+        : undefined;
     const isNavigationTabActive =
       activeTabId === navigationTabId && focusedWindowId != null;
-    const activeTabUrl = activeTabId
-      ? tabUrlMap.get(numberToTabId(activeTabId)) || null
-      : null;
+    const activeTabUrl =
+      activeTabId != null
+        ? tabUrlMap.get(numberToTabId(activeTabId)) || null
+        : null;
     return { isNavigationTabActive, activeTabUrl };
   }
 
@@ -503,7 +508,7 @@ export default defineBackground(async () => {
    */
   const isNavigationInUserTab = (navigationTabId: number): boolean => {
     const windowId = userWindowId();
-    if (!windowId) return false;
+    if (windowId == null) return false;
     const activeTabId = lastActiveTabIdByWindow.get(windowId) as unknown as
       | number
       | undefined;
@@ -639,8 +644,10 @@ export default defineBackground(async () => {
 
     // Check if scope has been inactive long enough
     const lastActive = lastActiveByScope.get(scopeId);
-    if (!lastActive) {
+    if (lastActive === undefined) {
       // First-seen scope: return false (will be handled by normal bump path)
+      // Only an absent entry means first-seen. A recorded timestamp is a
+      // recorded timestamp whatever its value.
       return false;
     }
 
