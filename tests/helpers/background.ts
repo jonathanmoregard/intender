@@ -44,6 +44,13 @@ export async function startBackground(
      * makes the call reject, as it does when the browser has no window left.
      */
     lastFocusedWindow?: number | null;
+    /**
+     * Which windows report themselves focused. Defaults to window 1 alone.
+     * Several at once is a real state, not a contrivance: while X hands focus
+     * from one window to the next, the window being left still reports
+     * focused until its FocusOut arrives.
+     */
+    focusedWindowIds?: number[];
   } = {}
 ) {
   vi.resetModules();
@@ -60,7 +67,11 @@ export async function startBackground(
   ];
   const windows = [...new Set(tabs.map(tab => tab.windowId))].map(id => ({
     id,
-    focused: !options.browserUnfocused && id === 1,
+    focused:
+      !options.browserUnfocused &&
+      (options.focusedWindowIds
+        ? options.focusedWindowIds.includes(id)
+        : id === 1),
   }));
   const settings = {
     intentions: [

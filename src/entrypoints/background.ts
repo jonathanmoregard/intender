@@ -226,11 +226,30 @@ const hydrateSessionState = async () => {
 };
 
 /**
+ * Whether Chrome reports THIS window as focused: true, false, or null when
+ * the answer cannot be had (the window is gone, or the call failed).
+ *
+ * Ask about a specific window rather than asking which window is focused.
+ * While the window manager hands focus over, the window being left still
+ * reports focused until its FocusOut arrives, so more than one window can
+ * report focused at once and "which one is focused" has no single answer -
+ * picking the first would silently prefer the window the user just left.
+ */
+const isWindowFocused = async (windowId: WindowId): Promise<boolean | null> => {
+  try {
+    const windows = await browser.windows.getAll();
+    const match = windows.find(w => w.id === windowIdToNumber(windowId));
+    return match ? match.focused === true : null;
+  } catch (windowError) {
+    console.log('[Intender] Failed to read window focus:', windowError);
+    return null;
+  }
+};
+
+/**
  * The window Chrome reports as focused right now, or null when Chrome itself
- * is in the background. Ask this before concluding that the user is away:
- * `lastFocusedWindowId` is only as current as the last focus event, and a
- * worker that restarted while Chrome was in the background never heard the
- * focus come back.
+ * is in the background. Only for seeding, where any focused window is a
+ * better answer than none - use isWindowFocused to judge a specific window.
  */
 const readFocusedWindowId = async (): Promise<WindowId | null> => {
   try {
@@ -801,17 +820,17 @@ export default defineBackground(async () => {
     // Refresh from the browser before judging: a focus event that arrived
     // while the worker was dead is simply never delivered, and the stale null
     // it leaves behind would dismiss every later switch as bookkeeping.
-    const focusedNow = await readFocusedWindowId();
-    if (focusedNow) {
-      lastFocusedWindowId = focusedNow;
-      lastKnownWindowId = focusedNow;
+    const activationWindowFocused = await isWindowFocused(windowId);
+    if (activationWindowFocused) {
+      lastFocusedWindowId = windowId;
+      lastKnownWindowId = windowId;
       focusLossObserved = false;
     }
 
     // Activation in a window the user is not in is bookkeeping, not user
     // activity. A window we merely remember still counts: the alternative is
     // to credit the user with nothing after a restart they never saw.
-    if (userWindowId() !== windowId) {
+    if (!activationWindowFocused && userWindowId() !== windowId) {
       lastActiveTabIdByWindow.set(windowId, toTabId);
       persistSession();
       return;

@@ -537,6 +537,23 @@ describe('lifecycle boundaries', () => {
     expectPrompt(h);
   });
 
+  it('a new window Chrome is still handing focus to is the user’s own window', async () => {
+    const h = await startBackground({
+      url: protectedUrl,
+      mode: 'all',
+      extraTabs: [{ id: 2, windowId: 2, active: true, url: 'about:blank' }],
+      focusedWindowIds: [1, 2],
+    });
+    // Window 2 just opened and Chrome has named it, but window 1 has not
+    // reported its focus loss yet, so both read as focused. Asking "which
+    // window is focused" can answer with either; the question that matters is
+    // whether window 2 is, since that is where the user just acted.
+    await h.browser.windows.onFocusChanged.emit(2);
+    await h.browser.tabs.onActivated.emit({ tabId: 2, windowId: 2 });
+    await h.navigate(protectedUrl, 2);
+    expectPrompt(h);
+  });
+
   it('hydration drops a scope mapping when the tab has navigated away', async () => {
     const h = await startBackground({
       url: outsideUrl,
