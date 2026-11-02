@@ -166,6 +166,13 @@ test.describe('Import/Export', () => {
       await expect
         .poll(async () => (await savedSettings(page)).inactivityTimeoutMs)
         .toBe(28800000);
+      // Clearing the box is a half-finished edit, not a request for the
+      // default. It used to snap to 30 and save that, so the field could not
+      // be cleared to type a new number.
+      await input.fill('');
+      await expect
+        .poll(async () => (await savedSettings(page)).inactivityTimeoutMs)
+        .toBe(28800000);
       await page.reload();
       await expect(page.getByTestId('inactivity-timeout-minutes')).toHaveValue(
         '480'

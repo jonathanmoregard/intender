@@ -85,10 +85,22 @@ describe('manual timeout entry', () => {
     { text: '0', minutes: 1 },
     { text: '900', minutes: 480 },
     { text: '15', minutes: 15 },
-    { text: '', minutes: 30 },
-    { text: 'invalid', minutes: 30 },
-    { text: '9'.repeat(400), minutes: 30 },
+    // Too large is still a number the user meant. Clamp it rather than
+    // discarding it for the default.
+    { text: '9'.repeat(400), minutes: 480 },
   ])('keeps "$text" within the editor range', ({ text, minutes }) => {
-    expect(parseTimeoutMinutesInput(text)).toBe(minutes);
+    expect(parseTimeoutMinutesInput(text)).toEqual({
+      kind: 'minutes',
+      minutes,
+    });
   });
+
+  // Returning the default for these made "user typed nothing" and "user chose
+  // 30" the same answer, so clearing the box snapped it to 30 and saved it.
+  it.each(['', '   ', 'invalid'])(
+    'reports "%s" as no number rather than as the default',
+    text => {
+      expect(parseTimeoutMinutesInput(text)).toEqual({ kind: 'no-number' });
+    }
+  );
 });

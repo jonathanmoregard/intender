@@ -141,8 +141,23 @@ export function readStoredSettings(value: unknown): Settings {
   return result;
 }
 
+/**
+ * What the timeout editor's contents amount to.
+ *
+ * Returning the default minute count for unusable input made "the user typed
+ * nothing" and "the user chose 30 minutes" the same answer, so clearing the
+ * box snapped it back to 30 and saved that. The caller has to tell them apart
+ * to leave a half-typed field alone.
+ */
+export type TimeoutMinutesInput =
+  | { kind: 'minutes'; minutes: number }
+  | { kind: 'no-number' };
+
 /** Parse the timeout editor's whole-minute value. */
-export function parseTimeoutMinutesInput(value: string): number {
+export function parseTimeoutMinutesInput(value: string): TimeoutMinutesInput {
   const minutes = Number.parseInt(value, 10);
-  return Number.isFinite(minutes) ? Math.min(480, Math.max(1, minutes)) : 30;
+  if (Number.isNaN(minutes)) return { kind: 'no-number' };
+  // Infinity is a number that is merely too big, which clamping answers. It is
+  // not an absence, and treating it as one would throw away what was meant.
+  return { kind: 'minutes', minutes: Math.min(480, Math.max(1, minutes)) };
 }

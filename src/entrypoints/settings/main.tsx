@@ -1112,9 +1112,13 @@ const SettingsTab = memo(
                     max='480'
                     value={inactivityTimeoutMinutes}
                     onChange={e => {
-                      const timeout = parseTimeoutMinutesInput(e.target.value);
-                      setInactivityTimeoutMinutes(timeout);
-                      saveInactivityTimeout(timeout);
+                      const entered = parseTimeoutMinutesInput(e.target.value);
+                      // Nothing usable in the box yet - it is empty, or being
+                      // retyped. Leave the stored timeout as it is instead of
+                      // filling the field with the default and saving that.
+                      if (entered.kind === 'no-number') return;
+                      setInactivityTimeoutMinutes(entered.minutes);
+                      saveInactivityTimeout(entered.minutes);
                     }}
                     className='timeout-input'
                     disabled={inactivityMode === 'off'}
