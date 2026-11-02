@@ -23,6 +23,7 @@ jobs:
     # v0.8.13 and v0.9.4. Gate on `env`, which is available.
     env:
       STORE_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+      STORE_PUBLISHER_ID: ${{ secrets.CHROME_PUBLISHER_ID }}
 
     steps:
       - name: Checkout code
@@ -67,18 +68,31 @@ jobs:
       # is the failure mode this workflow already has history with.
       - name: Report Chrome Web Store credential status
         run: |
-          if [ -n "$STORE_EXTENSION_ID" ]; then
-            echo "CHROME_EXTENSION_ID is set - uploading the zip to the Chrome Web Store as a draft."
-          else
+          if [ -z "$STORE_EXTENSION_ID" ]; then
             echo "::warning::CHROME_EXTENSION_ID is not set, so the Chrome Web Store upload is being skipped. The GitHub release above still happened."
+          elif [ -z "$STORE_PUBLISHER_ID" ]; then
+            echo "::warning::CHROME_PUBLISHER_ID is not set, so the Chrome Web Store upload is being skipped. The V2 API addresses items as publishers/<publisher>/items/<item>, so the publisher ID is not optional. Find it in the Developer Dashboard. The GitHub release above still happened."
+          else
+            echo "Store credentials are set - uploading the zip to the Chrome Web Store as a draft."
           fi
 
+      # Pinned to an exact tag because upstream publishes no moving major tag:
+      # it has v5.0.0, v6.0.0 and v7.0.0, and no v5/v6/v7 to float on. The `@v5`
+      # this used to say resolved to nothing at all, so the job would have died
+      # fetching the action.
+      #
+      # v7.0.0 is the first release on the Chrome Web Store API V2. V1 was only
+      # supported until 15 October 2026, which is why v6.0.0 is not an option
+      # either - it still depends on chrome-webstore-upload v1.x, which talks to
+      # www.googleapis.com/chromewebstore/v1.1.
       - name: Upload to Chrome Web Store
-        if: env.STORE_EXTENSION_ID != ''
-        uses: mnao305/chrome-extension-upload@v5
+        if: env.STORE_EXTENSION_ID != '' && env.STORE_PUBLISHER_ID != ''
+        uses: mnao305/chrome-extension-upload@v7.0.0
         with:
           file-path: .output/intender-${{ steps.version.outputs.version }}-chrome.zip
           extension-id: ${{ secrets.CHROME_EXTENSION_ID }}
+          # Required from v7 on, and the reason a new secret appears here.
+          publisher-id: ${{ secrets.CHROME_PUBLISHER_ID }}
           client-id: ${{ secrets.CHROME_CLIENT_ID }}
           client-secret: ${{ secrets.CHROME_CLIENT_SECRET }}
           refresh-token: ${{ secrets.CHROME_REFRESH_TOKEN }}
