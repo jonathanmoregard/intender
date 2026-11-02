@@ -522,6 +522,21 @@ describe('lifecycle boundaries', () => {
     expectPrompt(h);
   });
 
+  it('a second window entering a scope is checked even when Chrome reports no focus', async () => {
+    const h = await startBackground({
+      url: protectedUrl,
+      mode: 'all',
+      browserUnfocused: true,
+      extraTabs: [{ id: 2, windowId: 2, active: true, url: 'about:blank' }],
+    });
+    // Nothing reports focused, so the only window we can name is the
+    // remembered one - window 1, whose tab is already in the scope. That is
+    // not evidence the user is in it, so the same-scope allowance must not
+    // cover a navigation happening in window 2.
+    await h.navigate(protectedUrl, 2);
+    expectPrompt(h);
+  });
+
   it('hydration drops a scope mapping when the tab has navigated away', async () => {
     const h = await startBackground({
       url: outsideUrl,

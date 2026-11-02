@@ -66,8 +66,30 @@ const trackTabAudibility = (tab: browser.Tabs.Tab) => {
 const lastActiveByScope = new Map<IntentionScopeId, Timestamp>();
 const intentionScopePerTabId = new Map<TabId, IntentionScopeId>();
 const lastActiveTabIdByWindow = new Map<WindowId, TabId>();
-// never -1, ignore non proper browser windows
+// The window Chrome reports as focused. Never -1; non-browser windows are
+// ignored. Null means EITHER the user is away OR we have not been told yet,
+// which are different situations - see focusLossObserved.
 let lastFocusedWindowId: WindowId | null = null;
+// Where the user was, as far as the browser will say. Survives focus loss and
+// is re-derived at startup, so a worker that restarted while Chrome was in the
+// background still knows which window to attribute the user's actions to.
+let lastKnownWindowId: WindowId | null = null;
+// True once Chrome has told us focus was lost. Until then, a null
+// lastFocusedWindowId means "we do not know", not "the user is away".
+let focusLossObserved = false;
+
+/**
+ * The window to attribute the user's actions to, or null if the user is known
+ * to be away. Use this for bookkeeping - recording that a scope was in use.
+ *
+ * Do NOT use it to decide whether the user is looking at a tab right now: a
+ * remembered window is not evidence of that, and treating it as such lets a
+ * navigation in some other window pass as the user's own. That decision reads
+ * lastFocusedWindowId directly, via getActiveTabSnapshot.
+ */
+const userWindowId = (): WindowId | null =>
+  lastFocusedWindowId ?? (focusLossObserved ? null : lastKnownWindowId);
+
 const lastRedirectAtByTabId = new Map<TabId, Timestamp>();
 
 // Cross-browser shim for storage.session (Firefox compatibility)
@@ -197,6 +219,7 @@ const hydrateSessionState = async () => {
       sessionValues.lastFocusedWindowId != null
         ? numberToWindowId(sessionValues.lastFocusedWindowId as number)
         : null;
+    if (lastFocusedWindowId) lastKnownWindowId = lastFocusedWindowId;
   } catch (error) {
     console.log('[Intender] Failed hydration from storage.session:', error);
   }
@@ -228,8 +251,12 @@ const readFocusedWindowId = async (): Promise<WindowId | null> => {
  * and a worker that believed that would treat every later tab switch as
  * bookkeeping. The last focused window is still the one they were in; an
  * actual loss of focus is reported separately, as onFocusChanged(-1).
+ *
+ * This answer is NOT "the focused window". It may name a window the user is
+ * not in, so it belongs in lastKnownWindowId and never in
+ * lastFocusedWindowId, which gates whether a navigation is the user's own.
  */
-const resolveFocusedWindowId = async (): Promise<WindowId | null> => {
+const resolveLastKnownWindowId = async (): Promise<WindowId | null> => {
   const focused = await readFocusedWindowId();
   if (focused) return focused;
   try {
@@ -302,8 +329,8 @@ const reconcileStateWithBrowser = async (
       }
     }
 
-    const resolvedWindowId = await resolveFocusedWindowId();
-    if (resolvedWindowId) lastFocusedWindowId = resolvedWindowId;
+    const resolvedWindowId = await resolveLastKnownWindowId();
+    if (resolvedWindowId) lastKnownWindowId = resolvedWindowId;
 
     persistSession();
   } catch (error) {
@@ -405,6 +432,21 @@ export default defineBackground(async () => {
       : null;
     return { isNavigationTabActive, activeTabUrl };
   }
+
+  /**
+   * Whether this tab is the one the user is working in, for the purpose of
+   * crediting them with activity. Unlike getActiveTabSnapshot this accepts a
+   * remembered window, because a worker that never heard the focus come back
+   * would otherwise credit the user with nothing at all.
+   */
+  const isNavigationInUserTab = (navigationTabId: number): boolean => {
+    const windowId = userWindowId();
+    if (!windowId) return false;
+    const activeTabId = lastActiveTabIdByWindow.get(windowId) as unknown as
+      | number
+      | undefined;
+    return activeTabId === navigationTabId;
+  };
 
   function decideNavigation(args: {
     tabId: number;
@@ -760,10 +802,16 @@ export default defineBackground(async () => {
     // while the worker was dead is simply never delivered, and the stale null
     // it leaves behind would dismiss every later switch as bookkeeping.
     const focusedNow = await readFocusedWindowId();
-    if (focusedNow) lastFocusedWindowId = focusedNow;
+    if (focusedNow) {
+      lastFocusedWindowId = focusedNow;
+      lastKnownWindowId = focusedNow;
+      focusLossObserved = false;
+    }
 
-    // Activation in an unfocused window is bookkeeping, not user activity.
-    if (lastFocusedWindowId !== windowId) {
+    // Activation in a window the user is not in is bookkeeping, not user
+    // activity. A window we merely remember still counts: the alternative is
+    // to credit the user with nothing after a restart they never saw.
+    if (userWindowId() !== windowId) {
       lastActiveTabIdByWindow.set(windowId, toTabId);
       persistSession();
       return;
@@ -798,7 +846,7 @@ export default defineBackground(async () => {
     trackTabAudibility(tab);
     if (!intentionScopeId) return;
     if (
-      getActiveTabSnapshot(tabId).isNavigationTabActive ||
+      isNavigationInUserTab(tabId) ||
       (inactivityMode === 'all-except-audio' &&
         wasAudible !== isTabAudible(tab))
     ) {
@@ -896,7 +944,7 @@ export default defineBackground(async () => {
       persistSession();
       // A page can reload or update history on a timer. Only navigation in the
       // foreground tab is evidence of user activity; audio has its own handler.
-      if (getActiveTabSnapshot(details.tabId).isNavigationTabActive) {
+      if (isNavigationInUserTab(details.tabId)) {
         updateIntentionScopeActivity(scopeId);
       }
       debugLog('[Intender] Navigation committed to scoped page, set scope:', {
@@ -992,9 +1040,18 @@ export default defineBackground(async () => {
   browser.windows.onFocusChanged.addListener(async windowId => {
     // Cold window guard - wait for intentionIndex to be ready
     await ensureReady();
-    // Update tracking: record previous focused window
-    const prevWindowId = lastFocusedWindowId;
-    lastFocusedWindowId = windowId === -1 ? null : numberToWindowId(windowId);
+    // Record the window being left. A remembered one counts: a worker that
+    // restarted while Chrome was in the background never heard the focus
+    // arrive, and would otherwise have nothing to credit the departure to.
+    const prevWindowId = userWindowId();
+    if (windowId === -1) {
+      lastFocusedWindowId = null;
+      focusLossObserved = true;
+    } else {
+      lastFocusedWindowId = numberToWindowId(windowId);
+      lastKnownWindowId = lastFocusedWindowId;
+      focusLossObserved = false;
+    }
     if (windowId === -1 && prevWindowId !== null) {
       const departingTab = lastActiveTabIdByWindow.get(prevWindowId);
       const departingScope = departingTab ? getScopeForTab(departingTab) : null;
@@ -1129,6 +1186,11 @@ export default defineBackground(async () => {
     // If this was the last focused window, clear it
     if (lastFocusedWindowId === wId) {
       lastFocusedWindowId = null;
+    }
+    // A closed window is not somewhere the user can be, so it must not stay
+    // on as the window we remember them in.
+    if (lastKnownWindowId === wId) {
+      lastKnownWindowId = null;
     }
 
     persistSession();
@@ -1304,13 +1366,21 @@ export default defineBackground(async () => {
   // NOW start the async initialization after all listeners are registered
   await hydrateSessionState();
 
-  // Initialize window focus tracking
-  const initialWindowId = await resolveFocusedWindowId();
+  // Initialize window focus tracking. Only a live reading may set
+  // lastFocusedWindowId - the remembered window goes to lastKnownWindowId, so
+  // that a navigation in another window is never mistaken for the user's own.
+  const focusedAtStartup = await readFocusedWindowId();
+  if (focusedAtStartup) lastFocusedWindowId = focusedAtStartup;
+  const initialWindowId =
+    focusedAtStartup ?? (await resolveLastKnownWindowId());
   if (initialWindowId) {
-    lastFocusedWindowId = initialWindowId;
-    debugLog('[Intender] Initialized focused window:', lastFocusedWindowId);
+    lastKnownWindowId = initialWindowId;
+    debugLog('[Intender] Initialized window tracking:', {
+      lastFocusedWindowId,
+      lastKnownWindowId,
+    });
 
-    // Seed lastActiveTabIdByWindow for the focused window
+    // Seed lastActiveTabIdByWindow for that window
     try {
       const [activeTab] = await browser.tabs.query({
         active: true,
