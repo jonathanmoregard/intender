@@ -1059,10 +1059,21 @@ export default defineBackground(async () => {
   browser.windows.onFocusChanged.addListener(async windowId => {
     // Cold window guard - wait for intentionIndex to be ready
     await ensureReady();
-    // Record the window being left. A remembered one counts: a worker that
+    // Two questions here, and they must not share an answer.
+    //
+    // Which window is the user leaving? A remembered one counts: a worker that
     // restarted while Chrome was in the background never heard the focus
     // arrive, and would otherwise have nothing to credit the departure to.
-    const prevWindowId = userWindowId();
+    //
+    // Which window did focus actually just come from? Only a focus we observed
+    // can answer that. A remembered window is not evidence that it held focus a
+    // moment ago, and letting it stand in makes the tab the user left serve as
+    // the tab they came from. Identical from- and to-tabs mean identical
+    // scopes, and the same-scope fast path then returns before the inactivity
+    // check runs - so returning from lunch to the tab you left looks like
+    // never having gone.
+    const departedWindowId = userWindowId();
+    const prevFocusedWindowId = lastFocusedWindowId;
     if (windowId === -1) {
       lastFocusedWindowId = null;
       focusLossObserved = true;
@@ -1071,15 +1082,16 @@ export default defineBackground(async () => {
       lastKnownWindowId = lastFocusedWindowId;
       focusLossObserved = false;
     }
-    if (windowId === -1 && prevWindowId !== null) {
-      const departingTab = lastActiveTabIdByWindow.get(prevWindowId);
+    if (windowId === -1 && departedWindowId !== null) {
+      const departingTab = lastActiveTabIdByWindow.get(departedWindowId);
       const departingScope = departingTab ? getScopeForTab(departingTab) : null;
       if (departingScope) updateIntentionScopeActivity(departingScope);
     }
     persistSession();
 
     debugLog('[Intender] Window focus changed:', {
-      prevWindowId,
+      departedWindowId,
+      prevFocusedWindowId,
       newWindowId: windowId,
     });
     try {
@@ -1117,9 +1129,10 @@ export default defineBackground(async () => {
 
       const activeTabId = numberToTabId(activeTab.id);
 
-      // Compute fromTabId with fallback to query previous window
-      const cachedFromTabId = prevWindowId
-        ? lastActiveTabIdByWindow.get(prevWindowId)
+      // Compute fromTabId with fallback to query previous window. Only an
+      // observed previous focus may seed this - see the note above.
+      const cachedFromTabId = prevFocusedWindowId
+        ? lastActiveTabIdByWindow.get(prevFocusedWindowId)
         : undefined;
 
       // Check if cached tab has a scope
@@ -1128,10 +1141,11 @@ export default defineBackground(async () => {
         : null;
 
       // Determine if fallback is needed: no cached tab OR cached tab has no scope
-      const willUseFallback = prevWindowId && (!cachedFromTabId || !fromScope);
+      const willUseFallback =
+        prevFocusedWindowId && (!cachedFromTabId || !fromScope);
 
       debugLog('[Intender] Window focus fromTabId resolution:', {
-        prevWindowId,
+        prevFocusedWindowId,
         cachedFromTabId,
         fromScope,
         willUseFallback,
@@ -1143,7 +1157,7 @@ export default defineBackground(async () => {
       if (willUseFallback) {
         try {
           // WindowId is just a branded number, cast it back to number for the query
-          const prevWindowIdNumber = windowIdToNumber(prevWindowId);
+          const prevWindowIdNumber = windowIdToNumber(prevFocusedWindowId);
           debugLog(
             '[Intender] Attempting fallback query for window:',
             prevWindowIdNumber
@@ -1164,7 +1178,7 @@ export default defineBackground(async () => {
               updateIntentionScopeActivity(fallbackFromScope);
 
               // Update cache to keep it warm
-              lastActiveTabIdByWindow.set(prevWindowId, fallbackTabId);
+              lastActiveTabIdByWindow.set(prevFocusedWindowId, fallbackTabId);
 
               debugLog('[Intender] Fallback from-bump successful:', {
                 fallbackTabId,

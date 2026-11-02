@@ -913,6 +913,30 @@ describe('leaving and returning to the browser', () => {
     expect(h.session.lastFocusedWindowId).toBe(1);
   });
 
+  it('coming back after a restart that never saw the user leave still prompts', async () => {
+    const h = await startBackground({
+      url: protectedUrl,
+      mode: 'all',
+      // The worker died while Chrome was in the background, so it never heard
+      // the focus leave and has no lastFocusedWindowId to hydrate. All it can
+      // recover is where the user was, which is not the same claim.
+      browserUnfocused: true,
+      session: {
+        tabUrlMap: { 1: protectedUrl },
+        intentionScopePerTabId: { 1: 'rule-1' },
+        lastActiveByScope: { 'rule-1': 90000 },
+        lastActiveTabIdByWindow: { 1: 1 },
+      },
+    });
+    // Returning to the very tab they left, well past the timeout. If the
+    // remembered window is allowed to stand in for the window being departed,
+    // the from-tab and the arriving tab are the same tab, the scopes match,
+    // and the same-scope fast path skips the check the user is owed.
+    vi.setSystemTime(102000);
+    await h.focus(1);
+    expectPrompt(h);
+  });
+
   it('leaving a window that is in no scope records nothing', async () => {
     const h = await startBackground({
       url: outsideUrl,
