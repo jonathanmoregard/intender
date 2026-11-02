@@ -15,7 +15,14 @@ function getTestNameWithRun(): string {
   return `${testName} (run ${runNumber})`;
 }
 
-test.describe.configure({ mode: 'parallel' });
+// Every inactivity decision consults the focused window - through the
+// activation guard, through getActiveTabSnapshot, or through the idle
+// handler's own focus check. Two browsers sharing one X display trade focus,
+// and a departing window legitimately refreshes its scope's activity, so a
+// second instance can make any test here measure ~0 elapsed time. That is
+// correct behaviour reading a contended environment, not a bug to chase: the
+// whole file is tagged @serial so it runs one browser at a time.
+test.describe.configure({ mode: 'default' });
 
 async function gotoRobust(page: Page, url: string): Promise<void> {
   try {
@@ -119,7 +126,7 @@ async function toggleOsIdleEnabled(optionsPage: Page, enabled: boolean) {
 }
 
 // Parallel-safe tests (can run concurrently)
-test.describe('Inactivity revalidation - parallel safe', () => {
+test.describe('@serial Inactivity revalidation', () => {
   test('test-1: timeout in ms and revalidation on tab focus after inactivity', async () => {
     const testPhrase = getTestNameWithRun();
     const { context } = await launchExtension();
