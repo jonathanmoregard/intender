@@ -410,6 +410,32 @@ export default defineBackground(async () => {
     return intentionToIntentionScopeId(matchedIntention);
   };
 
+  /**
+   * What we know about which scope a tab is in.
+   *
+   * `unscoped` and `unknown-url` are different facts and used to be the same
+   * null: the first says the tab's URL matches no intention, the second says
+   * we have no URL for it. Every consumer so far treats them alike, but it
+   * has to say so - a tab we know nothing about failing open is a decision,
+   * not a default, and it is the shape of bug this worker keeps producing.
+   */
+  type TabScope =
+    | { kind: 'scoped'; scopeId: IntentionScopeId }
+    | { kind: 'unscoped' }
+    | { kind: 'unknown-url' };
+
+  /**
+   * The scope to act on. Not knowing a tab's URL yields nothing to check
+   * against, exactly as a URL in no scope does, so both collapse here - at one
+   * named place, rather than at each call site by accident.
+   */
+  const scopeToActOn = (scope: TabScope): IntentionScopeId | null =>
+    scope.kind === 'scoped' ? scope.scopeId : null;
+
+  /** Whether two tabs are known to sit in the same intention scope. */
+  const sameScope = (a: TabScope, b: TabScope): boolean =>
+    a.kind === 'scoped' && b.kind === 'scoped' && a.scopeId === b.scopeId;
+
   // The same policy applies to full-document and same-document navigation.
   type NavigationDecision =
     | {
@@ -548,10 +574,7 @@ export default defineBackground(async () => {
   }
 
   // Get intention scope ID for a tab with comprehensive resolution
-  const getScopeForTab = (
-    tabId: TabId,
-    url?: string
-  ): IntentionScopeId | null => {
+  const getScopeForTab = (tabId: TabId, url?: string): TabScope => {
     // Resolution order per spec:
     // 1. intentionScopePerTabId if present
     const mappedScope = intentionScopePerTabId.get(tabId);
@@ -560,7 +583,7 @@ export default defineBackground(async () => {
         tabId,
         mappedScope,
       });
-      return mappedScope;
+      return { kind: 'scoped', scopeId: mappedScope };
     }
 
     // 2. derive via tabUrlMap → scope lookup
@@ -573,12 +596,15 @@ export default defineBackground(async () => {
         url: resolvedUrl,
         scopeFromUrl: scopeFromUrl || null,
       });
-      return scopeFromUrl;
+      return scopeFromUrl
+        ? { kind: 'scoped', scopeId: scopeFromUrl }
+        : { kind: 'unscoped' };
     }
 
-    // 3. otherwise return null
+    // 3. no URL for this tab at all, which is not the same as having one that
+    // matches nothing - see TabScope.
     debugLog('[Intender] getScopeForTab: unresolved', { tabId });
-    return null;
+    return { kind: 'unknown-url' };
   };
 
   // Check if a scope should trigger inactivity intention check
@@ -671,8 +697,11 @@ export default defineBackground(async () => {
     persistSession();
 
     // Compute scopes for both tabs
-    const fromScope = fromTabId ? getScopeForTab(fromTabId) : null;
+    const fromScope: TabScope = fromTabId
+      ? getScopeForTab(fromTabId)
+      : { kind: 'unknown-url' };
     const toScope = getScopeForTab(toTabId, toUrl);
+    const toScopeId = scopeToActOn(toScope);
 
     debugLog('[Intender] Focus change:', {
       windowId,
@@ -681,24 +710,23 @@ export default defineBackground(async () => {
       toUrl,
       fromScope,
       toScope,
-      scopeComparison: fromScope === toScope ? 'SAME' : 'DIFFERENT',
+      scopeComparison: sameScope(fromScope, toScope) ? 'SAME' : 'DIFFERENT',
     });
 
-    // FAST PATH: Same-scope switch - skip inactivity check entirely
-    if (fromScope && toScope && fromScope === toScope) {
+    // FAST PATH: Same-scope switch - skip inactivity check entirely. Two tabs
+    // whose scope we do not know are not thereby in the same scope.
+    if (sameScope(fromScope, toScope) && toScopeId) {
       debugLog('[Intender] Same-scope switch detected, fast path:', {
-        scope: toScope,
-        fromScope,
-        toScope,
-        scopesEqual: fromScope === toScope,
+        scope: toScopeId,
       });
       // Bump activity for the scope and update tracking
-      updateIntentionScopeActivity(toScope);
+      updateIntentionScopeActivity(toScopeId);
       return;
     }
 
     // From bump: update activity for the previous tab's scope
-    if (fromTabId && fromScope) updateIntentionScopeActivity(fromScope);
+    const fromScopeId = scopeToActOn(fromScope);
+    if (fromTabId && fromScopeId) updateIntentionScopeActivity(fromScopeId);
 
     // Guard: if the target tab URL is already the intention page URL, skip redirect
     const resolvedUrl = toUrl || tabUrlMap.get(toTabId);
@@ -713,18 +741,21 @@ export default defineBackground(async () => {
     if (
       await shouldTriggerInactivityIntentionCheck(
         inactivityMode,
-        toScope,
+        toScopeId,
         inactivityTimeoutMs
       )
     ) {
-      debugLog('[Intender] Triggering inactivity redirect for scope:', toScope);
+      debugLog(
+        '[Intender] Triggering inactivity redirect for scope:',
+        toScopeId
+      );
 
-      if (resolvedUrl && toScope) {
-        await redirectToIntentionPage(toTabId, resolvedUrl, toScope);
+      if (resolvedUrl && toScopeId) {
+        await redirectToIntentionPage(toTabId, resolvedUrl, toScopeId);
       }
-    } else if (toScope) {
+    } else if (toScopeId) {
       // No redirect needed, just update activity
-      updateIntentionScopeActivity(toScope);
+      updateIntentionScopeActivity(toScopeId);
     }
   }
 
@@ -787,7 +818,7 @@ export default defineBackground(async () => {
           cachedUrl || (typeof activeTab.url === 'string' ? activeTab.url : '');
         if (!url) return;
 
-        const intentionScopeId = getScopeForTab(tabId, url);
+        const intentionScopeId = scopeToActOn(getScopeForTab(tabId, url));
         if (!intentionScopeId) return;
 
         // Check audio exemption for all-except-audio mode
@@ -854,7 +885,7 @@ export default defineBackground(async () => {
   // Handle audio state changes
   browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     const tId = numberToTabId(tabId);
-    const intentionScopeId = getScopeForTab(tId);
+    const intentionScopeId = scopeToActOn(getScopeForTab(tId));
     const audioChanged =
       changeInfo.audible !== undefined || changeInfo.mutedInfo !== undefined;
     if (!audioChanged) return;
@@ -1084,7 +1115,9 @@ export default defineBackground(async () => {
     }
     if (windowId === -1 && departedWindowId !== null) {
       const departingTab = lastActiveTabIdByWindow.get(departedWindowId);
-      const departingScope = departingTab ? getScopeForTab(departingTab) : null;
+      const departingScope = departingTab
+        ? scopeToActOn(getScopeForTab(departingTab))
+        : null;
       if (departingScope) updateIntentionScopeActivity(departingScope);
     }
     persistSession();
@@ -1135,19 +1168,21 @@ export default defineBackground(async () => {
         ? lastActiveTabIdByWindow.get(prevFocusedWindowId)
         : undefined;
 
-      // Check if cached tab has a scope
-      const fromScope = cachedFromTabId
-        ? getScopeForTab(cachedFromTabId)
+      // Check if cached tab has a scope. Collapse to the scope id here: a
+      // TabScope is an object, so testing it for truthiness below would always
+      // say "yes, it has a scope" and quietly retire the fallback.
+      const fromScopeId = cachedFromTabId
+        ? scopeToActOn(getScopeForTab(cachedFromTabId))
         : null;
 
       // Determine if fallback is needed: no cached tab OR cached tab has no scope
       const willUseFallback =
-        prevFocusedWindowId && (!cachedFromTabId || !fromScope);
+        prevFocusedWindowId && (!cachedFromTabId || !fromScopeId);
 
       debugLog('[Intender] Window focus fromTabId resolution:', {
         prevFocusedWindowId,
         cachedFromTabId,
-        fromScope,
+        fromScopeId,
         willUseFallback,
       });
 
@@ -1168,9 +1203,8 @@ export default defineBackground(async () => {
           });
           if (prevActiveTab && typeof prevActiveTab.id === 'number') {
             const fallbackTabId = numberToTabId(prevActiveTab.id);
-            const fallbackFromScope = getScopeForTab(
-              fallbackTabId,
-              prevActiveTab.url
+            const fallbackFromScope = scopeToActOn(
+              getScopeForTab(fallbackTabId, prevActiveTab.url)
             );
 
             if (fallbackFromScope) {

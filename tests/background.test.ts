@@ -937,6 +937,30 @@ describe('leaving and returning to the browser', () => {
     expectPrompt(h);
   });
 
+  it('leaving a window re-reads its active tab when the remembered one is unscoped', async () => {
+    const h = await startBackground({
+      url: protectedUrl,
+      mode: 'all',
+      extraTabs: [
+        // Still open, so reconciliation keeps the mapping that names it - but
+        // it is in no scope, which is the other reason to go and look again.
+        { id: 3, windowId: 1, active: false, url: outsideUrl },
+        { id: 2, windowId: 2, active: true, url: 'about:blank' },
+      ],
+      session: {
+        tabUrlMap: { 1: protectedUrl, 3: outsideUrl },
+        intentionScopePerTabId: { 1: 'rule-1' },
+        lastActiveByScope: { 'rule-1': 90000 },
+        lastActiveTabIdByWindow: { 1: 3 },
+        lastFocusedWindowId: 1,
+      },
+    });
+    vi.setSystemTime(100500);
+    await h.focus(2);
+    // Only the re-read writes window 1's tab; the focus handler writes window 2.
+    expect(h.session.lastActiveTabIdByWindow).toMatchObject({ 1: 1 });
+  });
+
   it('leaving a window that is in no scope records nothing', async () => {
     const h = await startBackground({
       url: outsideUrl,
