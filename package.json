@@ -20,6 +20,7 @@
     "test:watch": "vitest --watch",
     "test:coverage": "vitest --coverage",
     "test:url-matching": "vitest url-matching.test.ts",
+    "test:mutation": "stryker run",
     "version:check": "node scripts/version-check.js",
     "version:bump": "node scripts/version-bump.js",
     "pr:create": "node scripts/create-pr.js",
@@ -34,6 +35,8 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.54.2",
+    "@stryker-mutator/core": "^10.1.1",
+    "@stryker-mutator/vitest-runner": "^10.1.1",
     "@types/jest": "^30.0.0",
     "@types/lodash": "^4.17.20",
     "@types/lodash-es": "^4.17.12",
