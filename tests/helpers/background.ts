@@ -11,6 +11,7 @@ function event() {
     emit: async (...args: any[]) => {
       for (const listener of [...listeners]) await listener(...args);
     },
+    listenerCount: () => listeners.size,
   };
 }
 
@@ -38,6 +39,11 @@ export async function startBackground(
      * foreground application.
      */
     browserUnfocused?: boolean;
+    /**
+     * What windows.getLastFocused reports. Defaults to the first window; null
+     * makes the call reject, as it does when the browser has no window left.
+     */
+    lastFocusedWindow?: number | null;
   } = {}
 ) {
   vi.resetModules();
@@ -65,6 +71,8 @@ export async function startBackground(
   };
   const session = { ...options.session };
   const redirects: { tabId: number; url: string }[] = [];
+  const idleIntervals: number[] = [];
+  const idleStateChanged = event();
   let releaseSettings = () => {};
   const settingsGate = options.deferSettings
     ? new Promise<void>(resolve => {
@@ -123,11 +131,22 @@ export async function startBackground(
     },
     windows: {
       getAll: async () => windows,
-      getLastFocused: async () => windows[0],
+      getLastFocused: async () => {
+        if (options.lastFocusedWindow === null) {
+          throw new Error('No window is open');
+        }
+        return options.lastFocusedWindow === undefined
+          ? windows[0]
+          : windows.find(w => w.id === options.lastFocusedWindow);
+      },
       onFocusChanged: event(),
       onRemoved: event(),
     },
-    idle: { setDetectionInterval: () => {}, onStateChanged: event() },
+    idle: {
+      setDetectionInterval: (seconds: number) =>
+        idleIntervals.push(seconds) && undefined,
+      onStateChanged: idleStateChanged,
+    },
     webNavigation: {
       onBeforeNavigate: event(),
       onCommitted: event(),
@@ -176,6 +195,32 @@ export async function startBackground(
       'sync'
     );
   };
+  const changeSettings = async (
+    patch: Partial<typeof settings>,
+    changes?: Record<string, unknown>
+  ) => {
+    Object.assign(settings, patch);
+    await browser.storage.onChanged.emit(
+      changes ??
+        Object.fromEntries(
+          Object.entries(patch).map(([key, value]) => [
+            key,
+            { newValue: value },
+          ])
+        ),
+      'sync'
+    );
+  };
+  const removeTab = async (tabId: number) => {
+    const index = tabs.findIndex(tab => tab.id === tabId);
+    if (index !== -1) tabs.splice(index, 1);
+    await browser.tabs.onRemoved.emit(tabId, { windowId: 1 });
+  };
+  const replaceTab = async (addedTabId: number, removedTabId: number) => {
+    const removed = tabs.find(tab => tab.id === removedTabId);
+    if (removed) removed.id = addedTabId;
+    await browser.tabs.onReplaced.emit(addedTabId, removedTabId);
+  };
   return {
     browser,
     tabs,
@@ -183,6 +228,8 @@ export async function startBackground(
     settings,
     session,
     redirects,
+    idleIntervals,
+    idleListenerCount: () => idleStateChanged.listenerCount(),
     started,
     releaseSettings,
     before,
@@ -191,5 +238,8 @@ export async function startBackground(
     history,
     focus,
     changeRules,
+    changeSettings,
+    removeTab,
+    replaceTab,
   };
 }

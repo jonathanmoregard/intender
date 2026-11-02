@@ -368,6 +368,71 @@ describe('focus transitions', () => {
     }
   );
 
+  it('audio in another tab of the scope holds off the prompt', async () => {
+    const h = await startBackground({
+      url: outsideUrl,
+      mode: 'all-except-audio',
+      extraTabs: [
+        { id: 2, windowId: 1, active: false, url: protectedUrl },
+        {
+          id: 3,
+          windowId: 1,
+          active: false,
+          url: 'https://example.com/protected/radio',
+          audible: true,
+        },
+      ],
+      session: {
+        tabUrlMap: {
+          1: outsideUrl,
+          2: protectedUrl,
+          3: 'https://example.com/protected/radio',
+        },
+        intentionScopePerTabId: { 2: 'rule-1', 3: 'rule-1' },
+        lastActiveByScope: { 'rule-1': 90000 },
+        lastActiveTabIdByWindow: { 1: 1 },
+        lastFocusedWindowId: 1,
+      },
+    });
+    // The scope is overdue, but something in it is still playing - in a
+    // different tab than the one being opened.
+    vi.setSystemTime(102000);
+    await h.browser.tabs.onActivated.emit({ tabId: 2, windowId: 1 });
+    expect(h.redirects).toEqual([]);
+  });
+
+  it('a muted tab is not audio, so the overdue prompt stands', async () => {
+    const h = await startBackground({
+      url: outsideUrl,
+      mode: 'all-except-audio',
+      extraTabs: [
+        { id: 2, windowId: 1, active: false, url: protectedUrl },
+        {
+          id: 3,
+          windowId: 1,
+          active: false,
+          url: 'https://example.com/protected/radio',
+          audible: true,
+          mutedInfo: { muted: true },
+        },
+      ],
+      session: {
+        tabUrlMap: {
+          1: outsideUrl,
+          2: protectedUrl,
+          3: 'https://example.com/protected/radio',
+        },
+        intentionScopePerTabId: { 2: 'rule-1', 3: 'rule-1' },
+        lastActiveByScope: { 'rule-1': 90000 },
+        lastActiveTabIdByWindow: { 1: 1 },
+        lastFocusedWindowId: 1,
+      },
+    });
+    vi.setSystemTime(102000);
+    await h.browser.tabs.onActivated.emit({ tabId: 2, windowId: 1 });
+    expectPrompt(h);
+  });
+
   it('return from another application after timeout prompts', async () => {
     const h = await startBackground({ url: protectedUrl, mode: 'all' });
     await h.focus(-1);
@@ -573,6 +638,38 @@ describe('lifecycle boundaries', () => {
     expectPrompt(h);
   });
 
+  it('a suspending worker drops the clock of a scope no tab is in', async () => {
+    const h = await startBackground({
+      url: outsideUrl,
+      mode: 'all',
+      session: {
+        tabUrlMap: { 1: outsideUrl },
+        lastActiveByScope: { 'rule-1': 90000 },
+        lastFocusedWindowId: 1,
+      },
+    });
+    // Nothing is in rule-1 any more, so its clock would only ever be read
+    // back as a stale reason to prompt.
+    await h.browser.runtime.onSuspend.emit();
+    expect(h.session.lastActiveByScope).toEqual({});
+  });
+
+  it('a suspending worker keeps the clock of a scope still open', async () => {
+    const h = await startBackground({
+      url: protectedUrl,
+      mode: 'all',
+      session: {
+        tabUrlMap: { 1: protectedUrl },
+        intentionScopePerTabId: { 1: 'rule-1' },
+        lastActiveByScope: { 'rule-1': 90000 },
+        lastFocusedWindowId: 1,
+      },
+    });
+    await h.browser.runtime.onSuspend.emit();
+    expect(h.session.lastActiveByScope).toEqual({ 'rule-1': 90000 });
+    expect(h.session.lastFocusedWindowId).toBe(1);
+  });
+
   it('a replacement active tab remains the source for a same-scope background tab', async () => {
     const h = await startBackground({
       url: protectedUrl,
@@ -606,5 +703,367 @@ describe('lifecycle boundaries', () => {
     await h.before(`${protectedUrl}?intention_completed_53c5890=true`);
     await h.commit('https://other.org/');
     expectPrompt(h, 'https://other.org/');
+  });
+});
+
+describe('worker restart reconciliation', () => {
+  it('a scope the session already timed does not get its clock reset', async () => {
+    const h = await startBackground({
+      url: protectedUrl,
+      mode: 'all',
+      session: {
+        tabUrlMap: { 1: protectedUrl },
+        intentionScopePerTabId: { 1: 'rule-1' },
+        lastActiveByScope: { 'rule-1': 90000 },
+        lastActiveTabIdByWindow: { 1: 2 },
+        lastFocusedWindowId: 1,
+      },
+    });
+    // Only 500ms after startup, so a clock reset at startup would read as
+    // active and the prompt would be lost. It is the session's 90000 that
+    // makes this overdue.
+    vi.setSystemTime(100500);
+    await h.browser.tabs.onActivated.emit({ tabId: 1, windowId: 1 });
+    expectPrompt(h);
+  });
+
+  it('a scope the session never timed starts its clock at startup', async () => {
+    const h = await startBackground({
+      url: protectedUrl,
+      mode: 'all',
+      session: {
+        tabUrlMap: { 1: protectedUrl },
+        intentionScopePerTabId: { 1: 'rule-1' },
+        lastActiveTabIdByWindow: { 1: 2 },
+        lastFocusedWindowId: 1,
+      },
+    });
+    // Startup gives the unknown scope a clock. Without one it would have no
+    // last-active time at all, and an untimed scope never prompts - so the
+    // prompt here is what proves the clock was started.
+    vi.setSystemTime(102000);
+    await h.browser.tabs.onActivated.emit({ tabId: 1, windowId: 1 });
+    expectPrompt(h);
+  });
+
+  it('a cold start with no session seeds the window from the active tab', async () => {
+    const h = await startBackground({
+      url: protectedUrl,
+      mode: 'all',
+      extraTabs: [{ id: 2, windowId: 1, active: false, url: outsideUrl }],
+    });
+    // Nothing was hydrated, so tab 1 is the window's known active tab. A
+    // re-activation of it is spurious and must not count as arriving.
+    vi.setSystemTime(102000);
+    await h.browser.tabs.onActivated.emit({ tabId: 1, windowId: 1 });
+    expect(h.redirects).toEqual([]);
+  });
+
+  it('reconciliation drops tabs that closed while the worker was dead', async () => {
+    const h = await startBackground({
+      url: outsideUrl,
+      mode: 'all',
+      session: {
+        tabUrlMap: { 1: outsideUrl, 7: protectedUrl },
+        intentionScopePerTabId: { 7: 'rule-1' },
+        lastActiveByScope: { 'rule-1': 90000 },
+        lastActiveTabIdByWindow: { 1: 7 },
+        lastFocusedWindowId: 1,
+      },
+    });
+    vi.setSystemTime(102000);
+    // Tab 7 no longer exists, so it cannot still be the window's active tab
+    // and its scope mapping must be gone.
+    expect(h.session.lastActiveTabIdByWindow).toEqual({});
+    expect(h.session.tabUrlMap).toEqual({ 1: outsideUrl });
+    expect(h.session.intentionScopePerTabId).toEqual({});
+  });
+
+  it('falls back to the last focused window when Chrome reports none', async () => {
+    const h = await startBackground({
+      url: protectedUrl,
+      mode: 'all',
+      browserUnfocused: true,
+      session: {
+        tabUrlMap: { 1: protectedUrl },
+        intentionScopePerTabId: { 1: 'rule-1' },
+        lastActiveByScope: { 'rule-1': 90000 },
+        lastActiveTabIdByWindow: { 1: 2 },
+      },
+    });
+    // No window reports focused and the session carries no focus either, so
+    // only windows.getLastFocused can say where the user was.
+    vi.setSystemTime(102000);
+    await h.browser.tabs.onActivated.emit({ tabId: 1, windowId: 1 });
+    expectPrompt(h);
+  });
+
+  it('a browser with no window left leaves focus unknown', async () => {
+    const h = await startBackground({
+      url: protectedUrl,
+      mode: 'all',
+      browserUnfocused: true,
+      lastFocusedWindow: null,
+      session: {
+        tabUrlMap: { 1: protectedUrl },
+        intentionScopePerTabId: { 1: 'rule-1' },
+        lastActiveByScope: { 'rule-1': 90000 },
+        lastActiveTabIdByWindow: { 1: 2 },
+      },
+    });
+    vi.setSystemTime(102000);
+    await h.browser.tabs.onActivated.emit({ tabId: 1, windowId: 1 });
+    expect(h.redirects).toEqual([]);
+  });
+
+  it('a background window keeps its own last-active tab', async () => {
+    const h = await startBackground({
+      url: outsideUrl,
+      mode: 'all',
+      extraTabs: [
+        { id: 2, windowId: 2, active: false, url: outsideUrl },
+        { id: 3, windowId: 2, active: true, url: protectedUrl },
+      ],
+    });
+    // Window 2 is not the focused one, so only reconciliation can learn
+    // which of its tabs the user was on - and it must be the active one.
+    expect(h.session.lastActiveTabIdByWindow).toEqual({ 1: 1, 2: 3 });
+  });
+});
+
+describe('leaving and returning to the browser', () => {
+  it('losing focus starts the clock on the scope being left', async () => {
+    const h = await startBackground({ url: protectedUrl, mode: 'all' });
+    await h.browser.tabs.onActivated.emit({ tabId: 1, windowId: 1 });
+    vi.setSystemTime(105000);
+    // Leaving records when the user left; coming back 2s later is 2s away,
+    // not 7s, so the prompt is due relative to the departure.
+    await h.focus(-1);
+    vi.setSystemTime(107000);
+    await h.focus(1);
+    expectPrompt(h);
+  });
+
+  it('a brief flick away from the browser is not time away', async () => {
+    const h = await startBackground({ url: protectedUrl, mode: 'all' });
+    await h.browser.tabs.onActivated.emit({ tabId: 1, windowId: 1 });
+    vi.setSystemTime(105000);
+    await h.focus(-1);
+    vi.setSystemTime(105200);
+    await h.focus(1);
+    expect(h.redirects).toEqual([]);
+  });
+
+  it('losing focus is not itself an arrival to check', async () => {
+    const h = await startBackground({
+      url: protectedUrl,
+      mode: 'all',
+      session: {
+        tabUrlMap: { 1: protectedUrl },
+        intentionScopePerTabId: { 1: 'rule-1' },
+        lastActiveByScope: { 'rule-1': 90000 },
+        lastActiveTabIdByWindow: { 1: 1 },
+        lastFocusedWindowId: 1,
+      },
+    });
+    vi.setSystemTime(102000);
+    await h.focus(-1);
+    expect(h.redirects).toEqual([]);
+  });
+
+  it('the window the user is in survives a worker restart', async () => {
+    const h = await startBackground({ url: outsideUrl, mode: 'all' });
+    // A restarted worker reads this back, and a wrong answer there is what
+    // makes it treat the user's next tab switch as bookkeeping.
+    await h.focus(-1);
+    expect(h.session.lastFocusedWindowId).toBe(null);
+    await h.focus(1);
+    expect(h.session.lastFocusedWindowId).toBe(1);
+  });
+
+  it('leaving a window that is in no scope records nothing', async () => {
+    const h = await startBackground({
+      url: outsideUrl,
+      mode: 'all',
+      session: {
+        tabUrlMap: { 1: outsideUrl },
+        lastActiveTabIdByWindow: { 1: 1 },
+        lastFocusedWindowId: 1,
+      },
+    });
+    vi.setSystemTime(102000);
+    await h.focus(-1);
+    expect(h.session.lastActiveByScope).toEqual({});
+  });
+
+  it('leaving a window re-reads its active tab when the cache went stale', async () => {
+    const h = await startBackground({
+      url: protectedUrl,
+      mode: 'all',
+      extraTabs: [{ id: 2, windowId: 2, active: true, url: outsideUrl }],
+      session: {
+        tabUrlMap: { 1: protectedUrl },
+        intentionScopePerTabId: { 1: 'rule-1' },
+        lastActiveByScope: { 'rule-1': 90000 },
+        lastActiveTabIdByWindow: { 1: 9 },
+        lastFocusedWindowId: 1,
+      },
+    });
+    // Tab 9 is gone, so the window being left has no remembered tab.
+    // Re-reading its active tab is the only way to record that the user was
+    // in the protected scope right up to the moment they switched away.
+    vi.setSystemTime(100500);
+    await h.focus(2);
+    expect(h.session.lastActiveTabIdByWindow).toMatchObject({ 1: 1 });
+    vi.setSystemTime(100800);
+    await h.focus(1);
+    expect(h.redirects).toEqual([]);
+  });
+});
+
+describe('settings changes reach the worker', () => {
+  it('turning inactivity on takes effect without a restart', async () => {
+    const h = await startBackground({ url: protectedUrl, mode: 'off' });
+    await h.browser.tabs.onActivated.emit({ tabId: 1, windowId: 1 });
+    await h.changeSettings({ inactivityMode: 'all' });
+    vi.setSystemTime(105000);
+    await h.focus(-1);
+    vi.setSystemTime(107000);
+    await h.focus(1);
+    expectPrompt(h);
+  });
+
+  it('turning inactivity off takes effect without a restart', async () => {
+    const h = await startBackground({ url: protectedUrl, mode: 'all' });
+    await h.browser.tabs.onActivated.emit({ tabId: 1, windowId: 1 });
+    await h.changeSettings({ inactivityMode: 'off' });
+    vi.setSystemTime(105000);
+    await h.focus(-1);
+    vi.setSystemTime(107000);
+    await h.focus(1);
+    expect(h.redirects).toEqual([]);
+  });
+
+  it('a longer timeout takes effect without a restart', async () => {
+    const h = await startBackground({ url: protectedUrl, mode: 'all' });
+    await h.browser.tabs.onActivated.emit({ tabId: 1, windowId: 1 });
+    await h.changeSettings({ inactivityTimeoutMs: 60000 });
+    vi.setSystemTime(105000);
+    await h.focus(-1);
+    vi.setSystemTime(107000);
+    await h.focus(1);
+    expect(h.redirects).toEqual([]);
+  });
+
+  it('OS idle detection follows the configured mode', async () => {
+    const h = await startBackground({ url: protectedUrl, mode: 'off' });
+    expect(h.idleListenerCount()).toBe(0);
+    await h.changeSettings({ inactivityMode: 'all' });
+    expect(h.idleListenerCount()).toBe(1);
+    await h.changeSettings({ inactivityMode: 'off' });
+    expect(h.idleListenerCount()).toBe(0);
+  });
+
+  it('the OS idle interval follows the configured timeout, with a floor', async () => {
+    const h = await startBackground({ url: protectedUrl, mode: 'all' });
+    // Chrome rejects anything under 15s, so a 1s timeout still asks for 15.
+    expect(h.idleIntervals).toEqual([15]);
+    await h.changeSettings({ inactivityTimeoutMs: 120000 });
+    expect(h.idleIntervals.at(-1)).toBe(120);
+  });
+
+  it('a new rule claims tabs already open on that site', async () => {
+    const h = await startBackground({ url: 'https://late.org/page' });
+    expect(h.session.intentionScopePerTabId).toEqual({});
+    await h.changeRules([
+      ...h.settings.intentions,
+      { id: 'late-rule', url: 'late.org', phrase: 'Late intention' },
+    ]);
+    // The mapping is what a restarted worker reads back, so the claim has to
+    // reach the session, not just the live index.
+    expect(h.session.intentionScopePerTabId).toEqual({ 1: 'late-rule' });
+  });
+
+  it('a deleted rule releases the tabs it was claiming', async () => {
+    const h = await startBackground({ url: protectedUrl, mode: 'all' });
+    await h.browser.tabs.onActivated.emit({ tabId: 1, windowId: 1 });
+    expect(h.session.intentionScopePerTabId).toEqual({ 1: 'rule-1' });
+    await h.changeRules([]);
+    // Time away that would have prompted while the rule existed.
+    vi.setSystemTime(105000);
+    await h.focus(-1);
+    vi.setSystemTime(107000);
+    await h.focus(1);
+    expect(h.redirects).toEqual([]);
+  });
+});
+
+describe('tab lifecycle bookkeeping', () => {
+  it('a closed tab stops being the window its scope was last active in', async () => {
+    const h = await startBackground({
+      url: protectedUrl,
+      mode: 'all',
+      extraTabs: [{ id: 2, windowId: 1, active: false, url: outsideUrl }],
+    });
+    await h.browser.tabs.onActivated.emit({ tabId: 1, windowId: 1 });
+    await h.removeTab(1);
+    expect(h.session.tabUrlMap).not.toHaveProperty('1');
+    expect(h.session.intentionScopePerTabId).not.toHaveProperty('1');
+    expect(h.session.lastActiveTabIdByWindow).toEqual({});
+  });
+
+  it('a tab opened straight onto a page is known before it navigates', async () => {
+    const h = await startBackground({ url: outsideUrl, mode: 'all' });
+    await h.browser.tabs.onCreated.emit({
+      id: 5,
+      windowId: 1,
+      active: false,
+      url: protectedUrl,
+    });
+    expect(h.session.tabUrlMap).toEqual({ 1: outsideUrl, 5: protectedUrl });
+  });
+
+  it('a tab opened with no URL yet is not cached as having one', async () => {
+    const h = await startBackground({ url: outsideUrl, mode: 'all' });
+    await h.browser.tabs.onCreated.emit({ id: 5, windowId: 1, active: false });
+    expect(Object.keys(h.session.tabUrlMap!)).toEqual(['1']);
+  });
+
+  it('a replaced tab keeps the scope and URL of the tab it replaced', async () => {
+    const h = await startBackground({ url: protectedUrl, mode: 'all' });
+    await h.browser.tabs.onActivated.emit({ tabId: 1, windowId: 1 });
+    await h.replaceTab(9, 1);
+    expect(h.session.tabUrlMap).toEqual({ 9: protectedUrl });
+    expect(h.session.intentionScopePerTabId).toEqual({ 9: 'rule-1' });
+    expect(h.session.lastActiveTabIdByWindow).toEqual({ 1: 9 });
+  });
+
+  it('a replacement inherits the scope rather than re-prompting', async () => {
+    const h = await startBackground({ url: protectedUrl, mode: 'all' });
+    await h.browser.tabs.onActivated.emit({ tabId: 1, windowId: 1 });
+    await h.replaceTab(9, 1);
+    vi.setSystemTime(100500);
+    await h.browser.tabs.onActivated.emit({ tabId: 9, windowId: 1 });
+    expect(h.redirects).toEqual([]);
+  });
+});
+
+describe('window lifecycle bookkeeping', () => {
+  it('closing a window drops the tab it was tracking', async () => {
+    const h = await startBackground({
+      url: outsideUrl,
+      mode: 'all',
+      extraTabs: [{ id: 2, windowId: 2, active: true, url: outsideUrl }],
+    });
+    await h.browser.windows.onRemoved.emit(2);
+    expect(h.session.lastActiveTabIdByWindow).toEqual({ 1: 1 });
+    expect(h.session.lastFocusedWindowId).toBe(1);
+  });
+
+  it('closing the focused window leaves focus unknown', async () => {
+    const h = await startBackground({ url: outsideUrl, mode: 'all' });
+    await h.browser.windows.onRemoved.emit(1);
+    expect(h.session.lastActiveTabIdByWindow).toEqual({});
+    expect(h.session.lastFocusedWindowId).toBe(null);
   });
 });
