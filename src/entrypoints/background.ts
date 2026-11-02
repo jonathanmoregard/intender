@@ -229,20 +229,37 @@ const hydrateSessionState = async () => {
  * Whether Chrome reports THIS window as focused: true, false, or null when
  * the answer cannot be had (the window is gone, or the call failed).
  *
+ * What we managed to learn about one window's focus.
+ *
+ * `unfocused` and `indeterminate` were the same null, and both callers read it
+ * as "not focused" - so a windows.getAll() that threw looked exactly like the
+ * user being somewhere else. They are still treated alike at the call site,
+ * but it now has to say so, and a caller that should wait or retry instead can
+ * see which one it got.
+ */
+type WindowFocusReading =
+  | { kind: 'focused' }
+  | { kind: 'unfocused' }
+  | { kind: 'indeterminate'; why: 'window-gone' | 'query-failed' };
+
+/**
  * Ask about a specific window rather than asking which window is focused.
  * While the window manager hands focus over, the window being left still
  * reports focused until its FocusOut arrives, so more than one window can
  * report focused at once and "which one is focused" has no single answer -
  * picking the first would silently prefer the window the user just left.
  */
-const isWindowFocused = async (windowId: WindowId): Promise<boolean | null> => {
+const isWindowFocused = async (
+  windowId: WindowId
+): Promise<WindowFocusReading> => {
   try {
     const windows = await browser.windows.getAll();
     const match = windows.find(w => w.id === windowIdToNumber(windowId));
-    return match ? match.focused === true : null;
+    if (!match) return { kind: 'indeterminate', why: 'window-gone' };
+    return match.focused === true ? { kind: 'focused' } : { kind: 'unfocused' };
   } catch (windowError) {
     console.log('[Intender] Failed to read window focus:', windowError);
-    return null;
+    return { kind: 'indeterminate', why: 'query-failed' };
   }
 };
 
@@ -851,8 +868,8 @@ export default defineBackground(async () => {
     // Refresh from the browser before judging: a focus event that arrived
     // while the worker was dead is simply never delivered, and the stale null
     // it leaves behind would dismiss every later switch as bookkeeping.
-    const activationWindowFocused = await isWindowFocused(windowId);
-    if (activationWindowFocused) {
+    const activationWindowFocus = await isWindowFocused(windowId);
+    if (activationWindowFocus.kind === 'focused') {
       lastFocusedWindowId = windowId;
       lastKnownWindowId = windowId;
       focusLossObserved = false;
@@ -861,7 +878,15 @@ export default defineBackground(async () => {
     // Activation in a window the user is not in is bookkeeping, not user
     // activity. A window we merely remember still counts: the alternative is
     // to credit the user with nothing after a restart they never saw.
-    if (!activationWindowFocused && userWindowId() !== windowId) {
+    //
+    // An indeterminate reading is handled as unfocused rather than as focused:
+    // we will not claim the user is in a window we could not read. What keeps
+    // a transient failure from discarding the activation outright is the
+    // remembered-window check on the same line.
+    if (
+      activationWindowFocus.kind !== 'focused' &&
+      userWindowId() !== windowId
+    ) {
       lastActiveTabIdByWindow.set(windowId, toTabId);
       persistSession();
       return;
