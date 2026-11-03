@@ -391,7 +391,7 @@ describe('focus transitions', () => {
         intentionScopePerTabId: { 2: 'rule-1', 3: 'rule-1' },
         lastActiveByScope: { 'rule-1': 90000 },
         lastActiveTabIdByWindow: { 1: 1 },
-        lastFocusedWindowId: 1,
+        lastKnownWindowId: 1,
       },
     });
     // The scope is overdue, but something in it is still playing - in a
@@ -425,7 +425,7 @@ describe('focus transitions', () => {
         intentionScopePerTabId: { 2: 'rule-1', 3: 'rule-1' },
         lastActiveByScope: { 'rule-1': 90000 },
         lastActiveTabIdByWindow: { 1: 1 },
-        lastFocusedWindowId: 1,
+        lastKnownWindowId: 1,
       },
     });
     vi.setSystemTime(102000);
@@ -595,7 +595,7 @@ describe('lifecycle boundaries', () => {
         intentionScopePerTabId: { 1: 'rule-1' },
         lastActiveByScope: { 'rule-1': 90000 },
         lastActiveTabIdByWindow: { 1: 1 },
-        lastFocusedWindowId: 1,
+        lastKnownWindowId: 1,
       },
     });
     vi.setSystemTime(102000);
@@ -621,7 +621,7 @@ describe('lifecycle boundaries', () => {
         intentionScopePerTabId: { 1: 'rule-1' },
         lastActiveByScope: { 'rule-1': 90000 },
         lastActiveTabIdByWindow: { 1: 2 },
-        lastFocusedWindowId: 1,
+        lastKnownWindowId: 1,
       },
     });
     vi.setSystemTime(102000);
@@ -662,7 +662,7 @@ describe('lifecycle boundaries', () => {
         intentionScopePerTabId: { 1: 'rule-1' },
         lastActiveByScope: { 'rule-1': 90000 },
         lastActiveTabIdByWindow: { 1: 2 },
-        lastFocusedWindowId: 1,
+        lastKnownWindowId: 1,
       },
     });
     vi.setSystemTime(102000);
@@ -677,7 +677,7 @@ describe('lifecycle boundaries', () => {
       session: {
         tabUrlMap: { 1: outsideUrl },
         lastActiveByScope: { 'rule-1': 90000 },
-        lastFocusedWindowId: 1,
+        lastKnownWindowId: 1,
       },
     });
     // Nothing is in rule-1 any more, so its clock would only ever be read
@@ -694,12 +694,12 @@ describe('lifecycle boundaries', () => {
         tabUrlMap: { 1: protectedUrl },
         intentionScopePerTabId: { 1: 'rule-1' },
         lastActiveByScope: { 'rule-1': 90000 },
-        lastFocusedWindowId: 1,
+        lastKnownWindowId: 1,
       },
     });
     await h.browser.runtime.onSuspend.emit();
     expect(h.session.lastActiveByScope).toEqual({ 'rule-1': 90000 });
-    expect(h.session.lastFocusedWindowId).toBe(1);
+    expect(h.session.lastKnownWindowId).toBe(1);
   });
 
   it('a replacement active tab remains the source for a same-scope background tab', async () => {
@@ -748,7 +748,7 @@ describe('worker restart reconciliation', () => {
         intentionScopePerTabId: { 1: 'rule-1' },
         lastActiveByScope: { 'rule-1': 90000 },
         lastActiveTabIdByWindow: { 1: 2 },
-        lastFocusedWindowId: 1,
+        lastKnownWindowId: 1,
       },
     });
     // Only 500ms after startup, so a clock reset at startup would read as
@@ -767,7 +767,7 @@ describe('worker restart reconciliation', () => {
         tabUrlMap: { 1: protectedUrl },
         intentionScopePerTabId: { 1: 'rule-1' },
         lastActiveTabIdByWindow: { 1: 2 },
-        lastFocusedWindowId: 1,
+        lastKnownWindowId: 1,
       },
     });
     // Startup gives the unknown scope a clock. Without one it would have no
@@ -800,7 +800,7 @@ describe('worker restart reconciliation', () => {
         intentionScopePerTabId: { 7: 'rule-1' },
         lastActiveByScope: { 'rule-1': 90000 },
         lastActiveTabIdByWindow: { 1: 7 },
-        lastFocusedWindowId: 1,
+        lastKnownWindowId: 1,
       },
     });
     vi.setSystemTime(102000);
@@ -861,6 +861,56 @@ describe('worker restart reconciliation', () => {
     // which of its tabs the user was on - and it must be the active one.
     expect(h.session.lastActiveTabIdByWindow).toEqual({ 1: 1, 2: 3 });
   });
+
+  it('a window focused in a previous worker life is not one we saw focused', async () => {
+    const h = await startBackground({
+      url: protectedUrl,
+      mode: 'all',
+      browserUnfocused: true,
+      session: {
+        tabUrlMap: { 1: protectedUrl },
+        intentionScopePerTabId: { 1: 'rule-1' },
+        lastActiveByScope: { 'rule-1': 90000 },
+        lastActiveTabIdByWindow: { 1: 1 },
+        // Written by the worker life before this one. It says where the user
+        // was, not that this worker ever watched focus arrive there.
+        lastKnownWindowId: 1,
+        // The key a pre-upgrade worker life wrote. It must not come back as
+        // live focus either, however it is spelled.
+        lastFocusedWindowId: 1,
+      },
+    });
+    // Restarted while Chrome was in the background, so no focus event was
+    // delivered. Coming back must still run the inactivity check: a window
+    // only read out of storage cannot be the window focus just came from, and
+    // letting it try makes the tab being returned to the tab it came from -
+    // identical scopes, same-scope fast path, no check.
+    vi.setSystemTime(102000);
+    await h.focus(1);
+    expectPrompt(h);
+  });
+
+  it('a page advancing its own history while Chrome is away is not activity', async () => {
+    const h = await startBackground({
+      url: protectedUrl,
+      mode: 'all',
+      browserUnfocused: true,
+      session: {
+        tabUrlMap: { 1: protectedUrl },
+        intentionScopePerTabId: { 1: 'rule-1' },
+        lastActiveByScope: { 'rule-1': 90000 },
+        lastActiveTabIdByWindow: { 1: 1 },
+      },
+    });
+    // Chrome is not the foreground application, so nothing here is the user.
+    // A page that calls history.replaceState on a timer must not refresh the
+    // clock, or the prompt that was already overdue never arrives.
+    vi.setSystemTime(101500);
+    await h.history(`${protectedUrl}?page=2`);
+    vi.setSystemTime(102000);
+    await h.focus(1);
+    expectPrompt(h, `${protectedUrl}?page=2`);
+  });
 });
 
 describe('leaving and returning to the browser', () => {
@@ -895,7 +945,7 @@ describe('leaving and returning to the browser', () => {
         intentionScopePerTabId: { 1: 'rule-1' },
         lastActiveByScope: { 'rule-1': 90000 },
         lastActiveTabIdByWindow: { 1: 1 },
-        lastFocusedWindowId: 1,
+        lastKnownWindowId: 1,
       },
     });
     vi.setSystemTime(102000);
@@ -905,12 +955,16 @@ describe('leaving and returning to the browser', () => {
 
   it('the window the user is in survives a worker restart', async () => {
     const h = await startBackground({ url: outsideUrl, mode: 'all' });
-    // A restarted worker reads this back, and a wrong answer there is what
-    // makes it treat the user's next tab switch as bookkeeping.
+    // Only the remembered window is persisted, and it has to survive the user
+    // leaving: that is what tells the next worker life where they were, and a
+    // wrong answer there makes it treat their next tab switch as bookkeeping.
     await h.focus(-1);
-    expect(h.session.lastFocusedWindowId).toBe(null);
+    expect(h.session.lastKnownWindowId).toBe(1);
     await h.focus(1);
-    expect(h.session.lastFocusedWindowId).toBe(1);
+    expect(h.session.lastKnownWindowId).toBe(1);
+    // Live focus is deliberately not persisted. Reading it back would make a
+    // remembered window answer "which window did focus just come from?".
+    expect(h.session.lastFocusedWindowId).toBeUndefined();
   });
 
   it('coming back after a restart that never saw the user leave still prompts', async () => {
@@ -952,7 +1006,7 @@ describe('leaving and returning to the browser', () => {
         intentionScopePerTabId: { 1: 'rule-1' },
         lastActiveByScope: { 'rule-1': 90000 },
         lastActiveTabIdByWindow: { 1: 3 },
-        lastFocusedWindowId: 1,
+        lastKnownWindowId: 1,
       },
     });
     vi.setSystemTime(100500);
@@ -968,7 +1022,7 @@ describe('leaving and returning to the browser', () => {
       session: {
         tabUrlMap: { 1: outsideUrl },
         lastActiveTabIdByWindow: { 1: 1 },
-        lastFocusedWindowId: 1,
+        lastKnownWindowId: 1,
       },
     });
     vi.setSystemTime(102000);
@@ -986,7 +1040,7 @@ describe('leaving and returning to the browser', () => {
         intentionScopePerTabId: { 1: 'rule-1' },
         lastActiveByScope: { 'rule-1': 90000 },
         lastActiveTabIdByWindow: { 1: 9 },
-        lastFocusedWindowId: 1,
+        lastKnownWindowId: 1,
       },
     });
     // Tab 9 is gone, so the window being left has no remembered tab.
@@ -1137,13 +1191,13 @@ describe('window lifecycle bookkeeping', () => {
     });
     await h.browser.windows.onRemoved.emit(2);
     expect(h.session.lastActiveTabIdByWindow).toEqual({ 1: 1 });
-    expect(h.session.lastFocusedWindowId).toBe(1);
+    expect(h.session.lastKnownWindowId).toBe(1);
   });
 
   it('closing the focused window leaves focus unknown', async () => {
     const h = await startBackground({ url: outsideUrl, mode: 'all' });
     await h.browser.windows.onRemoved.emit(1);
     expect(h.session.lastActiveTabIdByWindow).toEqual({});
-    expect(h.session.lastFocusedWindowId).toBe(null);
+    expect(h.session.lastKnownWindowId).toBe(null);
   });
 });

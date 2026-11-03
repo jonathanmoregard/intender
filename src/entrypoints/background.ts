@@ -139,8 +139,10 @@ const persistSession = () => {
         intentionScopePerTabId: mapToObject(intentionScopePerTabId),
         lastActiveByScope: mapToObject(lastActiveByScope),
         lastActiveTabIdByWindow: mapToObject(lastActiveTabIdByWindow),
-        lastFocusedWindowId: lastFocusedWindowId
-          ? windowIdToNumber(lastFocusedWindowId)
+        // The remembered window, never the live focus. What the next worker
+        // life reads out of storage is by definition not a focus it observed.
+        lastKnownWindowId: lastKnownWindowId
+          ? windowIdToNumber(lastKnownWindowId)
           : null,
       })
       .catch(error => {
@@ -164,8 +166,8 @@ chrome.runtime.onSuspend.addListener(() => {
       intentionScopePerTabId: mapToObject(intentionScopePerTabId),
       lastActiveByScope: mapToObject(lastActiveByScope),
       lastActiveTabIdByWindow: mapToObject(lastActiveTabIdByWindow),
-      lastFocusedWindowId: lastFocusedWindowId
-        ? windowIdToNumber(lastFocusedWindowId)
+      lastKnownWindowId: lastKnownWindowId
+        ? windowIdToNumber(lastKnownWindowId)
         : null,
     });
   } catch (e) {
@@ -180,7 +182,7 @@ const hydrateSessionState = async () => {
       'intentionScopePerTabId',
       'lastActiveByScope',
       'lastActiveTabIdByWindow',
-      'lastFocusedWindowId',
+      'lastKnownWindowId',
     ]);
 
     const urlMap = objectToMap<number, string>(
@@ -215,11 +217,17 @@ const hydrateSessionState = async () => {
       lastActiveTabIdByWindow.set(numberToWindowId(key), numberToTabId(value));
     }
 
-    lastFocusedWindowId =
-      sessionValues.lastFocusedWindowId != null
-        ? numberToWindowId(sessionValues.lastFocusedWindowId as number)
+    // Restored as a remembered window and nothing more. lastFocusedWindowId is
+    // deliberately not written here: it answers "which window did focus just
+    // come from?", and a value read out of storage cannot answer that - this
+    // worker never watched focus arrive anywhere. Seeding it from the session
+    // is what let the tab being returned to serve as the tab focus came from,
+    // collapsing both scopes into one and skipping the inactivity check.
+    const rememberedWindowId =
+      sessionValues.lastKnownWindowId != null
+        ? numberToWindowId(sessionValues.lastKnownWindowId as number)
         : null;
-    if (lastFocusedWindowId) lastKnownWindowId = lastFocusedWindowId;
+    if (rememberedWindowId) lastKnownWindowId = rememberedWindowId;
   } catch (error) {
     console.log('[Intender] Failed hydration from storage.session:', error);
   }
@@ -501,13 +509,19 @@ export default defineBackground(async () => {
   }
 
   /**
-   * Whether this tab is the one the user is working in, for the purpose of
-   * crediting them with activity. Unlike getActiveTabSnapshot this accepts a
-   * remembered window, because a worker that never heard the focus come back
-   * would otherwise credit the user with nothing at all.
+   * Whether this tab is the one the user is working in right now, for the
+   * purpose of crediting them with activity.
+   *
+   * This requires live focus. A page reloads or rewrites its own history on a
+   * timer with nobody watching, and a remembered window would credit that to
+   * the user: the clock resets, and a prompt that was already overdue never
+   * arrives. The gap this used to guard against - a worker that restarted
+   * without ever hearing focus arrive - is covered at startup, which reads
+   * focus from the browser rather than waiting to be told. When that read
+   * finds nothing, the honest answer is that nobody is here.
    */
   const isNavigationInUserTab = (navigationTabId: number): boolean => {
-    const windowId = userWindowId();
+    const windowId = lastFocusedWindowId;
     if (windowId == null) return false;
     const activeTabId = lastActiveTabIdByWindow.get(windowId) as unknown as
       | number
