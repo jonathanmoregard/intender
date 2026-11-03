@@ -1,0 +1,15 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "packageManager": "pnpm",
+  "plugins": ["@stryker-mutator/vitest-runner"],
+  "testRunner": "vitest",
+  "vitest": { "configFile": "vitest.config.ts" },
+  "mutate": ["src/entrypoints/background.ts"],
+  "coverageAnalysis": "perTest",
+  "reporters": ["html", "json", "progress-append-only"],
+  "htmlReporter": { "fileName": ".stryker-tmp/report.html" },
+  "jsonReporter": { "fileName": ".stryker-tmp/report.json" },
+  "timeoutMS": 20000,
+  "concurrency": 3,
+  "disableTypeChecks": true
+}

@@ -16,7 +16,10 @@ import {
   type InactivityMode,
 } from '../../components/storage';
 import { minutesToMs, msToMinutes } from '../../components/time';
-import { generateUUID } from '../../components/uuid';
+import {
+  parseSettingsImport,
+  parseTimeoutMinutesInput,
+} from '../../components/settings-data';
 type Tab = 'settings' | 'about';
 
 // Build info fallbacks for environments where Vite define isn't injected
@@ -27,8 +30,18 @@ const BUILD_VERSION: string = __VERSION__ ?? '0.0.0';
 const BUILD_HASH: string = __GIT_HASH__ ?? 'dev';
 
 const SettingsTab = memo(
-  ({ setActiveTab }: { setActiveTab: (tab: Tab) => void }) => {
+  ({
+    setActiveTab,
+    setImporting,
+  }: {
+    setActiveTab: (tab: Tab) => void;
+    setImporting: (importing: boolean) => void;
+  }) => {
     const [intentions, setIntentions] = useState<RawIntention[]>([]);
+    const persistedIntentions = useRef<RawIntention[] | null>(null);
+    const currentIntentions = useRef(intentions);
+    const importInProgress = useRef(false);
+    currentIntentions.current = intentions;
     const [deleteConfirm, setDeleteConfirm] = useState<{
       show: boolean;
       index: number | null;
@@ -52,6 +65,11 @@ const SettingsTab = memo(
     const [inactivityMode, setInactivityMode] = useState<InactivityMode>('off');
     const [inactivityTimeoutMinutes, setInactivityTimeoutMinutes] =
       useState(30);
+    // What is in the box, which is not the same thing as the saved timeout
+    // while an edit is half-finished. A controlled numeric value cannot hold
+    // "empty", so React restored the previous number the moment the field was
+    // cleared and the box could never be emptied to type a new one.
+    const [inactivityTimeoutDraft, setInactivityTimeoutDraft] = useState('30');
     const [canCopyIntentionText, setCanCopyIntentionText] = useState(false);
     const [breathIntensity, setBreathIntensity] =
       useState<BreathAnimationIntensity>('minimal');
@@ -146,6 +164,9 @@ const SettingsTab = memo(
 
     const saveIntentions = useCallback(
       async (intentionsToSave: RawIntention[]) => {
+        // A timer/flush may run before the busy UI renders. Never queue an
+        // editor snapshot behind an import that is replacing that snapshot.
+        if (importInProgress.current) return;
         await storage.set({ intentions: intentionsToSave });
       },
       []
@@ -158,6 +179,14 @@ const SettingsTab = memo(
     const saveInactivityMode = useCallback(async (mode: InactivityMode) => {
       await storage.set({ inactivityMode: mode });
     }, []);
+
+    // Anything that changes the saved timeout from outside the box - the
+    // initial load, an import, the e2e override - owns what the box shows.
+    // Typing sets the draft itself, so this only ever agrees with it; an
+    // unusable draft leaves the saved value alone and so is left as typed.
+    useEffect(() => {
+      setInactivityTimeoutDraft(String(inactivityTimeoutMinutes));
+    }, [inactivityTimeoutMinutes]);
 
     const saveInactivityTimeout = useCallback(
       async (timeoutMinutes: number) => {
@@ -206,6 +235,7 @@ const SettingsTab = memo(
       storage.get().then(async data => {
         const initialIntentions =
           data.intentions.length > 0 ? data.intentions : [emptyRawIntention()];
+        persistedIntentions.current = initialIntentions;
         setIntentions(initialIntentions);
         setFuzzyMatching(data.fuzzyMatching ?? true);
         setInactivityMode(data.inactivityMode ?? 'off');
@@ -267,11 +297,19 @@ const SettingsTab = memo(
 
     // Debounced auto-save whenever intentions change (except during initial load)
     useEffect(() => {
-      // Don't save during initial load (when intentions are empty and we're about to load from storage)
-      if (intentions.length > 0) {
+      // Loading/importing persisted state must not enqueue another write.
+      if (intentions.length > 0 && intentions !== persistedIntentions.current) {
         debouncedSave(intentions);
       }
     }, [intentions, debouncedSave]);
+
+    // Leaving Settings must persist the latest draft before a remount reads it.
+    // Lodash reschedules edits itself; only imports explicitly cancel drafts.
+    useEffect(() => {
+      return () => {
+        void debouncedSave.flush();
+      };
+    }, [debouncedSave]);
 
     // Track shift key state
     useEffect(() => {
@@ -571,102 +609,75 @@ const SettingsTab = memo(
       input.accept = '.json';
       input.onchange = async e => {
         const file = (e.target as HTMLInputElement).files?.[0];
-        if (!file) return;
+        if (!file || importInProgress.current) return;
+
+        // Imports replace the editor as one exclusive operation. Lock before
+        // reading the file so neither edits nor another import can race it.
+        importInProgress.current = true;
+        setImporting(true);
+        debouncedSave.cancel();
 
         try {
           const text = await file.text();
-          const importedData = JSON.parse(text);
+          const settingsToApply = parseSettingsImport(JSON.parse(text));
 
-          // Handle both old format (just intentions array) and new format (full settings object)
-          if (Array.isArray(importedData)) {
-            // Old format: just intentions array
-            const processedIntentions = importedData.map(intention => ({
-              ...intention,
-              id: generateUUID(),
-            }));
+          // storage.set orders the import after already in-flight editor writes.
+          await storage.set(settingsToApply);
+          // Discard timers created by effects that were pending before the lock.
+          debouncedSave.cancel();
 
-            setIntentions(processedIntentions);
-            await storage.set({ intentions: processedIntentions });
-
-            // Mark all imported intentions as loaded
-            const importedIds = new Set(
-              processedIntentions.map(intention => intention.id as string)
-            );
-            updateLoadedIntentionIds(importedIds);
-
-            setToast({
-              show: true,
-              message: `Settings Imported`,
-              type: 'success',
-            });
-            setTimeout(
-              () => setToast(prev => ({ ...prev, show: false })),
-              3000
-            );
-          } else {
-            // New format: full settings object - load all settings except version
-            const {
-              version,
-              intentions: importedIntentions,
-              ...otherSettings
-            } = importedData;
-
-            // Process intentions with new IDs
-            const processedIntentions = (importedIntentions || []).map(
-              (intention: any) => ({
-                ...intention,
-                id: generateUUID(),
-              })
-            ) as RawIntention[];
-
-            // Load all settings (excluding version)
-            const settingsToApply = {
-              ...otherSettings,
-              intentions: processedIntentions,
-            };
-
-            setIntentions(processedIntentions);
-            await storage.set(settingsToApply);
-
-            // Update UI state for all settings
-            if (settingsToApply.fuzzyMatching !== undefined) {
-              setFuzzyMatching(settingsToApply.fuzzyMatching);
-            }
-            if (settingsToApply.inactivityMode !== undefined) {
-              setInactivityMode(settingsToApply.inactivityMode);
-            }
-            if (settingsToApply.inactivityTimeoutMs !== undefined) {
-              setInactivityTimeoutMinutes(
-                msToMinutes(settingsToApply.inactivityTimeoutMs)
-              );
-            }
-            if (settingsToApply.showAdvancedSettings !== undefined) {
-              setShowAdvancedSettings(settingsToApply.showAdvancedSettings);
-            }
-            if (settingsToApply.canCopyIntentionText !== undefined) {
-              setCanCopyIntentionText(settingsToApply.canCopyIntentionText);
-            }
-            if (settingsToApply.directToSettings !== undefined) {
-              setDirectToSettings(settingsToApply.directToSettings);
-            }
-
-            // Mark all imported intentions as loaded
-            const importedIds = new Set(
-              processedIntentions.map(intention => intention.id as string)
-            );
-            updateLoadedIntentionIds(importedIds);
-
-            setToast({
-              show: true,
-              message: `Settings Imported`,
-              type: 'success',
-            });
-            setTimeout(
-              () => setToast(prev => ({ ...prev, show: false })),
-              3000
+          const importedIntentions = settingsToApply.intentions;
+          const displayedIntentions =
+            importedIntentions.length > 0
+              ? importedIntentions
+              : [emptyRawIntention()];
+          persistedIntentions.current = displayedIntentions;
+          setIntentions(displayedIntentions);
+          if (settingsToApply.fuzzyMatching !== undefined) {
+            setFuzzyMatching(settingsToApply.fuzzyMatching);
+          }
+          if (settingsToApply.inactivityMode !== undefined) {
+            setInactivityMode(settingsToApply.inactivityMode);
+          }
+          if (settingsToApply.inactivityTimeoutMs !== undefined) {
+            setInactivityTimeoutMinutes(
+              msToMinutes(settingsToApply.inactivityTimeoutMs)
             );
           }
+          if (settingsToApply.showAdvancedSettings !== undefined) {
+            setShowAdvancedSettings(settingsToApply.showAdvancedSettings);
+          }
+          if (settingsToApply.canCopyIntentionText !== undefined) {
+            setCanCopyIntentionText(settingsToApply.canCopyIntentionText);
+          }
+          if (settingsToApply.breathAnimationIntensity !== undefined) {
+            setBreathIntensity(settingsToApply.breathAnimationIntensity);
+          }
+          if (settingsToApply.directToSettings !== undefined) {
+            setDirectToSettings(settingsToApply.directToSettings);
+          }
+          if (settingsToApply.debugLogging !== undefined) {
+            setDebugLogging(settingsToApply.debugLogging);
+          }
+          updateLoadedIntentionIds(
+            new Set(importedIntentions.map(row => row.id))
+          );
+          setBlurredUrlIds(new Set());
+          setBlurredPhraseIds(new Set());
+          setShowExamples(
+            importedIntentions.filter(row => !isEmpty(row)).length < 2
+          );
+          setToast({
+            show: true,
+            message: 'Settings Imported',
+            type: 'success',
+          });
+          setTimeout(() => setToast(prev => ({ ...prev, show: false })), 3000);
         } catch (error) {
+          // A failed import leaves the editor intact, including unsaved drafts.
+          if (currentIntentions.current !== persistedIntentions.current) {
+            debouncedSave(currentIntentions.current);
+          }
           console.error('Import failed:', error);
           setToast({
             show: true,
@@ -675,6 +686,9 @@ const SettingsTab = memo(
             type: 'error',
           });
           setTimeout(() => setToast(prev => ({ ...prev, show: false })), 3000);
+        } finally {
+          importInProgress.current = false;
+          setImporting(false);
         }
       };
       input.click();
@@ -1109,11 +1123,33 @@ const SettingsTab = memo(
                     type='number'
                     min='1'
                     max='480'
-                    value={inactivityTimeoutMinutes}
+                    value={inactivityTimeoutDraft}
                     onChange={e => {
-                      const timeout = parseInt(e.target.value) || 30;
-                      setInactivityTimeoutMinutes(timeout);
-                      saveInactivityTimeout(timeout);
+                      const typed = e.target.value;
+                      const entered = parseTimeoutMinutesInput(typed);
+                      // Nothing usable in the box yet - it is empty, or being
+                      // retyped. Keep it exactly as typed so it can be
+                      // emptied, and leave the saved timeout alone instead of
+                      // filling the field with the default and saving that.
+                      if (entered.kind === 'no-number') {
+                        setInactivityTimeoutDraft(typed);
+                        return;
+                      }
+                      setInactivityTimeoutDraft(String(entered.minutes));
+                      setInactivityTimeoutMinutes(entered.minutes);
+                      saveInactivityTimeout(entered.minutes);
+                    }}
+                    onBlur={() => {
+                      // Leaving a half-finished edit behind should not leave
+                      // an empty box next to a timeout that is still in force.
+                      if (
+                        parseTimeoutMinutesInput(inactivityTimeoutDraft)
+                          .kind === 'no-number'
+                      ) {
+                        setInactivityTimeoutDraft(
+                          String(inactivityTimeoutMinutes)
+                        );
+                      }
                     }}
                     className='timeout-input'
                     disabled={inactivityMode === 'off'}
@@ -1598,6 +1634,7 @@ const Sidebar = memo(
 
 const Options = () => {
   const [activeTab, setActiveTab] = useState<Tab>('settings');
+  const [importing, setImporting] = useState(false);
 
   const handleTabChange = (newTab: Tab, setActiveTab: (tab: Tab) => void) => {
     // For now, just allow the tab change
@@ -1606,20 +1643,34 @@ const Options = () => {
   };
 
   return (
-    <div className='options-container'>
-      <Sidebar
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        onTabChange={handleTabChange}
-      />
+    <>
+      <div
+        className='options-container'
+        inert={importing}
+        aria-busy={importing}
+      >
+        <Sidebar
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          onTabChange={handleTabChange}
+        />
 
-      <div className='content'>
-        {activeTab === 'settings' && (
-          <SettingsTab setActiveTab={setActiveTab} />
-        )}
-        {activeTab === 'about' && <AboutTab />}
+        <div className='content'>
+          {activeTab === 'settings' && (
+            <SettingsTab
+              setActiveTab={setActiveTab}
+              setImporting={setImporting}
+            />
+          )}
+          {activeTab === 'about' && <AboutTab />}
+        </div>
       </div>
-    </div>
+      {importing && (
+        <div className='toast' role='status'>
+          Importing settings…
+        </div>
+      )}
+    </>
   );
 };
 

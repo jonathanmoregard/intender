@@ -32,6 +32,10 @@ web-ext.config.ts
 
 test-results/
 .test-results/
+.stryker-tmp/
+
+# Agent session scratch
+tasks/
 
 # Store assets (generated screenshots)
 store-assets/

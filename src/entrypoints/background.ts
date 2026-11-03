@@ -50,13 +50,46 @@ const buildIntentionRedirectUrl = (
 
 // Tab URL cache to track last-known URLs for each tab
 const tabUrlMap = new Map<TabId, string>();
+const audibleTabIds = new Set<TabId>();
+
+const isTabAudible = (tab: Pick<browser.Tabs.Tab, 'audible' | 'mutedInfo'>) =>
+  tab.audible === true && tab.mutedInfo?.muted !== true;
+
+const trackTabAudibility = (tab: browser.Tabs.Tab) => {
+  if (tab.id == null) return;
+  const tabId = numberToTabId(tab.id);
+  if (isTabAudible(tab)) audibleTabIds.add(tabId);
+  else audibleTabIds.delete(tabId);
+};
 
 // Inactivity tracking
 const lastActiveByScope = new Map<IntentionScopeId, Timestamp>();
 const intentionScopePerTabId = new Map<TabId, IntentionScopeId>();
 const lastActiveTabIdByWindow = new Map<WindowId, TabId>();
-// never -1, ignore non proper browser windows
+// The window Chrome reports as focused. Never -1; non-browser windows are
+// ignored. Null means EITHER the user is away OR we have not been told yet,
+// which are different situations - see focusLossObserved.
 let lastFocusedWindowId: WindowId | null = null;
+// Where the user was, as far as the browser will say. Survives focus loss and
+// is re-derived at startup, so a worker that restarted while Chrome was in the
+// background still knows which window to attribute the user's actions to.
+let lastKnownWindowId: WindowId | null = null;
+// True once Chrome has told us focus was lost. Until then, a null
+// lastFocusedWindowId means "we do not know", not "the user is away".
+let focusLossObserved = false;
+
+/**
+ * The window to attribute the user's actions to, or null if the user is known
+ * to be away. Use this for bookkeeping - recording that a scope was in use.
+ *
+ * Do NOT use it to decide whether the user is looking at a tab right now: a
+ * remembered window is not evidence of that, and treating it as such lets a
+ * navigation in some other window pass as the user's own. That decision reads
+ * lastFocusedWindowId directly, via getActiveTabSnapshot.
+ */
+const userWindowId = (): WindowId | null =>
+  lastFocusedWindowId ?? (focusLossObserved ? null : lastKnownWindowId);
+
 const lastRedirectAtByTabId = new Map<TabId, Timestamp>();
 
 // Cross-browser shim for storage.session (Firefox compatibility)
@@ -106,8 +139,10 @@ const persistSession = () => {
         intentionScopePerTabId: mapToObject(intentionScopePerTabId),
         lastActiveByScope: mapToObject(lastActiveByScope),
         lastActiveTabIdByWindow: mapToObject(lastActiveTabIdByWindow),
-        lastFocusedWindowId: lastFocusedWindowId
-          ? windowIdToNumber(lastFocusedWindowId)
+        // The remembered window, never the live focus. What the next worker
+        // life reads out of storage is by definition not a focus it observed.
+        lastKnownWindowId: lastKnownWindowId
+          ? windowIdToNumber(lastKnownWindowId)
           : null,
       })
       .catch(error => {
@@ -131,8 +166,8 @@ chrome.runtime.onSuspend.addListener(() => {
       intentionScopePerTabId: mapToObject(intentionScopePerTabId),
       lastActiveByScope: mapToObject(lastActiveByScope),
       lastActiveTabIdByWindow: mapToObject(lastActiveTabIdByWindow),
-      lastFocusedWindowId: lastFocusedWindowId
-        ? windowIdToNumber(lastFocusedWindowId)
+      lastKnownWindowId: lastKnownWindowId
+        ? windowIdToNumber(lastKnownWindowId)
         : null,
     });
   } catch (e) {
@@ -147,7 +182,7 @@ const hydrateSessionState = async () => {
       'intentionScopePerTabId',
       'lastActiveByScope',
       'lastActiveTabIdByWindow',
-      'lastFocusedWindowId',
+      'lastKnownWindowId',
     ]);
 
     const urlMap = objectToMap<number, string>(
@@ -182,12 +217,98 @@ const hydrateSessionState = async () => {
       lastActiveTabIdByWindow.set(numberToWindowId(key), numberToTabId(value));
     }
 
-    lastFocusedWindowId =
-      sessionValues.lastFocusedWindowId != null
-        ? numberToWindowId(sessionValues.lastFocusedWindowId as number)
+    // Restored as a remembered window and nothing more. lastFocusedWindowId is
+    // deliberately not written here: it answers "which window did focus just
+    // come from?", and a value read out of storage cannot answer that - this
+    // worker never watched focus arrive anywhere. Seeding it from the session
+    // is what let the tab being returned to serve as the tab focus came from,
+    // collapsing both scopes into one and skipping the inactivity check.
+    const rememberedWindowId =
+      sessionValues.lastKnownWindowId != null
+        ? numberToWindowId(sessionValues.lastKnownWindowId as number)
         : null;
+    if (rememberedWindowId) lastKnownWindowId = rememberedWindowId;
   } catch (error) {
     console.log('[Intender] Failed hydration from storage.session:', error);
+  }
+};
+
+/**
+ * Whether Chrome reports THIS window as focused: true, false, or null when
+ * the answer cannot be had (the window is gone, or the call failed).
+ *
+ * What we managed to learn about one window's focus.
+ *
+ * `unfocused` and `indeterminate` were the same null, and both callers read it
+ * as "not focused" - so a windows.getAll() that threw looked exactly like the
+ * user being somewhere else. They are still treated alike at the call site,
+ * but it now has to say so, and a caller that should wait or retry instead can
+ * see which one it got.
+ */
+type WindowFocusReading =
+  | { kind: 'focused' }
+  | { kind: 'unfocused' }
+  | { kind: 'indeterminate'; why: 'window-gone' | 'query-failed' };
+
+/**
+ * Ask about a specific window rather than asking which window is focused.
+ * While the window manager hands focus over, the window being left still
+ * reports focused until its FocusOut arrives, so more than one window can
+ * report focused at once and "which one is focused" has no single answer -
+ * picking the first would silently prefer the window the user just left.
+ */
+const isWindowFocused = async (
+  windowId: WindowId
+): Promise<WindowFocusReading> => {
+  try {
+    const windows = await browser.windows.getAll();
+    const match = windows.find(w => w.id === windowIdToNumber(windowId));
+    if (!match) return { kind: 'indeterminate', why: 'window-gone' };
+    return match.focused === true ? { kind: 'focused' } : { kind: 'unfocused' };
+  } catch (windowError) {
+    console.log('[Intender] Failed to read window focus:', windowError);
+    return { kind: 'indeterminate', why: 'query-failed' };
+  }
+};
+
+/**
+ * The window Chrome reports as focused right now, or null when Chrome itself
+ * is in the background. Only for seeding, where any focused window is a
+ * better answer than none - use isWindowFocused to judge a specific window.
+ */
+const readFocusedWindowId = async (): Promise<WindowId | null> => {
+  try {
+    const windows = await browser.windows.getAll();
+    const focusedWindow = windows.find(w => w.focused);
+    return focusedWindow?.id ? numberToWindowId(focusedWindow.id) : null;
+  } catch (windowError) {
+    console.log('[Intender] Failed to read focused window:', windowError);
+    return null;
+  }
+};
+
+/**
+ * Which window the user was last in, as far as the browser will say.
+ *
+ * Used where a missing answer would be read as "the user is nowhere": on a
+ * cold start, no window is reported focused while Chrome is in the background,
+ * and a worker that believed that would treat every later tab switch as
+ * bookkeeping. The last focused window is still the one they were in; an
+ * actual loss of focus is reported separately, as onFocusChanged(-1).
+ *
+ * This answer is NOT "the focused window". It may name a window the user is
+ * not in, so it belongs in lastKnownWindowId and never in
+ * lastFocusedWindowId, which gates whether a navigation is the user's own.
+ */
+const resolveLastKnownWindowId = async (): Promise<WindowId | null> => {
+  const focused = await readFocusedWindowId();
+  if (focused) return focused;
+  try {
+    const lastFocused = await browser.windows.getLastFocused();
+    return lastFocused?.id ? numberToWindowId(lastFocused.id) : null;
+  } catch (windowError) {
+    console.log('[Intender] Failed to resolve focused window:', windowError);
+    return null;
   }
 };
 
@@ -198,11 +319,13 @@ const reconcileStateWithBrowser = async (
   try {
     const allTabs = await browser.tabs.query({});
     const seenTabIds = new Set<TabId>();
+    audibleTabIds.clear();
 
     for (const tab of allTabs) {
       if (tab.id == null) continue;
       const tabId = numberToTabId(tab.id);
       seenTabIds.add(tabId);
+      trackTabAudibility(tab);
 
       const url = typeof tab.url === 'string' ? tab.url : undefined;
       if (url) {
@@ -220,10 +343,19 @@ const reconcileStateWithBrowser = async (
         if (!lastActiveByScope.has(scope) && updateActivity) {
           updateActivity(scope);
         }
+      } else {
+        intentionScopePerTabId.delete(tabId);
       }
 
+      // Seed only what the session did not already carry. The browser's view
+      // is "which tab is active now", which on a restart is the tab whose
+      // activation woke the worker - overwriting with it would make that tab
+      // its own predecessor and silence the check it just asked for.
       if (tab.active && typeof tab.windowId === 'number') {
-        lastActiveTabIdByWindow.set(numberToWindowId(tab.windowId), tabId);
+        const windowId = numberToWindowId(tab.windowId);
+        if (!lastActiveTabIdByWindow.has(windowId)) {
+          lastActiveTabIdByWindow.set(windowId, tabId);
+        }
       }
     }
 
@@ -241,16 +373,8 @@ const reconcileStateWithBrowser = async (
       }
     }
 
-    try {
-      const windows = await browser.windows.getAll();
-      const focusedWindow = windows.find(w => w.focused);
-      lastFocusedWindowId = focusedWindow?.id
-        ? numberToWindowId(focusedWindow.id)
-        : null;
-    } catch (windowError) {
-      lastFocusedWindowId = null;
-      console.log('[Intender] Failed window reconciliation:', windowError);
-    }
+    const resolvedWindowId = await resolveLastKnownWindowId();
+    if (resolvedWindowId) lastKnownWindowId = resolvedWindowId;
 
     persistSession();
   } catch (error) {
@@ -302,7 +426,6 @@ export default defineBackground(async () => {
       '[Intender] Updated activity for intention scope:',
       intentionScopeId
     );
-    cleanupNavDecisionCache();
     persistSession();
   };
 
@@ -312,7 +435,33 @@ export default defineBackground(async () => {
     return intentionToIntentionScopeId(matchedIntention);
   };
 
-  // Unified navigation decision and short-lived cache (to keep decisions monotonic across hooks)
+  /**
+   * What we know about which scope a tab is in.
+   *
+   * `unscoped` and `unknown-url` are different facts and used to be the same
+   * null: the first says the tab's URL matches no intention, the second says
+   * we have no URL for it. Every consumer so far treats them alike, but it
+   * has to say so - a tab we know nothing about failing open is a decision,
+   * not a default, and it is the shape of bug this worker keeps producing.
+   */
+  type TabScope =
+    | { kind: 'scoped'; scopeId: IntentionScopeId }
+    | { kind: 'unscoped' }
+    | { kind: 'unknown-url' };
+
+  /**
+   * The scope to act on. Not knowing a tab's URL yields nothing to check
+   * against, exactly as a URL in no scope does, so both collapse here - at one
+   * named place, rather than at each call site by accident.
+   */
+  const scopeToActOn = (scope: TabScope): IntentionScopeId | null =>
+    scope.kind === 'scoped' ? scope.scopeId : null;
+
+  /** Whether two tabs are known to sit in the same intention scope. */
+  const sameScope = (a: TabScope, b: TabScope): boolean =>
+    a.kind === 'scoped' && b.kind === 'scoped' && a.scopeId === b.scopeId;
+
+  // The same policy applies to full-document and same-document navigation.
   type NavigationDecision =
     | {
         kind: 'allow';
@@ -324,75 +473,69 @@ export default defineBackground(async () => {
       }
     | { kind: 'block_redirect'; reason: 'matched-scope'; redirectTo: string };
 
-  const NAV_DECISION_TTL_MS = 3000;
-  const navDecisionCache = new Map<
-    string,
-    { decision: NavigationDecision; until: number }
+  // A decision belongs to one navigation, never to a reusable tab/URL pair.
+  // Keep its source until commit so server redirects are checked from the page
+  // that initiated the navigation. A newer before-event supersedes this entry.
+  const pendingNavigations = new Map<
+    number,
+    {
+      sourceUrl: string | null;
+      targetUrl: string;
+      decision: NavigationDecision;
+    }
   >();
-
-  function cacheKey(tabId: number, targetUrl: string): string {
-    return `${tabId}:${targetUrl}`;
-  }
-
-  function readCachedDecision(
-    tabId: number,
-    targetUrl: string
-  ): NavigationDecision | null {
-    const key = cacheKey(tabId, targetUrl);
-    const entry = navDecisionCache.get(key);
-    if (!entry) return null;
-    const now = Date.now();
-    if (now <= entry.until) return entry.decision;
-    navDecisionCache.delete(key);
-    return null;
-  }
-
-  function writeCachedDecision(
-    tabId: number,
-    targetUrl: string,
-    decision: NavigationDecision
-  ): void {
-    const key = cacheKey(tabId, targetUrl);
-    navDecisionCache.set(key, {
-      decision,
-      until: Date.now() + NAV_DECISION_TTL_MS,
-    });
-  }
 
   function getActiveTabSnapshot(navigationTabId: number): {
     isNavigationTabActive: boolean;
     activeTabUrl: string | null;
   } {
+    // Absence is tested the same way throughout: a window or tab id is a
+    // number, and asking whether we have one is not the same question as
+    // asking whether it is non-zero.
     const focusedWindowId = lastFocusedWindowId;
-    const activeTabId = focusedWindowId
-      ? (lastActiveTabIdByWindow.get(focusedWindowId) as unknown as
-          | number
-          | undefined)
-      : undefined;
+    const activeTabId =
+      focusedWindowId != null
+        ? (lastActiveTabIdByWindow.get(focusedWindowId) as unknown as
+            | number
+            | undefined)
+        : undefined;
     const isNavigationTabActive =
       activeTabId === navigationTabId && focusedWindowId != null;
-    const activeTabUrl = activeTabId
-      ? tabUrlMap.get(numberToTabId(activeTabId)) || null
-      : null;
+    const activeTabUrl =
+      activeTabId != null
+        ? tabUrlMap.get(numberToTabId(activeTabId)) || null
+        : null;
     return { isNavigationTabActive, activeTabUrl };
   }
 
-  const cleanupNavDecisionCache = () => {
-    const now = Date.now();
-    for (const [key, entry] of navDecisionCache) {
-      if (now > entry.until) navDecisionCache.delete(key);
-    }
+  /**
+   * Whether this tab is the one the user is working in right now, for the
+   * purpose of crediting them with activity.
+   *
+   * This requires live focus. A page reloads or rewrites its own history on a
+   * timer with nobody watching, and a remembered window would credit that to
+   * the user: the clock resets, and a prompt that was already overdue never
+   * arrives. The gap this used to guard against - a worker that restarted
+   * without ever hearing focus arrive - is covered at startup, which reads
+   * focus from the browser rather than waiting to be told. When that read
+   * finds nothing, the honest answer is that nobody is here.
+   */
+  const isNavigationInUserTab = (navigationTabId: number): boolean => {
+    const windowId = lastFocusedWindowId;
+    if (windowId == null) return false;
+    const activeTabId = lastActiveTabIdByWindow.get(windowId) as unknown as
+      | number
+      | undefined;
+    return activeTabId === navigationTabId;
   };
 
   function decideNavigation(args: {
     tabId: number;
     sourceUrl: string | null;
     targetUrl: string;
-    postCommit?: boolean;
     cameFromIntentionPage?: boolean;
   }): NavigationDecision {
-    const { tabId, sourceUrl, targetUrl, postCommit, cameFromIntentionPage } =
-      args;
+    const { tabId, sourceUrl, targetUrl, cameFromIntentionPage } = args;
     const { isNavigationTabActive, activeTabUrl } = getActiveTabSnapshot(tabId);
 
     // Same-scope allow
@@ -431,25 +574,12 @@ export default defineBackground(async () => {
       return { kind: 'allow', reason: 'active-tab-same-scope' };
     }
 
-    // Post-commit enforcement for server/client redirects into a scoped target
-    if (postCommit) {
-      const matched =
-        targetScope != null ? lookupIntention(targetUrl, intentionIndex) : null;
-      if (matched && !cameFromIntentionPage) {
-        const toScope = intentionToIntentionScopeId(matched);
-        const redirectTo = buildIntentionRedirectUrl(targetUrl, toScope);
-        return { kind: 'block_redirect', reason: 'matched-scope', redirectTo };
-      }
-    }
-
-    // Before-navigate: block when target matches a configured intention
-    if (!postCommit) {
-      const matched = lookupIntention(targetUrl, intentionIndex);
-      if (matched) {
-        const toScope = intentionToIntentionScopeId(matched);
-        const redirectTo = buildIntentionRedirectUrl(targetUrl, toScope);
-        return { kind: 'block_redirect', reason: 'matched-scope', redirectTo };
-      }
+    if (targetScope) {
+      return {
+        kind: 'block_redirect',
+        reason: 'matched-scope',
+        redirectTo: buildIntentionRedirectUrl(targetUrl, targetScope),
+      };
     }
 
     return { kind: 'allow', reason: 'no-match' };
@@ -471,7 +601,7 @@ export default defineBackground(async () => {
         tab =>
           tab.id != null &&
           scopeTabIds.has(tab.id as TabId) &&
-          tab.mutedInfo?.muted !== true
+          isTabAudible(tab)
       );
     } catch (error) {
       console.error('[Intender] Failed to check scope audibility:', error);
@@ -480,10 +610,7 @@ export default defineBackground(async () => {
   }
 
   // Get intention scope ID for a tab with comprehensive resolution
-  const getScopeForTab = (
-    tabId: TabId,
-    url?: string
-  ): IntentionScopeId | null => {
+  const getScopeForTab = (tabId: TabId, url?: string): TabScope => {
     // Resolution order per spec:
     // 1. intentionScopePerTabId if present
     const mappedScope = intentionScopePerTabId.get(tabId);
@@ -492,7 +619,7 @@ export default defineBackground(async () => {
         tabId,
         mappedScope,
       });
-      return mappedScope;
+      return { kind: 'scoped', scopeId: mappedScope };
     }
 
     // 2. derive via tabUrlMap → scope lookup
@@ -505,12 +632,15 @@ export default defineBackground(async () => {
         url: resolvedUrl,
         scopeFromUrl: scopeFromUrl || null,
       });
-      return scopeFromUrl;
+      return scopeFromUrl
+        ? { kind: 'scoped', scopeId: scopeFromUrl }
+        : { kind: 'unscoped' };
     }
 
-    // 3. otherwise return null
+    // 3. no URL for this tab at all, which is not the same as having one that
+    // matches nothing - see TabScope.
     debugLog('[Intender] getScopeForTab: unresolved', { tabId });
-    return null;
+    return { kind: 'unknown-url' };
   };
 
   // Check if a scope should trigger inactivity intention check
@@ -528,8 +658,10 @@ export default defineBackground(async () => {
 
     // Check if scope has been inactive long enough
     const lastActive = lastActiveByScope.get(scopeId);
-    if (!lastActive) {
+    if (lastActive === undefined) {
       // First-seen scope: return false (will be handled by normal bump path)
+      // Only an absent entry means first-seen. A recorded timestamp is a
+      // recorded timestamp whatever its value.
       return false;
     }
 
@@ -603,8 +735,11 @@ export default defineBackground(async () => {
     persistSession();
 
     // Compute scopes for both tabs
-    const fromScope = fromTabId ? getScopeForTab(fromTabId) : null;
+    const fromScope: TabScope = fromTabId
+      ? getScopeForTab(fromTabId)
+      : { kind: 'unknown-url' };
     const toScope = getScopeForTab(toTabId, toUrl);
+    const toScopeId = scopeToActOn(toScope);
 
     debugLog('[Intender] Focus change:', {
       windowId,
@@ -613,24 +748,23 @@ export default defineBackground(async () => {
       toUrl,
       fromScope,
       toScope,
-      scopeComparison: fromScope === toScope ? 'SAME' : 'DIFFERENT',
+      scopeComparison: sameScope(fromScope, toScope) ? 'SAME' : 'DIFFERENT',
     });
 
-    // FAST PATH: Same-scope switch - skip inactivity check entirely
-    if (fromScope && toScope && fromScope === toScope) {
+    // FAST PATH: Same-scope switch - skip inactivity check entirely. Two tabs
+    // whose scope we do not know are not thereby in the same scope.
+    if (sameScope(fromScope, toScope) && toScopeId) {
       debugLog('[Intender] Same-scope switch detected, fast path:', {
-        scope: toScope,
-        fromScope,
-        toScope,
-        scopesEqual: fromScope === toScope,
+        scope: toScopeId,
       });
       // Bump activity for the scope and update tracking
-      updateIntentionScopeActivity(toScope);
+      updateIntentionScopeActivity(toScopeId);
       return;
     }
 
     // From bump: update activity for the previous tab's scope
-    if (fromTabId && fromScope) updateIntentionScopeActivity(fromScope);
+    const fromScopeId = scopeToActOn(fromScope);
+    if (fromTabId && fromScopeId) updateIntentionScopeActivity(fromScopeId);
 
     // Guard: if the target tab URL is already the intention page URL, skip redirect
     const resolvedUrl = toUrl || tabUrlMap.get(toTabId);
@@ -645,18 +779,21 @@ export default defineBackground(async () => {
     if (
       await shouldTriggerInactivityIntentionCheck(
         inactivityMode,
-        toScope,
+        toScopeId,
         inactivityTimeoutMs
       )
     ) {
-      debugLog('[Intender] Triggering inactivity redirect for scope:', toScope);
+      debugLog(
+        '[Intender] Triggering inactivity redirect for scope:',
+        toScopeId
+      );
 
-      if (resolvedUrl && toScope) {
-        await redirectToIntentionPage(toTabId, resolvedUrl, toScope);
+      if (resolvedUrl && toScopeId) {
+        await redirectToIntentionPage(toTabId, resolvedUrl, toScopeId);
       }
-    } else if (toScope) {
+    } else if (toScopeId) {
       // No redirect needed, just update activity
-      updateIntentionScopeActivity(toScope);
+      updateIntentionScopeActivity(toScopeId);
     }
   }
 
@@ -682,10 +819,12 @@ export default defineBackground(async () => {
   ): Promise<void> {
     if (newState === 'idle') {
       try {
-        if (inactivityMode === 'off') return;
-
-        // Cold window guard - wait for intentionIndex to be ready
+        // Cold window guard - wait for settings and intentionIndex to be ready.
+        // A restarted worker still holds the default mode, and reading it first
+        // would silently skip the check that woke the worker.
         await ensureReady();
+
+        if (inactivityMode === 'off') return;
 
         // Strictly check for a currently focused window at idle time
         let focusedWindowId: number | null = null;
@@ -717,7 +856,7 @@ export default defineBackground(async () => {
           cachedUrl || (typeof activeTab.url === 'string' ? activeTab.url : '');
         if (!url) return;
 
-        const intentionScopeId = getScopeForTab(tabId, url);
+        const intentionScopeId = scopeToActOn(getScopeForTab(tabId, url));
         if (!intentionScopeId) return;
 
         // Check audio exemption for all-except-audio mode
@@ -742,8 +881,37 @@ export default defineBackground(async () => {
     // Cold window guard - wait for intentionIndex to be ready
     await ensureReady();
 
-    // Track previous active per window (from tab handling)
+    // Track previous active per window (from tab handling). Safe to read after
+    // the gate: reconciliation only fills gaps, so a restarted worker still
+    // sees the tab the session recorded rather than this activation's own tab.
     const fromTabId = lastActiveTabIdByWindow.get(windowId);
+
+    // Refresh from the browser before judging: a focus event that arrived
+    // while the worker was dead is simply never delivered, and the stale null
+    // it leaves behind would dismiss every later switch as bookkeeping.
+    const activationWindowFocus = await isWindowFocused(windowId);
+    if (activationWindowFocus.kind === 'focused') {
+      lastFocusedWindowId = windowId;
+      lastKnownWindowId = windowId;
+      focusLossObserved = false;
+    }
+
+    // Activation in a window the user is not in is bookkeeping, not user
+    // activity. A window we merely remember still counts: the alternative is
+    // to credit the user with nothing after a restart they never saw.
+    //
+    // An indeterminate reading is handled as unfocused rather than as focused:
+    // we will not claim the user is in a window we could not read. What keeps
+    // a transient failure from discarding the activation outright is the
+    // remembered-window check on the same line.
+    if (
+      activationWindowFocus.kind !== 'focused' &&
+      userWindowId() !== windowId
+    ) {
+      lastActiveTabIdByWindow.set(windowId, toTabId);
+      persistSession();
+      return;
+    }
 
     // Skip if same tab (spurious re-activation)
     if (fromTabId && fromTabId === toTabId) return;
@@ -761,31 +929,30 @@ export default defineBackground(async () => {
   });
 
   // Handle audio state changes
-  browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     const tId = numberToTabId(tabId);
+    const intentionScopeId = scopeToActOn(getScopeForTab(tId));
+    const audioChanged =
+      changeInfo.audible !== undefined || changeInfo.mutedInfo !== undefined;
+    if (!audioChanged) return;
 
-    const intentionScopeId = getScopeForTab(tId);
-
-    // Handle audible state changes - update activity when audio starts/stops
-    if (changeInfo.audible !== undefined) {
-      if (changeInfo.audible) {
-        debugLog('[Intender] Tab became audible, bumping activity:', {
-          tabId,
-          intentionScopeId: intentionScopeId || 'unknown',
-        });
-        if (intentionScopeId) updateIntentionScopeActivity(intentionScopeId);
-      } else {
-        debugLog('[Intender] Tab stopped being audible, bumping activity:', {
-          tabId,
-          intentionScopeId: intentionScopeId || 'unknown',
-        });
-        if (intentionScopeId) updateIntentionScopeActivity(intentionScopeId);
-      }
+    // Track effective playback, not the presence of an update field: mutedInfo
+    // also contains metadata that can change without changing audibility.
+    const wasAudible = audibleTabIds.has(tId);
+    trackTabAudibility(tab);
+    if (!intentionScopeId) return;
+    if (
+      isNavigationInUserTab(tabId) ||
+      (inactivityMode === 'all-except-audio' &&
+        wasAudible !== isTabAudible(tab))
+    ) {
+      updateIntentionScopeActivity(intentionScopeId);
     }
   });
 
   // Track new tabs to initialize cache
   browser.tabs.onCreated.addListener(tab => {
+    trackTabAudibility(tab);
     if (tab.id !== undefined && typeof tab.url === 'string') {
       tabUrlMap.set(numberToTabId(tab.id), tab.url);
       debugLog('[Intender] Tab created, cached URL:', {
@@ -797,7 +964,10 @@ export default defineBackground(async () => {
   });
 
   // Update cache when navigation is committed (reliable source of truth)
-  browser.webNavigation.onCommitted.addListener(async details => {
+  async function handleCommittedNavigation(
+    details: { tabId: number; frameId: number; url: string },
+    sameDocument = false
+  ): Promise<void> {
     // Only track main frame navigation
     if (details.frameId !== 0) {
       return;
@@ -807,9 +977,13 @@ export default defineBackground(async () => {
     await ensureReady();
 
     const tabId = numberToTabId(details.tabId);
-    const priorUrl = tabUrlMap.get(tabId) || null;
-    tabUrlMap.set(tabId, details.url);
-    persistSession();
+    const pending = sameDocument
+      ? undefined
+      : pendingNavigations.get(details.tabId);
+    pendingNavigations.delete(details.tabId);
+    const priorUrl = pending
+      ? pending.sourceUrl
+      : (tabUrlMap.get(tabId) ?? null);
 
     debugLog('[Intender] Navigation committed, updated cache:', {
       tabId: details.tabId,
@@ -819,17 +993,28 @@ export default defineBackground(async () => {
     // Unified decision (post-commit)
     const cameFromIntentionPage =
       priorUrl?.startsWith(intentionPageUrl) === true;
-    const cached = readCachedDecision(details.tabId, details.url);
+    // Completion may redirect within its authorized scope (e.g. stripping the
+    // token). It does not authorize a different intention's destination.
+    const completedScope =
+      pending?.decision.kind === 'allow' &&
+      pending.decision.reason === 'intention-completed'
+        ? lookupIntentionScopeId(pending.targetUrl)
+        : null;
+    const reusePending =
+      pending &&
+      (pending.targetUrl === details.url ||
+        (completedScope !== null &&
+          completedScope === lookupIntentionScopeId(details.url)));
     const decision =
-      cached ??
+      (reusePending ? pending.decision : null) ??
       decideNavigation({
         tabId: details.tabId,
         sourceUrl: priorUrl,
         targetUrl: details.url,
-        postCommit: true,
         cameFromIntentionPage,
       });
-    if (!cached) writeCachedDecision(details.tabId, details.url, decision);
+    tabUrlMap.set(tabId, details.url);
+    persistSession();
 
     if (decision.kind === 'block_redirect') {
       try {
@@ -853,7 +1038,11 @@ export default defineBackground(async () => {
       const scopeId = intentionToIntentionScopeId(matched);
       intentionScopePerTabId.set(tabId, scopeId);
       persistSession();
-      updateIntentionScopeActivity(scopeId);
+      // A page can reload or update history on a timer. Only navigation in the
+      // foreground tab is evidence of user activity; audio has its own handler.
+      if (isNavigationInUserTab(details.tabId)) {
+        updateIntentionScopeActivity(scopeId);
+      }
       debugLog('[Intender] Navigation committed to scoped page, set scope:', {
         tabId: details.tabId,
         scopeId,
@@ -872,7 +1061,17 @@ export default defineBackground(async () => {
         persistSession();
       }
     }
-  });
+  }
+
+  browser.webNavigation.onCommitted.addListener(details =>
+    handleCommittedNavigation(details)
+  );
+  browser.webNavigation.onHistoryStateUpdated.addListener(details =>
+    handleCommittedNavigation(details, true)
+  );
+  browser.webNavigation.onReferenceFragmentUpdated.addListener(details =>
+    handleCommittedNavigation(details, true)
+  );
 
   // Clean up cache when tabs are removed
   browser.tabs.onRemoved.addListener(tabId => {
@@ -880,15 +1079,20 @@ export default defineBackground(async () => {
 
     // Clean up all tracking maps
     tabUrlMap.delete(tId);
+    audibleTabIds.delete(tId);
     intentionScopePerTabId.delete(tId);
     lastRedirectAtByTabId.delete(tId);
+    pendingNavigations.delete(tabId);
+    for (const [windowId, activeTabId] of lastActiveTabIdByWindow) {
+      if (activeTabId === tId) lastActiveTabIdByWindow.delete(windowId);
+    }
     persistSession();
 
     debugLog('[Intender] Tab removed, cleared cache:', { tabId });
   });
 
   // Handle tab replacement (e.g., prerender activation swaps tab IDs)
-  browser.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
+  browser.tabs.onReplaced.addListener(async (addedTabId, removedTabId) => {
     const added = numberToTabId(addedTabId);
     const removed = numberToTabId(removedTabId);
 
@@ -906,6 +1110,12 @@ export default defineBackground(async () => {
     }
 
     lastRedirectAtByTabId.delete(removed);
+    audibleTabIds.delete(removed);
+    pendingNavigations.delete(removedTabId);
+    pendingNavigations.delete(addedTabId);
+    for (const [windowId, activeTabId] of lastActiveTabIdByWindow) {
+      if (activeTabId === removed) lastActiveTabIdByWindow.set(windowId, added);
+    }
     persistSession();
 
     debugLog('[Intender] Tab replaced:', {
@@ -914,21 +1124,53 @@ export default defineBackground(async () => {
       migratedUrl: removedUrl || null,
       migratedScope: removedScope || null,
     });
+    try {
+      trackTabAudibility(await browser.tabs.get(addedTabId));
+    } catch {
+      // A replacement may itself close before its snapshot can be read.
+      audibleTabIds.delete(added);
+    }
   });
 
   // Handle window focus changes
   browser.windows.onFocusChanged.addListener(async windowId => {
     // Cold window guard - wait for intentionIndex to be ready
     await ensureReady();
-    // Update tracking: record previous focused window
-    const prevWindowId = lastFocusedWindowId;
-    if (windowId !== -1) {
+    // Two questions here, and they must not share an answer.
+    //
+    // Which window is the user leaving? A remembered one counts: a worker that
+    // restarted while Chrome was in the background never heard the focus
+    // arrive, and would otherwise have nothing to credit the departure to.
+    //
+    // Which window did focus actually just come from? Only a focus we observed
+    // can answer that. A remembered window is not evidence that it held focus a
+    // moment ago, and letting it stand in makes the tab the user left serve as
+    // the tab they came from. Identical from- and to-tabs mean identical
+    // scopes, and the same-scope fast path then returns before the inactivity
+    // check runs - so returning from lunch to the tab you left looks like
+    // never having gone.
+    const departedWindowId = userWindowId();
+    const prevFocusedWindowId = lastFocusedWindowId;
+    if (windowId === -1) {
+      lastFocusedWindowId = null;
+      focusLossObserved = true;
+    } else {
       lastFocusedWindowId = numberToWindowId(windowId);
-      persistSession();
+      lastKnownWindowId = lastFocusedWindowId;
+      focusLossObserved = false;
     }
+    if (windowId === -1 && departedWindowId !== null) {
+      const departingTab = lastActiveTabIdByWindow.get(departedWindowId);
+      const departingScope = departingTab
+        ? scopeToActOn(getScopeForTab(departingTab))
+        : null;
+      if (departingScope) updateIntentionScopeActivity(departingScope);
+    }
+    persistSession();
 
     debugLog('[Intender] Window focus changed:', {
-      prevWindowId,
+      departedWindowId,
+      prevFocusedWindowId,
       newWindowId: windowId,
     });
     try {
@@ -966,23 +1208,27 @@ export default defineBackground(async () => {
 
       const activeTabId = numberToTabId(activeTab.id);
 
-      // Compute fromTabId with fallback to query previous window
-      const cachedFromTabId = prevWindowId
-        ? lastActiveTabIdByWindow.get(prevWindowId)
+      // Compute fromTabId with fallback to query previous window. Only an
+      // observed previous focus may seed this - see the note above.
+      const cachedFromTabId = prevFocusedWindowId
+        ? lastActiveTabIdByWindow.get(prevFocusedWindowId)
         : undefined;
 
-      // Check if cached tab has a scope
-      const fromScope = cachedFromTabId
-        ? getScopeForTab(cachedFromTabId)
+      // Check if cached tab has a scope. Collapse to the scope id here: a
+      // TabScope is an object, so testing it for truthiness below would always
+      // say "yes, it has a scope" and quietly retire the fallback.
+      const fromScopeId = cachedFromTabId
+        ? scopeToActOn(getScopeForTab(cachedFromTabId))
         : null;
 
       // Determine if fallback is needed: no cached tab OR cached tab has no scope
-      const willUseFallback = prevWindowId && (!cachedFromTabId || !fromScope);
+      const willUseFallback =
+        prevFocusedWindowId && (!cachedFromTabId || !fromScopeId);
 
       debugLog('[Intender] Window focus fromTabId resolution:', {
-        prevWindowId,
+        prevFocusedWindowId,
         cachedFromTabId,
-        fromScope,
+        fromScopeId,
         willUseFallback,
       });
 
@@ -992,7 +1238,7 @@ export default defineBackground(async () => {
       if (willUseFallback) {
         try {
           // WindowId is just a branded number, cast it back to number for the query
-          const prevWindowIdNumber = windowIdToNumber(prevWindowId);
+          const prevWindowIdNumber = windowIdToNumber(prevFocusedWindowId);
           debugLog(
             '[Intender] Attempting fallback query for window:',
             prevWindowIdNumber
@@ -1003,9 +1249,8 @@ export default defineBackground(async () => {
           });
           if (prevActiveTab && typeof prevActiveTab.id === 'number') {
             const fallbackTabId = numberToTabId(prevActiveTab.id);
-            const fallbackFromScope = getScopeForTab(
-              fallbackTabId,
-              prevActiveTab.url
+            const fallbackFromScope = scopeToActOn(
+              getScopeForTab(fallbackTabId, prevActiveTab.url)
             );
 
             if (fallbackFromScope) {
@@ -1013,7 +1258,7 @@ export default defineBackground(async () => {
               updateIntentionScopeActivity(fallbackFromScope);
 
               // Update cache to keep it warm
-              lastActiveTabIdByWindow.set(prevWindowId, fallbackTabId);
+              lastActiveTabIdByWindow.set(prevFocusedWindowId, fallbackTabId);
 
               debugLog('[Intender] Fallback from-bump successful:', {
                 fallbackTabId,
@@ -1055,6 +1300,11 @@ export default defineBackground(async () => {
     if (lastFocusedWindowId === wId) {
       lastFocusedWindowId = null;
     }
+    // A closed window is not somewhere the user can be, so it must not stay
+    // on as the window we remember them in.
+    if (lastKnownWindowId === wId) {
+      lastKnownWindowId = null;
+    }
 
     persistSession();
 
@@ -1080,18 +1330,13 @@ export default defineBackground(async () => {
 
     // Unified decision path
     {
-      const cached = readCachedDecision(details.tabId, targetUrl);
-      const decision =
-        cached ??
-        decideNavigation({
-          tabId: details.tabId,
-          sourceUrl,
-          targetUrl,
-          postCommit: false,
-          cameFromIntentionPage:
-            sourceUrl?.startsWith(intentionPageUrl) === true,
-        });
-      if (!cached) writeCachedDecision(details.tabId, targetUrl, decision);
+      const decision = decideNavigation({
+        tabId: details.tabId,
+        sourceUrl,
+        targetUrl,
+        cameFromIntentionPage: sourceUrl?.startsWith(intentionPageUrl) === true,
+      });
+      pendingNavigations.set(details.tabId, { sourceUrl, targetUrl, decision });
 
       if (decision.kind === 'allow') return;
 
@@ -1137,6 +1382,10 @@ export default defineBackground(async () => {
       const msg = message as { type?: string } | null | undefined;
       if (!msg || typeof msg.type !== 'string') return;
 
+      // Both branches read the stored mode, which a restarted worker has not
+      // loaded yet.
+      await ensureReady();
+
       if (msg.type === 'e2e:forceInactivityCheck-idle') {
         e2eDisableOSIdle = true;
         toggleIdleDetection(inactivityMode);
@@ -1161,6 +1410,7 @@ export default defineBackground(async () => {
         const { intentions } = await storage.get();
         const parsedIntentions = mapNulls(parseIntention, intentions);
         intentionIndex = createIntentionIndex(parsedIntentions);
+        pendingNavigations.clear();
 
         // Refresh tab → scope mappings and bump activity for newly scoped tabs
         try {
@@ -1229,35 +1479,45 @@ export default defineBackground(async () => {
   // NOW start the async initialization after all listeners are registered
   await hydrateSessionState();
 
-  // Initialize window focus tracking
-  try {
-    const windows = await browser.windows.getAll();
-    const focusedWindow = windows.find(w => w.focused);
-    if (focusedWindow && typeof focusedWindow.id === 'number') {
-      lastFocusedWindowId = numberToWindowId(focusedWindow.id);
-      debugLog('[Intender] Initialized focused window:', lastFocusedWindowId);
+  // Initialize window focus tracking. Only a live reading may set
+  // lastFocusedWindowId - the remembered window goes to lastKnownWindowId, so
+  // that a navigation in another window is never mistaken for the user's own.
+  const focusedAtStartup = await readFocusedWindowId();
+  if (focusedAtStartup) lastFocusedWindowId = focusedAtStartup;
+  const initialWindowId =
+    focusedAtStartup ?? (await resolveLastKnownWindowId());
+  if (initialWindowId) {
+    lastKnownWindowId = initialWindowId;
+    debugLog('[Intender] Initialized window tracking:', {
+      lastFocusedWindowId,
+      lastKnownWindowId,
+    });
 
-      // Seed lastActiveTabIdByWindow for the focused window
-      try {
-        const [activeTab] = await browser.tabs.query({
-          active: true,
-          windowId: focusedWindow.id,
+    // Seed lastActiveTabIdByWindow for that window
+    try {
+      const [activeTab] = await browser.tabs.query({
+        active: true,
+        windowId: windowIdToNumber(initialWindowId),
+      });
+      // Seed, do not overwrite: the session already knows which tab the
+      // user came from, while the browser only knows which tab is active
+      // now - on a restart, the one whose activation woke the worker.
+      if (
+        activeTab &&
+        typeof activeTab.id === 'number' &&
+        !lastActiveTabIdByWindow.has(initialWindowId)
+      ) {
+        const activeTabId = numberToTabId(activeTab.id);
+        lastActiveTabIdByWindow.set(initialWindowId, activeTabId);
+        debugLog('[Intender] Seeded active tab for focused window:', {
+          windowId: initialWindowId,
+          tabId: activeTabId,
         });
-        if (activeTab && typeof activeTab.id === 'number') {
-          const activeTabId = numberToTabId(activeTab.id);
-          lastActiveTabIdByWindow.set(lastFocusedWindowId, activeTabId);
-          debugLog('[Intender] Seeded active tab for focused window:', {
-            windowId: lastFocusedWindowId,
-            tabId: activeTabId,
-          });
-          persistSession();
-        }
-      } catch (tabError) {
-        debugLog('[Intender] Failed to seed active tab:', tabError);
+        persistSession();
       }
+    } catch (tabError) {
+      debugLog('[Intender] Failed to seed active tab:', tabError);
     }
-  } catch (error) {
-    debugLog('[Intender] Failed to initialize window focus:', error);
   }
 
   // Load intentions and settings on startup
@@ -1270,7 +1530,6 @@ export default defineBackground(async () => {
     } = await storage.get();
     const parsedIntentions = mapNulls(parseIntention, intentions);
     intentionIndex = createIntentionIndex(parsedIntentions);
-    intentionIndexReady = true;
 
     inactivityMode = storedInactivityMode as InactivityMode;
     inactivityTimeoutMs = storedInactivityTimeoutMs as TimeoutMs;
@@ -1285,5 +1544,11 @@ export default defineBackground(async () => {
     );
   } catch (error) {
     console.error('[Intender] Failed to load intentions on startup:', error);
+  } finally {
+    // Open the gate only here: a handler released between the settings load
+    // and this point would decide against a half-reconciled snapshot. The
+    // finally also covers a failed startup, which must not leave every
+    // handler waiting out the gate's timeout.
+    intentionIndexReady = true;
   }
 });

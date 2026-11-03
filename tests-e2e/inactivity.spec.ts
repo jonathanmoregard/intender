@@ -15,7 +15,14 @@ function getTestNameWithRun(): string {
   return `${testName} (run ${runNumber})`;
 }
 
-test.describe.configure({ mode: 'parallel' });
+// Every inactivity decision consults the focused window - through the
+// activation guard, through getActiveTabSnapshot, or through the idle
+// handler's own focus check. Two browsers sharing one X display trade focus,
+// and a departing window legitimately refreshes its scope's activity, so a
+// second instance can make any test here measure ~0 elapsed time. That is
+// correct behaviour reading a contended environment, not a bug to chase: the
+// whole file is tagged @serial so it runs one browser at a time.
+test.describe.configure({ mode: 'default' });
 
 async function gotoRobust(page: Page, url: string): Promise<void> {
   try {
@@ -119,7 +126,7 @@ async function toggleOsIdleEnabled(optionsPage: Page, enabled: boolean) {
 }
 
 // Parallel-safe tests (can run concurrently)
-test.describe('Inactivity revalidation - parallel safe', () => {
+test.describe('@serial Inactivity revalidation', () => {
   test('test-1: timeout in ms and revalidation on tab focus after inactivity', async () => {
     const testPhrase = getTestNameWithRun();
     const { context } = await launchExtension();
@@ -730,8 +737,9 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     const newTab = await context.newPage();
     await gotoRobust(newTab, 'https://google.com');
 
-    // Wait over inactivity
-    await settingsPage.waitForTimeout(1500);
+    // Wait past the inactivity timeout. It has to exceed the configured
+    // timeout on its own: the worker stop that follows is not a wait.
+    await settingsPage.waitForTimeout(2500);
     await stopServiceWorker(context);
 
     await mainTab.bringToFront();
@@ -781,8 +789,9 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     const newTab = await context.newPage();
     await gotoRobust(newTab, 'https://google.com');
 
-    // Wait over inactivity
-    await settingsPage.waitForTimeout(1500);
+    // Wait past the inactivity timeout. It has to exceed the configured
+    // timeout on its own: the worker stop that follows is not a wait.
+    await settingsPage.waitForTimeout(2500);
     await stopServiceWorker(context);
 
     await mainTab.bringToFront();
@@ -822,7 +831,7 @@ test.describe('Inactivity revalidation - parallel safe', () => {
     });
 
     // Add another intention for google using helper at index 1
-    await settingsPage.getByRole('button', { name: 'Add Intention' }).click();
+    await SettingsPage.addIntentionRow(settingsPage);
     await SettingsPage.addIntentionAt(settingsPage, 1, {
       url: 'google.com',
       phrase: 'Google intention',
@@ -1099,8 +1108,9 @@ test.describe.serial('@serial Inactivity revalidation - Serial Tests', () => {
     // Switch to a'
     await tabAPrime.bringToFront();
 
-    // Wait 6s (total 2.2s > 2s timeout)
-    await settingsPage.waitForTimeout(1200);
+    // Switching to a' above refreshed the scope, so this wait alone has to
+    // exceed the 2s timeout.
+    await settingsPage.waitForTimeout(2500);
     await stopServiceWorker(context);
 
     // Force idle check since this is a sub-15s timeout test

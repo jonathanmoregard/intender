@@ -1,64 +1,215 @@
 name: Build and Release Extension
 
+# Releases follow CI instead of racing it. On `push` these two workflows
+# started together, so a commit could be released while its tests were still
+# running - or after they had already gone red. `workflow_run` fires only once
+# CI has finished, and the gate below insists it finished green.
+#
+# `workflow_dispatch` deliberately does not consult CI: it is the manual
+# escape hatch, and the two things it exists for - retrying a store upload, and
+# shipping when the automation is wedged - are both cases where a human has
+# already decided. Reach for it knowingly.
 on:
-  push:
+  workflow_run:
+    workflows: ['CI']
+    types: [completed]
     branches: [main, master]
-    paths:
-      - 'src/**'
-      - 'wxt.config.ts'
-      - 'pnpm-lock.yaml'
   workflow_dispatch:
 
 jobs:
+  # `workflow_run` cannot filter on paths, which is what used to keep a
+  # docs-only push from cutting a release. Asking whether this version has
+  # already been released is the better question anyway: it is what the path
+  # filter was approximating, and it also makes a re-run harmless.
+  #
+  # Two questions, deliberately kept apart. "Is there a GitHub release for this
+  # version?" is not the same as "has this version been deployed": the release
+  # is cut several steps BEFORE the store upload, so the upload can fail, or
+  # skip for want of a secret, while the release sits there looking finished.
+  # Letting one answer stand for both would make the retry path skip the very
+  # upload it was run to perform - the same quiet non-delivery this workflow
+  # already has history with. So a manual dispatch always proceeds, and only
+  # the release-creation step itself is skipped when the release exists.
+  decide:
+    # workflow_run fires for failures and cancellations too, and for CI's
+    # pull_request runs as well as its push runs. Only a green push qualifies.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      sha: ${{ steps.version.outputs.sha }}
+      should_run: ${{ steps.existing.outputs.should_run }}
+      release_exists: ${{ steps.existing.outputs.release_exists }}
+    steps:
+      - name: Checkout the commit CI tested
+        uses: actions/checkout@v4
+        with:
+          # Not the default branch tip: workflow_run runs detached from the
+          # commit that triggered it, and releasing a different tree than the
+          # one that went green would defeat the point of the gate.
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+
+      - name: Read the version and the exact commit
+        id: version
+        run: |
+          {
+            echo "version=$(node -p "require('./package.json').version")"
+            echo "sha=$(git rev-parse HEAD)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Decide whether to run, and whether a release is still needed
+        id: existing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "release_exists=true" >> "$GITHUB_OUTPUT"
+            if [ "$EVENT" = "workflow_dispatch" ]; then
+              # The retry path. The release stays as it is; everything after it
+              # runs again, which is the whole point of dispatching this.
+              echo "should_run=true" >> "$GITHUB_OUTPUT"
+              echo "::notice::v$VERSION is already released. Keeping that release and re-running the store upload."
+            else
+              echo "should_run=false" >> "$GITHUB_OUTPUT"
+              echo "::notice::v$VERSION is already released, so an automatic run has nothing to add. Bump the version to ship a new one, or run this workflow manually to retry the Chrome Web Store upload."
+            fi
+          else
+            echo "release_exists=false" >> "$GITHUB_OUTPUT"
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build-and-release:
+    needs: decide
+    if: needs.decide.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
       packages: write
 
+    # Lifted out of the step that gates on it. The `secrets` context is not
+    # available in a step's `if`, and using it there does not fail the step -
+    # it makes the whole workflow file invalid, so the run completes with zero
+    # jobs and no release. That is what silently killed every release between
+    # v0.8.13 and v0.9.4. Gate on `env`, which is available.
+    env:
+      STORE_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+      STORE_PUBLISHER_ID: ${{ secrets.CHROME_PUBLISHER_ID }}
+
     steps:
-      - name: Checkout code
+      - name: Checkout the commit CI tested
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.decide.outputs.sha }}
 
       - name: Setup Node.js
+        if: needs.decide.outputs.release_exists != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '22'
 
       - name: Setup pnpm
+        if: needs.decide.outputs.release_exists != 'true'
         uses: pnpm/action-setup@v4
         with:
           version: 10.0.0
 
       - name: Install dependencies
+        if: needs.decide.outputs.release_exists != 'true'
         run: pnpm install
 
-      - name: Get version from package.json
-        id: version
-        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
-
       - name: Build and zip extension
+        if: needs.decide.outputs.release_exists != 'true'
         run: pnpm zip
 
+      # The retry path ships the artifact that was actually released, rather
+      # than rebuilding from whatever the branch holds now. A dispatch checks
+      # out the branch tip, and `pre-push`'s version-bump rule cannot vouch for
+      # it: merges made with the GitHub button never run a local hook, so the
+      # tree can differ from the released one while the version does not.
+      - name: Download the zip from the existing release
+        if: needs.decide.outputs.release_exists == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.decide.outputs.version }}
+        run: |
+          mkdir -p .output
+          gh release download "v$VERSION" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "intender-$VERSION-chrome.zip" \
+            --dir .output \
+            --clobber
+          ls -l ".output/intender-$VERSION-chrome.zip"
+
+      # v1 runs on a Node runtime GitHub no longer supports, so it would fail
+      # the first time this workflow fires again. v2 takes the same inputs.
+      #
+      # Skipped, not failed, when the release is already there: a dispatch that
+      # exists to retry the store upload must not stumble on the release it is
+      # retrying past.
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        if: needs.decide.outputs.release_exists != 'true'
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.version.outputs.version }}
-          files: .output/intender-${{ steps.version.outputs.version }}-chrome.zip
+          tag_name: v${{ needs.decide.outputs.version }}
+          # Without this the tag is cut at GITHUB_SHA, which under workflow_run
+          # is the default branch tip rather than the commit that was tested
+          # and zipped. Those are the same commit right up until they are not.
+          target_commitish: ${{ needs.decide.outputs.sha }}
+          files: .output/intender-${{ needs.decide.outputs.version }}-chrome.zip
           generate_release_notes: true
           draft: false
           prerelease: false
-          name: Release v${{ steps.version.outputs.version }}
+          name: Release v${{ needs.decide.outputs.version }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # - name: Upload to Chrome Web Store
-      #   if: ${{ secrets.CHROME_EXTENSION_ID != '' }}
-      #   uses: mnao305/chrome-extension-upload@v5
-      #   with:
-      #     file-path: .output/intender-${{ steps.version.outputs.version }}-chrome.zip
-      #     extension-id: ${{ secrets.CHROME_EXTENSION_ID }}
-      #     client-id: ${{ secrets.CHROME_CLIENT_ID }}
-      #     client-secret: ${{ secrets.CHROME_CLIENT_SECRET }}
-      #     refresh-token: ${{ secrets.CHROME_REFRESH_TOKEN }}
-      #     publish: true
+      # Says out loud which way the gate below went. A skipped step reads as a
+      # pass in the Actions UI, and a store upload that quietly never happens
+      # is the failure mode this workflow already has history with.
+      - name: Report Chrome Web Store credential status
+        run: |
+          if [ -z "$STORE_EXTENSION_ID" ]; then
+            echo "::warning::CHROME_EXTENSION_ID is not set, so the Chrome Web Store upload is being skipped. The GitHub release above still happened."
+          elif [ -z "$STORE_PUBLISHER_ID" ]; then
+            echo "::warning::CHROME_PUBLISHER_ID is not set, so the Chrome Web Store upload is being skipped. The V2 API addresses items as publishers/<publisher>/items/<item>, so the publisher ID is not optional. Find it in the Developer Dashboard. The GitHub release above still happened."
+          else
+            echo "Store credentials are set - uploading the zip to the Chrome Web Store as a draft."
+          fi
+
+      # Pinned to an exact tag because upstream publishes no moving major tag:
+      # it has v5.0.0, v6.0.0 and v7.0.0, and no v5/v6/v7 to float on. The `@v5`
+      # this used to say resolved to nothing at all, so the job would have died
+      # fetching the action.
+      #
+      # v7.0.0 is the first release on the Chrome Web Store API V2. V1 was only
+      # supported until 15 October 2026, which is why v6.0.0 is not an option
+      # either - it still depends on chrome-webstore-upload v1.x, which talks to
+      # www.googleapis.com/chromewebstore/v1.1.
+      - name: Upload to Chrome Web Store
+        if: env.STORE_EXTENSION_ID != '' && env.STORE_PUBLISHER_ID != ''
+        uses: mnao305/chrome-extension-upload@v7.0.0
+        with:
+          file-path: .output/intender-${{ needs.decide.outputs.version }}-chrome.zip
+          extension-id: ${{ secrets.CHROME_EXTENSION_ID }}
+          # Required from v7 on, and the reason a new secret appears here.
+          publisher-id: ${{ secrets.CHROME_PUBLISHER_ID }}
+          client-id: ${{ secrets.CHROME_CLIENT_ID }}
+          client-secret: ${{ secrets.CHROME_CLIENT_SECRET }}
+          refresh-token: ${{ secrets.CHROME_REFRESH_TOKEN }}
+          # Upload only, deliberately and for now. The CI gate above is what
+          # used to be missing, so auto-publish is defensible once this has
+          # run for real - but this step has never executed successfully in
+          # this repository's history, and the first upload is worth looking
+          # at in the dashboard before it reaches anyone. Flip to true once
+          # one draft has landed and looked right.
+          #
+          # Do not leave it here indefinitely: a draft nobody clicks is the
+          # same silent non-delivery this workflow already has history with.
+          publish: false

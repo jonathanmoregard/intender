@@ -40,59 +40,19 @@ export function toComponents(normalizedUrl: NormalizedUrl): {
   subdomain: string | null;
   path: string;
 } {
-  try {
-    // Add protocol if missing for URL constructor
-    const urlWithProtocol = normalizedUrl.startsWith('http')
-      ? normalizedUrl
-      : `https://${normalizedUrl}`;
+  // normalizeUrl always produces a protocol-free URL. Parse it consistently,
+  // including hosts beginning with "http" and multi-label public suffixes.
+  const parsedUrl = new URL(`https://${normalizedUrl}`);
+  const { domainWithoutSuffix, publicSuffix, subdomain } = parse(
+    parsedUrl.hostname
+  );
 
-    const parsedUrl = new URL(urlWithProtocol);
-    const { domainWithoutSuffix, publicSuffix, subdomain } = parse(
-      parsedUrl.hostname
-    );
-
-    return {
-      domain: domainWithoutSuffix || '',
-      publicSuffix: publicSuffix || '',
-      subdomain: subdomain || null,
-      path: parsedUrl.pathname === '/' ? '' : parsedUrl.pathname,
-    };
-  } catch {
-    // Fallback to manual parsing for edge cases
-    const [hostAndPath, ...rest] = normalizedUrl.split('/');
-    const path = rest.length > 0 ? '/' + rest.join('/') : '';
-
-    const hostParts = hostAndPath.split('.');
-
-    if (hostParts.length === 1) {
-      return {
-        domain: hostParts[0],
-        publicSuffix: '',
-        subdomain: null,
-        path,
-      };
-    }
-
-    if (hostParts.length === 2) {
-      return {
-        domain: hostParts[0],
-        publicSuffix: hostParts[1],
-        subdomain: null,
-        path,
-      };
-    }
-
-    const publicSuffix = hostParts[hostParts.length - 1];
-    const domain = hostParts[hostParts.length - 2];
-    const subdomain = hostParts.slice(0, -2).join('.');
-
-    return {
-      domain,
-      publicSuffix,
-      subdomain: subdomain || null,
-      path,
-    };
-  }
+  return {
+    domain: domainWithoutSuffix || '',
+    publicSuffix: publicSuffix || '',
+    subdomain: subdomain || null,
+    path: parsedUrl.pathname === '/' ? '' : parsedUrl.pathname,
+  };
 }
 
 /**
@@ -101,18 +61,21 @@ export function toComponents(normalizedUrl: NormalizedUrl): {
  */
 export function parseUrlString(input: string): URL | null {
   const trimmed = input.trim();
-  const parsed = parse(trimmed, { allowPrivateDomains: false });
-
-  if (!parsed.isIcann || !parsed.domain) return null;
-
-  let urlStr = trimmed;
-  if (!/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(trimmed)) {
-    urlStr = 'https://' + trimmed;
-  }
+  // A host followed by a numeric port is not a URL scheme. Require explicit
+  // HTTP(S) schemes to include their authority separator; reject other schemes.
+  const hasHttpScheme = /^https?:\/\//i.test(trimmed);
+  const hasScheme = /^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(trimmed);
+  const hasHostPort = /^[^/:?#]+:\d+(?:[/?#]|$)/.test(trimmed);
+  if (hasScheme && !hasHttpScheme && !hasHostPort) return null;
 
   try {
-    const url = new URL(urlStr);
-    if (!url.hostname || url.hostname !== parsed.hostname) return null;
+    const url = new URL(hasHttpScheme ? trimmed : `https://${trimmed}`);
+    if (url.username || url.password) return null;
+
+    // Validate the browser's canonical hostname, so IDNs and trailing root
+    // dots use the same domain interpretation throughout parsing and matching.
+    const parsed = parse(url.hostname, { allowPrivateDomains: false });
+    if (!parsed.isIcann || !parsed.domain) return null;
     return url;
   } catch {
     return null;

@@ -83,7 +83,7 @@ export function isLanguageCode(code: string): boolean {
   }
 
   // Check if it's a language-country combination (e.g., 'en-us', 'fr-fr')
-  if (lowerCode.includes('-')) {
+  if (/^[a-z]{2}-[a-z]{2}$/.test(lowerCode)) {
     const [lang, country] = lowerCode.split('-');
     return ISO6391.validate(lang) && countries.isValid(country.toUpperCase());
   }
@@ -125,6 +125,48 @@ export function extractLanguageFromPath(path: string): {
   }
 
   return { language: null, remainingPath: path };
+}
+
+// ============================================================================
+// PATH SCOPE
+// ============================================================================
+
+/**
+ * What an intention's path claims about which URLs it covers.
+ *
+ * These are two different claims and must not share a representation. Covering
+ * the whole site is a decision, and it should be visible as one. The empty
+ * string used to express it twice over - directly, as "no path", and
+ * indirectly, because `startsWith('')` is true of every URL - so the second
+ * route was reachable by accident, from any path that stripped down to
+ * nothing. The non-empty constraint on `prefixes` closes that route: an empty
+ * prefix can no longer reach `startsWith`, so site-wide matching is only ever
+ * the `whole-site` case, chosen on purpose in `pathScopeOf`.
+ */
+export type PathScope =
+  | { kind: 'whole-site' }
+  | { kind: 'prefixes'; prefixes: [string, ...string[]] };
+
+/**
+ * Reads an intention's path as the claim it makes.
+ *
+ * A locale is noise here: it is stripped from both sides, so `/en/news` and
+ * `/news` are the same page in two languages. A path that is *only* a locale
+ * is therefore the site's localized front door - the root - and the root
+ * covers the site. `example.com/en` and `example.com` mean the same thing.
+ *
+ * The consequence to know about is that `isLanguageCode` is generous: `my`,
+ * `it`, `no`, `is`, `to` and `am` are all ISO 639-1 codes, so `company.com/my`
+ * is read as a locale and covers all of `company.com`. That is a question
+ * about which segments count as locales, not about this function.
+ */
+export function pathScopeOf(path: string): PathScope {
+  if (!path) return { kind: 'whole-site' };
+  const { remainingPath } = extractLanguageFromPath(path);
+  if (!remainingPath) return { kind: 'whole-site' };
+  const prefixes: [string, ...string[]] =
+    remainingPath !== path ? [path, remainingPath] : [path];
+  return { kind: 'prefixes', prefixes };
 }
 
 // ============================================================================
@@ -309,31 +351,17 @@ export function matchesIntentionScopeIgnoringDomain(
   }
 
   // Step 3: Path Match
-  if (!intentionScope.path) {
-    // If intentionScope.path is empty, match any path
-    return true;
-  }
+  const pathScope = pathScopeOf(intentionScope.path);
+  if (pathScope.kind === 'whole-site') return true;
 
-  // Try matching with original path first
-  if (targetParts.path.startsWith(intentionScope.path)) {
-    return true;
-  }
-
-  // If that fails, try stripping language from target path
-  const { remainingPath } = extractLanguageFromPath(targetParts.path);
-  if (remainingPath.startsWith(intentionScope.path)) {
-    return true;
-  }
-
-  // If that fails, try stripping language from intention path
-  const { remainingPath: intentionRemainingPath } = extractLanguageFromPath(
-    intentionScope.path
+  // Compare original and language-free paths on both sides. Keeping originals
+  // preserves literal path-prefix matching when a segment is also a locale.
+  const { remainingPath: targetPath } = extractLanguageFromPath(
+    targetParts.path
   );
-  if (targetParts.path.startsWith(intentionRemainingPath)) {
-    return true;
-  }
-
-  return false;
+  return [targetParts.path, targetPath].some(target =>
+    pathScope.prefixes.some(prefix => target.startsWith(prefix))
+  );
 }
 
 /**
