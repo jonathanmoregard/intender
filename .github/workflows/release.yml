@@ -1,16 +1,68 @@
 name: Build and Release Extension
 
+# Releases follow CI instead of racing it. On `push` these two workflows
+# started together, so a commit could be released while its tests were still
+# running - or after they had already gone red. `workflow_run` fires only once
+# CI has finished, and the gate below insists it finished green.
 on:
-  push:
+  workflow_run:
+    workflows: ['CI']
+    types: [completed]
     branches: [main, master]
-    paths:
-      - 'src/**'
-      - 'wxt.config.ts'
-      - 'pnpm-lock.yaml'
   workflow_dispatch:
 
 jobs:
+  # `workflow_run` cannot filter on paths, which is what used to keep a
+  # docs-only push from cutting a release. Asking whether this version has
+  # already been released is the better question anyway: it is what the path
+  # filter was approximating, and it also makes a re-run harmless.
+  decide:
+    # workflow_run fires for failures and cancellations too, and for CI's
+    # pull_request runs as well as its push runs. Only a green push qualifies.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      sha: ${{ steps.version.outputs.sha }}
+      should_release: ${{ steps.existing.outputs.should_release }}
+    steps:
+      - name: Checkout the commit CI tested
+        uses: actions/checkout@v4
+        with:
+          # Not the default branch tip: workflow_run runs detached from the
+          # commit that triggered it, and releasing a different tree than the
+          # one that went green would defeat the point of the gate.
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+
+      - name: Read the version and the exact commit
+        id: version
+        run: |
+          {
+            echo "version=$(node -p "require('./package.json').version")"
+            echo "sha=$(git rev-parse HEAD)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Skip if this version is already released
+        id: existing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::v$VERSION is already released, so there is nothing to ship. Bump the version in package.json to cut a new one."
+          else
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build-and-release:
+    needs: decide
+    if: needs.decide.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -26,8 +78,10 @@ jobs:
       STORE_PUBLISHER_ID: ${{ secrets.CHROME_PUBLISHER_ID }}
 
     steps:
-      - name: Checkout code
+      - name: Checkout the commit CI tested
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.decide.outputs.sha }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -42,10 +96,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Get version from package.json
-        id: version
-        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
-
       - name: Build and zip extension
         run: pnpm zip
 
@@ -54,12 +104,16 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.version.outputs.version }}
-          files: .output/intender-${{ steps.version.outputs.version }}-chrome.zip
+          tag_name: v${{ needs.decide.outputs.version }}
+          # Without this the tag is cut at GITHUB_SHA, which under workflow_run
+          # is the default branch tip rather than the commit that was tested
+          # and zipped. Those are the same commit right up until they are not.
+          target_commitish: ${{ needs.decide.outputs.sha }}
+          files: .output/intender-${{ needs.decide.outputs.version }}-chrome.zip
           generate_release_notes: true
           draft: false
           prerelease: false
-          name: Release v${{ steps.version.outputs.version }}
+          name: Release v${{ needs.decide.outputs.version }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -89,14 +143,20 @@ jobs:
         if: env.STORE_EXTENSION_ID != '' && env.STORE_PUBLISHER_ID != ''
         uses: mnao305/chrome-extension-upload@v7.0.0
         with:
-          file-path: .output/intender-${{ steps.version.outputs.version }}-chrome.zip
+          file-path: .output/intender-${{ needs.decide.outputs.version }}-chrome.zip
           extension-id: ${{ secrets.CHROME_EXTENSION_ID }}
           # Required from v7 on, and the reason a new secret appears here.
           publisher-id: ${{ secrets.CHROME_PUBLISHER_ID }}
           client-id: ${{ secrets.CHROME_CLIENT_ID }}
           client-secret: ${{ secrets.CHROME_CLIENT_SECRET }}
           refresh-token: ${{ secrets.CHROME_REFRESH_TOKEN }}
-          # Upload only. Rolling the new version out to users stays a manual
-          # click in the developer dashboard, because nothing here gates the
-          # release on CI passing.
+          # Upload only, deliberately and for now. The CI gate above is what
+          # used to be missing, so auto-publish is defensible once this has
+          # run for real - but this step has never executed successfully in
+          # this repository's history, and the first upload is worth looking
+          # at in the dashboard before it reaches anyone. Flip to true once
+          # one draft has landed and looked right.
+          #
+          # Do not leave it here indefinitely: a draft nobody clicks is the
+          # same silent non-delivery this workflow already has history with.
           publish: false
