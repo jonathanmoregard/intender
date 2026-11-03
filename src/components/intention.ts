@@ -134,11 +134,14 @@ export function extractLanguageFromPath(path: string): {
 /**
  * What an intention's path claims about which URLs it covers.
  *
- * These are two different claims and must not share a representation. An
- * intention with no path covers the whole site; an intention with a path
- * covers that prefix. The empty string used to express both - directly, as
- * "no path", and indirectly, because `startsWith('')` is true of every URL -
- * so a path that stripped down to nothing silently became site-wide.
+ * These are two different claims and must not share a representation. Covering
+ * the whole site is a decision, and it should be visible as one. The empty
+ * string used to express it twice over - directly, as "no path", and
+ * indirectly, because `startsWith('')` is true of every URL - so the second
+ * route was reachable by accident, from any path that stripped down to
+ * nothing. The non-empty constraint on `prefixes` closes that route: an empty
+ * prefix can no longer reach `startsWith`, so site-wide matching is only ever
+ * the `whole-site` case, chosen on purpose in `pathScopeOf`.
  */
 export type PathScope =
   | { kind: 'whole-site' }
@@ -147,17 +150,22 @@ export type PathScope =
 /**
  * Reads an intention's path as the claim it makes.
  *
- * A path is matched both literally and with a leading locale removed, so
- * `/en/news` and `/news` are the same page in two languages. A path that is
- * *only* a locale has nothing left once the locale is removed, and an empty
- * prefix is not a narrower claim - it is every URL on the site. The
- * non-empty constraint on `prefixes` is what makes that unrepresentable.
+ * A locale is noise here: it is stripped from both sides, so `/en/news` and
+ * `/news` are the same page in two languages. A path that is *only* a locale
+ * is therefore the site's localized front door - the root - and the root
+ * covers the site. `example.com/en` and `example.com` mean the same thing.
+ *
+ * The consequence to know about is that `isLanguageCode` is generous: `my`,
+ * `it`, `no`, `is`, `to` and `am` are all ISO 639-1 codes, so `company.com/my`
+ * is read as a locale and covers all of `company.com`. That is a question
+ * about which segments count as locales, not about this function.
  */
 export function pathScopeOf(path: string): PathScope {
   if (!path) return { kind: 'whole-site' };
   const { remainingPath } = extractLanguageFromPath(path);
+  if (!remainingPath) return { kind: 'whole-site' };
   const prefixes: [string, ...string[]] =
-    remainingPath && remainingPath !== path ? [path, remainingPath] : [path];
+    remainingPath !== path ? [path, remainingPath] : [path];
   return { kind: 'prefixes', prefixes };
 }
 

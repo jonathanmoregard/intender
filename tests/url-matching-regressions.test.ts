@@ -90,26 +90,47 @@ describe('language path scope', () => {
   );
 });
 
-describe('a path-scoped intention stays path-scoped', () => {
-  // A path whose only segment is a locale used to have an empty
-  // language-stripped form, and an empty prefix matches every URL - so the
-  // intention silently became site-wide. That reading is unreachable now:
-  // "the whole site" and "this prefix" are separate cases of PathScope.
+describe('a locale-only path is the site root', () => {
+  // A locale is stripped from both sides of a path comparison, so a path that
+  // is nothing but a locale is the site's localized front door - the root -
+  // and the root covers the site. `example.com/en` means `example.com`.
+  // This is `PathScope`'s `whole-site` case, chosen deliberately in
+  // `pathScopeOf`, rather than the `startsWith('')` it used to fall out of.
   it.each([
     ['example.com/en', 'https://example.com/admin/billing'],
+    ['example.com/en', 'https://example.com/'],
+    ['example.com/en', 'https://example.com/en/news'],
+    ['example.com/en-us', 'https://example.com/careers'],
+    ['example.com', 'https://example.com/admin/billing'],
+  ])('%s captures %s', (scope, target) => {
+    expect(matches(scope, target)).toBe(true);
+  });
+
+  // isLanguageCode is generous: `my`, `it` and `no` are ISO 639-1 codes, so
+  // these read as locales too. Pinned as the known consequence of the rule
+  // above, not endorsed - narrowing it is a separate question.
+  it.each([
     ['example.com/my', 'https://example.com/admin/billing'],
     ['example.com/it', 'https://example.com/careers'],
     ['example.com/no', 'https://example.com/'],
-  ])('%s does not capture %s', (scope, target) => {
-    expect(matches(scope, target)).toBe(false);
+  ])('%s captures %s because the segment is also a locale', (scope, target) => {
+    expect(matches(scope, target)).toBe(true);
   });
 
+  // A path with something left after the locale stays that narrow.
   it.each([
-    ['example.com/en', 'https://example.com/en/news'],
     ['example.com/en/news', 'https://example.com/news/story'],
     ['example.com/en/news', 'https://example.com/en/news/story'],
-    ['example.com', 'https://example.com/admin/billing'],
-  ])('%s still captures %s', (scope, target) => {
+  ])('%s captures %s', (scope, target) => {
     expect(matches(scope, target)).toBe(true);
+  });
+
+  it('a non-locale path does not widen', () => {
+    expect(matches('example.com/news', 'https://example.com/admin')).toBe(
+      false
+    );
+    expect(matches('example.com/en/news', 'https://example.com/admin')).toBe(
+      false
+    );
   });
 });
