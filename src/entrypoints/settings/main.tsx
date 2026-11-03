@@ -65,6 +65,11 @@ const SettingsTab = memo(
     const [inactivityMode, setInactivityMode] = useState<InactivityMode>('off');
     const [inactivityTimeoutMinutes, setInactivityTimeoutMinutes] =
       useState(30);
+    // What is in the box, which is not the same thing as the saved timeout
+    // while an edit is half-finished. A controlled numeric value cannot hold
+    // "empty", so React restored the previous number the moment the field was
+    // cleared and the box could never be emptied to type a new one.
+    const [inactivityTimeoutDraft, setInactivityTimeoutDraft] = useState('30');
     const [canCopyIntentionText, setCanCopyIntentionText] = useState(false);
     const [breathIntensity, setBreathIntensity] =
       useState<BreathAnimationIntensity>('minimal');
@@ -174,6 +179,14 @@ const SettingsTab = memo(
     const saveInactivityMode = useCallback(async (mode: InactivityMode) => {
       await storage.set({ inactivityMode: mode });
     }, []);
+
+    // Anything that changes the saved timeout from outside the box - the
+    // initial load, an import, the e2e override - owns what the box shows.
+    // Typing sets the draft itself, so this only ever agrees with it; an
+    // unusable draft leaves the saved value alone and so is left as typed.
+    useEffect(() => {
+      setInactivityTimeoutDraft(String(inactivityTimeoutMinutes));
+    }, [inactivityTimeoutMinutes]);
 
     const saveInactivityTimeout = useCallback(
       async (timeoutMinutes: number) => {
@@ -1110,15 +1123,33 @@ const SettingsTab = memo(
                     type='number'
                     min='1'
                     max='480'
-                    value={inactivityTimeoutMinutes}
+                    value={inactivityTimeoutDraft}
                     onChange={e => {
-                      const entered = parseTimeoutMinutesInput(e.target.value);
+                      const typed = e.target.value;
+                      const entered = parseTimeoutMinutesInput(typed);
                       // Nothing usable in the box yet - it is empty, or being
-                      // retyped. Leave the stored timeout as it is instead of
+                      // retyped. Keep it exactly as typed so it can be
+                      // emptied, and leave the saved timeout alone instead of
                       // filling the field with the default and saving that.
-                      if (entered.kind === 'no-number') return;
+                      if (entered.kind === 'no-number') {
+                        setInactivityTimeoutDraft(typed);
+                        return;
+                      }
+                      setInactivityTimeoutDraft(String(entered.minutes));
                       setInactivityTimeoutMinutes(entered.minutes);
                       saveInactivityTimeout(entered.minutes);
+                    }}
+                    onBlur={() => {
+                      // Leaving a half-finished edit behind should not leave
+                      // an empty box next to a timeout that is still in force.
+                      if (
+                        parseTimeoutMinutesInput(inactivityTimeoutDraft)
+                          .kind === 'no-number'
+                      ) {
+                        setInactivityTimeoutDraft(
+                          String(inactivityTimeoutMinutes)
+                        );
+                      }
                     }}
                     className='timeout-input'
                     disabled={inactivityMode === 'off'}

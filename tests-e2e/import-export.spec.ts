@@ -167,15 +167,29 @@ test.describe('Import/Export', () => {
         .poll(async () => (await savedSettings(page)).inactivityTimeoutMs)
         .toBe(28800000);
       // Clearing the box is a half-finished edit, not a request for the
-      // default. It used to snap to 30 and save that, so the field could not
-      // be cleared to type a new number.
+      // default. It used to snap to 30 and save that; then it snapped back to
+      // the previous number, because a controlled numeric value cannot hold
+      // "empty". The box has to actually stay empty to be retyped.
       await input.fill('');
+      await expect(input).toHaveValue('');
       await expect
         .poll(async () => (await savedSettings(page)).inactivityTimeoutMs)
         .toBe(28800000);
+      // Typing into the emptied box works and saves the new number.
+      await input.fill('45');
+      await expect(input).toHaveValue('45');
+      await expect
+        .poll(async () => (await savedSettings(page)).inactivityTimeoutMs)
+        .toBe(2700000);
+      // An edit abandoned while empty does not leave the box blank next to a
+      // timeout that is still in force.
+      await input.fill('');
+      await expect(input).toHaveValue('');
+      await input.blur();
+      await expect(input).toHaveValue('45');
       await page.reload();
       await expect(page.getByTestId('inactivity-timeout-minutes')).toHaveValue(
-        '480'
+        '45'
       );
     } finally {
       await context.close();
